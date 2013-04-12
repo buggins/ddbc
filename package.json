@@ -1,0 +1,27 @@
+{
+    "name": "DDBC",
+    "description": "DB Connector for D language, similar to JDBC",
+    "authors": ["Vadim Lopatin"],
+    "homepage": "http://sourceforge.net/projects/ddbc",
+    "license": "Boost Software License (BSL 1.0)",
+    "dependencies": {
+    }
+    "configurations": [
+        {
+            "name": "MySQL",
+            "versions": ["USE_MYSQL"]
+        },
+        {
+            "name": "SQLite",
+            "versions": ["USE_SQLITE"],
+            "libs-posix": ["sqlite3"],
+            "libs-windows": ["sqlite3.lib"]
+        },
+        {
+            "name": "PGSQL",
+            "versions": ["USE_PGSQL"],
+            "libs-posix": ["pq"],
+            "libs-windows": ["libpq.lib"]
+        }
+    ]
+}
