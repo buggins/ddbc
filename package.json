@@ -5,7 +5,8 @@
     "homepage": "http://sourceforge.net/projects/ddbc",
     "license": "Boost Software License (BSL 1.0)",
     "dependencies": {
-    }
+    },
+    "targetType": "staticLibrary",
     "configurations": [
         {
             "name": "MySQL",
