@@ -229,10 +229,11 @@ version(USE_PGSQL) {
     		lock();
     		scope(exit) unlock();
 
-    		// TODO:
-    		throw new SQLException("Not implemented");
     		//conn.selectDB(catalog);
     		dbName = catalog;
+    		// TODO:
+				
+    		throw new SQLException("Not implemented");
     	}
     	
     	override bool isClosed() {
@@ -788,7 +789,7 @@ version(USE_PGSQL) {
             else if (x.convertsTo!(ubyte[]))
                 setUbytes(parameterIndex, x.get!(ubyte[]));
             else
-                setParam(parameterIndex, x.toString);
+                setParam(parameterIndex, x.toString());
         }
 
         override void setNull(int parameterIndex) {
@@ -1062,7 +1063,7 @@ version(USE_PGSQL) {
     		if (v.convertsTo!(byte[])) {
     			return v.get!(byte[]);
     		}
-            return byteaToBytes(v.toString);
+            return byteaToBytes(v.toString());
     	}
     	override ubyte[] getUbytes(int columnIndex) {
     		checkClosed();
@@ -1074,7 +1075,7 @@ version(USE_PGSQL) {
     		if (v.convertsTo!(ubyte[])) {
     			return v.get!(ubyte[]);
     		}
-            return byteaToUbytes(v.toString);
+            return byteaToUbytes(v.toString());
         }
     	override string getString(int columnIndex) {
     		checkClosed();
