@@ -585,7 +585,7 @@ version(USE_SQLITE) {
             else if (x.convertsTo!TimeOfDay)
                 setTime(parameterIndex, x.get!TimeOfDay);
             else
-                setString(parameterIndex, x.toString);
+                setString(parameterIndex, x.toString());
         }
         override void setNull(int parameterIndex) {
             checkClosed();
