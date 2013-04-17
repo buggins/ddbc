@@ -1,5 +1,5 @@
 {
-    "name": "DDBC",
+    "name": "ddbc",
     "description": "DB Connector for D language, similar to JDBC",
     "authors": ["Vadim Lopatin"],
     "homepage": "https://github.com/buggins/ddbc",
