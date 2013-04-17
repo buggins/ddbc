@@ -2,7 +2,7 @@
     "name": "DDBC",
     "description": "DB Connector for D language, similar to JDBC",
     "authors": ["Vadim Lopatin"],
-    "homepage": "http://sourceforge.net/projects/ddbc",
+    "homepage": "https://github.com/buggins/ddbc",
     "license": "Boost Software License (BSL 1.0)",
     "dependencies": {
     },
