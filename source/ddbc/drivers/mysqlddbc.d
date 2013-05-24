@@ -34,9 +34,10 @@ import std.variant;
 import core.sync.mutex;
 import ddbc.common;
 import ddbc.core;
-import ddbc.drivers.mysql;
 
 version(USE_MYSQL) {
+
+import mysql.connection;
 
 version(unittest) {
     /*
@@ -111,7 +112,7 @@ private:
     string password;
     string hostname;
     int port = 3306;
-    ddbc.drivers.mysql.Connection conn;
+    mysql.connection.Connection conn;
     bool closed;
     bool autocommit;
     Mutex mutex;
@@ -141,7 +142,7 @@ public:
         mutex.unlock();
     }
 
-    ddbc.drivers.mysql.Connection getConnection() { return conn; }
+    mysql.connection.Connection getConnection() { return conn; }
 
 
 	void onStatementClosed(MySQLStatement stmt) {
@@ -192,7 +193,7 @@ public:
 
             //writeln("host " ~ hostname ~ " : " ~ to!string(port) ~ " db=" ~ dbName ~ " user=" ~ username ~ " pass=" ~ password);
 
-            conn = new ddbc.drivers.mysql.Connection(hostname, username, password, dbName, cast(ushort)port);
+            conn = new mysql.connection.Connection(hostname, username, password, dbName, cast(ushort)port);
             closed = false;
             setAutoCommit(true);
         } catch (Throwable e) {
@@ -324,7 +325,7 @@ class MySQLStatement : Statement {
 private:
     MySQLConnection conn;
     Command * cmd;
-    ddbc.drivers.mysql.ResultSet rs;
+    mysql.connection.ResultSet rs;
 	MySQLResultSet resultSet;
 
     bool closed;
@@ -389,7 +390,7 @@ public:
 		try {
 			cmd = new Command(conn.getConnection(), query);
 	        rs = cmd.execSQLResult();
-    	    resultSet = new MySQLResultSet(this, rs, createMetadata(cmd.getResultHeaders().getFieldDescriptions()));
+    	    resultSet = new MySQLResultSet(this, rs, createMetadata(cmd.resultFieldDescriptions));
         	return resultSet;
 		} catch (Throwable e) {
             throw new SQLException(e.msg ~ " - while execution of query " ~ query);
@@ -458,7 +459,7 @@ class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
         try {
             cmd = new Command(conn.getConnection(), query);
             cmd.prepare();
-            paramCount = cmd.getParamCount();
+            paramCount = cmd.numParams;
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -480,7 +481,7 @@ public:
         scope(exit) unlock();
         try {
             if (metadata is null)
-                metadata = createMetadata(cmd.getPreparedHeaders().getFieldDescriptions());
+                metadata = createMetadata(cmd.preparedFieldDescriptions);
             return metadata;
         } catch (Throwable e) {
             throw new SQLException(e);
@@ -494,7 +495,7 @@ public:
         scope(exit) unlock();
         try {
             if (paramMetadata is null)
-                paramMetadata = createMetadata(cmd.getPreparedHeaders().getParamDescriptions());
+                paramMetadata = createMetadata(cmd.preparedParamDescriptions);
             return paramMetadata;
         } catch (Throwable e) {
             throw new SQLException(e);
@@ -788,7 +789,7 @@ public:
 
 class MySQLResultSet : ResultSetImpl {
     private MySQLStatement stmt;
-    private ddbc.drivers.mysql.ResultSet rs;
+    private mysql.connection.ResultSet rs;
     ResultSetMetaData metadata;
     private bool closed;
     private int currentRowIndex;
@@ -823,7 +824,7 @@ public:
         stmt.unlock();
     }
 
-    this(MySQLStatement stmt, ddbc.drivers.mysql.ResultSet resultSet, ResultSetMetaData metadata) {
+    this(MySQLStatement stmt, mysql.connection.ResultSet resultSet, ResultSetMetaData metadata) {
         this.stmt = stmt;
         this.rs = resultSet;
         this.metadata = metadata;
@@ -831,8 +832,9 @@ public:
             closed = false;
             rowCount = cast(int)rs.length;
             currentRowIndex = -1;
-            columnMap = rs.getColNameMap();
-    		columnCount = cast(int)rs.getColNames().length;
+			foreach(key, val; rs.colNameIndicies)
+				columnMap[key] = cast(int)val;
+    		columnCount = cast(int)rs.colNames.length;
         } catch (Throwable e) {
             throw new SQLException(e);
         }
