@@ -5,7 +5,7 @@
     "homepage": "https://github.com/buggins/ddbc",
     "license": "Boost Software License (BSL 1.0)",
     "dependencies": {
-        "mysql-native": "==0.0.10"
+        "mysql-native": ">=0.0.12"
     },
     "targetType": "staticLibrary",
     "configurations": [
@@ -17,13 +17,17 @@
             "name": "SQLite",
             "versions": ["USE_SQLITE"],
             "libs-posix": ["sqlite3"],
-            "libs-windows": ["sqlite3.lib"]
+            "libs-windows": ["sqlite3.lib"],
+            "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
+            "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib" ],
         },
         {
             "name": "PGSQL",
             "versions": ["USE_PGSQL"],
             "libs-posix": ["pq"],
-            "libs-windows": ["libpq.lib"]
+            "libs-windows": ["libpq"],
+            "copyFiles-windows-x86": [ "libs/win32/libpq.dll" ],
+            "sourceFiles-windows-x86" : [ "libs/win32/libpq.lib" ],
         }
     ]
 }
