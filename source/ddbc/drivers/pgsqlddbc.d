@@ -363,7 +363,12 @@ version(USE_PGSQL) {
                                     v[col] = parse!int(s);
                                     break;
                                 case BOOLOID:
-                                    v[col] = s == "true" ? true : (s == "false" ? false : parse!int(s) != 0);
+                                    if( s == "true" || s == "t" || s == "1" )
+                                        v[col] = true;
+                                    else if( s == "false" || s == "f" || s == "0" )
+                                        v[col] = false;
+                                    else
+                                        v[col] = parse!int(s) != 0;
                                     break;
                                 case CHAROID:
                                     v[col] = cast(char)(s.length > 0 ? s[0] : 0);
@@ -387,6 +392,9 @@ version(USE_PGSQL) {
                                     break;
                                 case BYTEAOID:
                                     v[col] = byteaToUbytes(s);
+                                    break;
+                                case TIMESTAMPOID:
+                                    v[col] = DateTime.fromISOExtString( s.translate( [ ' ': 'T' ] ) );
                                     break;
                                 default:
                                     throw new SQLException("Unsupported column type " ~ to!string(t));
