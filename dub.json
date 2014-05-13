@@ -17,7 +17,7 @@
             "name": "SQLite",
             "versions": ["USE_SQLITE"],
             "libs-posix": ["sqlite3"],
-            "libs-windows": ["sqlite3.lib"],
+            "libs-windows": ["sqlite3"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
             "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib" ],
         },
