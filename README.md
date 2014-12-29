@@ -14,21 +14,20 @@ NOTE: project has been moved from SourceForge to GitHub
 
 Example:
 
-    import ddbc.core;
-    import ddbc.common;
+    import ddbc.all;
+    import std.stdio;
+    import std.conv;
 
     // Create driver and fill connection params. You can leave only one section - for RDBMS you want to use
     string[string] params;
     // This part depends on RDBMS
     version( USE_SQLITE )
     {
-        import ddbc.drivers.sqliteddbc;
         SQLITEDriver driver = new SQLITEDriver();
         string url = "zzz.db"; // file with DB
     }
     else version( USE_PGSQL )
     {
-        import ddbc.drivers.pgsqlddbc;
         PGSQLDriver driver = new PGSQLDriver();
         string url = PGSQLDriver.generateUrl( "/tmp", 5432, "testdb" );
         params["user"] = "hdtest";
@@ -36,7 +35,6 @@ Example:
         params["ssl"] = "true";
     } else version(USE_MYSQL)
     {
-        import ddbc.drivers.mysqlddbc;
         // MySQL driver - you can use PostgreSQL or SQLite instead as well
         MySQLDriver driver = new MySQLDriver();
         string url = MySQLDriver.generateUrl("localhost", 3306, "test_db");
