@@ -15,11 +15,28 @@ NOTE: project has been moved from SourceForge to GitHub
 Example:
 
     // create connection pool
+
+    string[string] params;
     // This part depends on RDBMS
-    // MySQL driver - you can use PostgreSQL or SQLite instead as well
-    MySQLDriver driver = new MySQLDriver();
-    string url = MySQLDriver.generateUrl("localhost", 3306, "test_db");
-    string[string] params = MySQLDriver.setUserAndPassword("testuser", "testpassword");
+    version( USE_SQLITE )
+    {
+        SQLITEDriver driver = new SQLITEDriver();
+        string url = "zzz.db"; // file with DB
+    }
+    else version( USE_PGSQL )
+    {
+        PGSQLDriver driver = new PGSQLDriver();
+        string url = PGSQLDriver.generateUrl( "/tmp", 5432, "testdb" );
+        params["user"] = "hdtest";
+        params["password"] = "secret";
+        params["ssl"] = "true";
+    } else version(USE_MYSQL)
+    {
+        // MySQL driver - you can use PostgreSQL or SQLite instead as well
+        MySQLDriver driver = new MySQLDriver();
+        string url = MySQLDriver.generateUrl("localhost", 3306, "test_db");
+        params = MySQLDriver.setUserAndPassword("testuser", "testpassword");
+    }
     // This part is common for all
     DataSource ds = new ConnectionPoolDataSourceImpl(driver, url, params);
 
