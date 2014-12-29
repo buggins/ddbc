@@ -34,7 +34,7 @@ version(USE_PGSQL) {
     
     
     version (Windows) {
-        pragma (lib, "libpq.lib");
+        pragma (lib, "libpq");
         //pragma (lib, "pq");
     } else version (linux) {
         pragma (lib, "pq");
