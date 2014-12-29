@@ -15,7 +15,7 @@
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL"],
             "libs-posix": ["sqlite3", "pq"],
             "libs-windows": ["sqlite3", "libpq"],
-            "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll" ],
+            "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll", "libs/win32/intl.dll" ],
             "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib", "libs/win32/libpq.lib" ],
         },
         {
@@ -35,7 +35,7 @@
             "versions": ["USE_PGSQL"],
             "libs-posix": ["pq"],
             "libs-windows": ["libpq"],
-            "copyFiles-windows-x86": [ "libs/win32/libpq.dll" ],
+            "copyFiles-windows-x86": [ "libs/win32/libpq.dll", "libs/win32/intl.dll" ],
             "sourceFiles-windows-x86" : [ "libs/win32/libpq.lib" ],
         }
     ]
