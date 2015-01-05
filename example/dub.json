@@ -1,0 +1,14 @@
+{
+    "name": "ddbctest",
+    "description": "example for DB Connector for D language, similar to JDBC",
+    "authors": ["Vadim Lopatin","Laeeth Isharc"],
+    "homepage": "https://github.com/buggins/ddbc",
+    "license": "Boost Software License (BSL 1.0)",
+    "dependencies": {
+        "mysql-native": ">=0.0.12",
+	"ddbc": ">=0.2.16",
+    },
+    "targetType": "executable",
+    "libs-posix": ["sqlite3", "pq"],
+     "versions": ["VibeCustomMain"],
+}
