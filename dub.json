@@ -16,7 +16,7 @@
             "libs-posix": ["sqlite3", "pq"],
             "libs-windows": ["sqlite3", "libpq"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll", "libs/win32/intl.dll" ],
-            "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib", "libs/win32/libpq.lib" ],
+            "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib", "libs/win32/libpq.lib" ]
         },
         {
             "name": "MySQL",
@@ -28,7 +28,7 @@
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
-            "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib" ],
+            "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib" ]
         },
         {
             "name": "PGSQL",
@@ -36,7 +36,7 @@
             "libs-posix": ["pq"],
             "libs-windows": ["libpq"],
             "copyFiles-windows-x86": [ "libs/win32/libpq.dll", "libs/win32/intl.dll" ],
-            "sourceFiles-windows-x86" : [ "libs/win32/libpq.lib" ],
+            "sourceFiles-windows-x86" : [ "libs/win32/libpq.lib" ]
         }
     ]
 }
