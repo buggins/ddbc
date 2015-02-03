@@ -702,6 +702,14 @@ string getAllColumnsReadCode(T)() {
     return res;
 }
 
+string getAllColumnsReadCode(T, fieldList...)() {
+    string res = "int index = 1;\n";
+    foreach(m; fieldList) {
+        res ~= getColumnReadCode!(T, m);
+    }
+    return res;
+}
+
 unittest {
     struct User1 {
         long id;
@@ -747,27 +755,45 @@ string generateSelectSQL(T)() {
     return "SELECT " ~ join(getColumnNamesForType!(T)(), ",") ~ " FROM " ~ getTableNameForType!(T)();
 }
 
+string joinFieldList(fieldList...)() {
+    string res;
+    foreach(f; fieldList) {
+        if (res.length)
+            res ~= ",";
+        res ~= f;
+    }
+    return res;
+}
+
+/// returns "SELECT <field list> FROM <table name>"
+string generateSelectSQL(T, fieldList...)() {
+    string res = "SELECT ";
+    res ~= joinFieldList!fieldList;
+    res ~= " FROM " ~ getTableNameForType!(T)();
+    return res;
+}
+
 unittest {
     //pragma(msg, "column names: " ~ join(getColumnNamesForType!(User)(), ","));
     //pragma(msg, "select SQL: " ~ generateSelectSQL!(User)());
 }
 
 /// range for select query
-struct select(T) {
+struct select(T, fieldList...) {
     T entity;
     private Statement stmt;
     private ResultSet r;
-    static immutable selectSQL = generateSelectSQL!(T)();
+    static immutable selectSQL = generateSelectSQL!(T, fieldList)();
     string whereCondSQL;
     string orderBySQL;
     this(Statement stmt) {
         this.stmt = stmt;
     }
-    ref select!T where(string whereCond) {
+    ref select where(string whereCond) {
         whereCondSQL = " WHERE " ~ whereCond;
         return this;
     }
-    ref select!T orderBy(string order) {
+    ref select orderBy(string order) {
         orderBySQL = " ORDER BY " ~ order;
         return this;
     }
@@ -781,7 +807,7 @@ struct select(T) {
             r = stmt.executeQuery(selectSQL ~ whereCondSQL ~ orderBySQL);
         if (!r.next())
             return true;
-        mixin(getAllColumnsReadCode!T());
+        mixin(getAllColumnsReadCode!(T, fieldList));
         return false;
     }
     ~this() {

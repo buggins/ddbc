@@ -38,4 +38,8 @@ void main() {
         writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
     }
 
+    writeln("reading all user table rows, but fetching only id and name (you will see default value 0 in flags field)");
+    foreach(e; stmt.select!(User, "id", "name")) {
+        writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
+    }
 }
