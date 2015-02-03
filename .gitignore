@@ -21,5 +21,4 @@ obj/
 _ReSharper*/
 code.visualdproj
 HibernatedTest/*
-main.d
 Unittest/*

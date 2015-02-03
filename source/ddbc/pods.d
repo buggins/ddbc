@@ -11,25 +11,36 @@ Source file ddbc/drivers/pgsqlddbc.d.
 
  This module contains implementation POD utilities.
 ----
-import ddbc.pods;
 import ddbc.core;
 import ddbc.common;
 import ddbc.drivers.sqliteddbc;
+import ddbc.pods;
+import std.stdio;
+
+// prepare database connectivity
+auto ds = new ConnectionPoolDataSourceImpl(new SQLITEDriver(), "ddbctest.sqlite");
+auto conn = ds.getConnection();
+scope(exit) conn.close();
+Statement stmt = conn.createStatement();
+scope(exit) stmt.close();
+// fill database with test data
+stmt.executeUpdate("DROP TABLE IF EXISTS user");
+stmt.executeUpdate("CREATE TABLE user (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)");
+stmt.executeUpdate(`INSERT INTO user (id, name, flags) VALUES (1, "John", 5), (2, "Andrei", 2), (3, "Walter", 2), (4, "Rikki", 3), (5, "Iain", 0), (6, "Robert", 1)`);
+
+// our POD object
 struct User {
     long id;
     string name;
     int flags;
 }
 
-auto ds = new ConnectionPoolDataSourceImpl(new SQLITEDriver(), "ddbctest.sqlite");
-auto conn = ds.getConnection();
-scope(exit) conn.close();
-Statement stmt = conn.createStatement();
-scope(exit) stmt.close();
-stmt.executeUpdate("DROP TABLE IF EXISTS user");
-stmt.executeUpdate("CREATE TABLE user (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)");
-stmt.executeUpdate(`INSERT INTO user (id, name, flags) VALUES (1, "John", 5), (2, "Andrei", 2), (3, "Walter", 2), (4, "Rikki", 3), (5, "Iain", 0), (6, "Robert", 1)`);
+writeln("reading all user table rows");
+foreach(e; stmt.select!User) {
+    writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
+}
 
+writeln("reading user table rows with where and order by");
 foreach(e; stmt.select!User.where("id < 6").orderBy("name desc")) {
     writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
 }
@@ -48,6 +59,8 @@ import std.typecons;
 import std.conv;
 import std.datetime;
 import std.string;
+
+import ddbc.core;
 
 alias Nullable!byte Byte;
 alias Nullable!ubyte Ubyte;
@@ -86,14 +99,6 @@ struct String
     }
 
     alias _value this;
-}
-
-enum PropertyMemberKind : int {
-    FIELD_MEMBER,      // int field;
-    GETTER_MEMBER,     // getField() + setField() or isField() and setField()
-    PROPERTY_MEMBER,   // @property T field() { ... } + @property xxx field(T value) { ... }
-    LAZY_MEMBER,       // Lazy!Object field;
-    UNSUPPORTED_MEMBER,// 
 }
 
 enum PropertyMemberType : int {
@@ -698,27 +703,27 @@ string getAllColumnsReadCode(T)() {
 }
 
 unittest {
-    struct User {
+    struct User1 {
         long id;
         string name;
         int flags;
     }
-    pragma(msg, "nullValueCode = " ~ ColumnTypeSetNullCode[getPropertyMemberType!(User, "id")()]);
-    pragma(msg, "datasetReader = " ~ getColumnTypeDatasetReadCode!(User, "id")());
-    pragma(msg, "getPropertyWriteCode: " ~ getPropertyWriteCode!(User, "id"));
-    pragma(msg, "getAllColumnsReadCode:\n" ~ getAllColumnsReadCode!(User));
+    //pragma(msg, "nullValueCode = " ~ ColumnTypeSetNullCode[getPropertyMemberType!(User, "id")()]);
+    //pragma(msg, "datasetReader = " ~ getColumnTypeDatasetReadCode!(User, "id")());
+    //pragma(msg, "getPropertyWriteCode: " ~ getPropertyWriteCode!(User, "id"));
+    //pragma(msg, "getAllColumnsReadCode:\n" ~ getAllColumnsReadCode!(User));
     //static assert(getPropertyWriteCode!(User, "id") == "long nv = 0;entity.id = (!r.isNull(index) ? r.getLong(index) : nv);");
 }
 
 unittest {
-    struct User {
+    struct User1 {
         long id;
         string name;
         int flags;
     }
-    static assert(getPropertyMemberType!(User, "id")() == PropertyMemberType.LONG_TYPE);
-    static assert(getPropertyMemberType!(User, "name")() == PropertyMemberType.STRING_TYPE);
-    pragma(msg, "getPropertyMemberType unit test passed");
+    static assert(getPropertyMemberType!(User1, "id")() == PropertyMemberType.LONG_TYPE);
+    static assert(getPropertyMemberType!(User1, "name")() == PropertyMemberType.STRING_TYPE);
+    //pragma(msg, "getPropertyMemberType unit test passed");
 }
 
 
@@ -729,26 +734,26 @@ string getTableNameForType(T)() if (__traits(isPOD, T)) {
 }
 
 unittest {
-    struct User {
+    struct User1 {
         long id;
         string name;
         int flags;
     }
-    static assert(getTableNameForType!User() == "user");
+    static assert(getTableNameForType!User1() == "user1");
 }
 
 /// returns "SELECT <field list> FROM <table name>"
 string generateSelectSQL(T)() {
-    return "SELECT " ~ join(getColumnNamesForType!(User)(), ",") ~ " FROM " ~ getTableNameForType!(T)();
+    return "SELECT " ~ join(getColumnNamesForType!(T)(), ",") ~ " FROM " ~ getTableNameForType!(T)();
 }
 
 unittest {
-    pragma(msg, "column names: " ~ join(getColumnNamesForType!(User)(), ","));
-    pragma(msg, "select SQL: " ~ generateSelectSQL!(User)());
+    //pragma(msg, "column names: " ~ join(getColumnNamesForType!(User)(), ","));
+    //pragma(msg, "select SQL: " ~ generateSelectSQL!(User)());
 }
 
 /// range for select query
-struct select(T) if (__traits(isPOD, T))  {
+struct select(T) {
     T entity;
     private Statement stmt;
     private ResultSet r;
@@ -757,13 +762,12 @@ struct select(T) if (__traits(isPOD, T))  {
     string orderBySQL;
     this(Statement stmt) {
         this.stmt = stmt;
-        writeln("created query ", selectSQL);
     }
-    ref SelectQuery where(string whereCond) {
+    ref select!T where(string whereCond) {
         whereCondSQL = " WHERE " ~ whereCond;
         return this;
     }
-    ref SelectQuery orderBy(string order) {
+    ref select!T orderBy(string order) {
         orderBySQL = " ORDER BY " ~ order;
         return this;
     }
