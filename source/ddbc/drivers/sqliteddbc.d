@@ -932,7 +932,7 @@ version(USE_SQLITE) {
     class SQLITEDriver : Driver {
         // helper function
         public static string generateUrl(string host, ushort port, string dbname) {
-            return "postgresql://" ~ host ~ ":" ~ to!string(port) ~ "/" ~ dbname;
+            return "sqlite://" ~ host ~ ":" ~ to!string(port) ~ "/" ~ dbname;
         }
         public static string[string] setUserAndPassword(string username, string password) {
             string[string] params;

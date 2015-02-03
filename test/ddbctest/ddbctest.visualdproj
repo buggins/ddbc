@@ -1,9 +1,9 @@
 <DProject>
- <ProjectGuid>{73F0CBE2-F09C-4141-866B-352226CA8029}</ProjectGuid>
+ <ProjectGuid>{2D9D91AB-FB57-41E6-9769-A82E95235A40}</ProjectGuid>
  <Config name="Debug" platform="Win32">
   <obj>0</obj>
   <link>0</link>
-  <lib>1</lib>
+  <lib>0</lib>
   <subsystem>0</subsystem>
   <multiobj>0</multiobj>
   <singleFileCompilation>0</singleFileCompilation>
@@ -42,12 +42,12 @@
   <pic>0</pic>
   <cov>0</cov>
   <nofloat>0</nofloat>
-  <Dversion>2.043</Dversion>
+  <Dversion>2</Dversion>
   <ignoreUnsupportedPragmas>0</ignoreUnsupportedPragmas>
   <compiler>0</compiler>
   <otherDMD>0</otherDMD>
   <program>$(DMDInstallDir)windows\bin\dmd.exe</program>
-  <imppath />
+  <imppath>..\..\source</imppath>
   <fileImppath />
   <outdir>$(ConfigurationName)</outdir>
   <objdir>$(OutDir)</objdir>
@@ -83,11 +83,11 @@
   <cv2pdbOptions />
   <objfiles />
   <linkswitches />
-  <libfiles>libpq.lib;sqlite.lib</libfiles>
-  <libpaths>lib/win32</libpaths>
+  <libfiles />
+  <libpaths>..\..\libs\win32</libpaths>
   <deffile />
   <resfile />
-  <exefile>$(OutDir)\$(ProjectName).lib</exefile>
+  <exefile>$(OutDir)\$(ProjectName).exe</exefile>
   <useStdLibPath>1</useStdLibPath>
   <additionalOptions />
   <preBuildCommand />
@@ -97,7 +97,7 @@
  <Config name="Release" platform="Win32">
   <obj>0</obj>
   <link>0</link>
-  <lib>1</lib>
+  <lib>0</lib>
   <subsystem>0</subsystem>
   <multiobj>0</multiobj>
   <singleFileCompilation>0</singleFileCompilation>
@@ -181,23 +181,14 @@
   <libpaths />
   <deffile />
   <resfile />
-  <exefile>$(OutDir)\$(ProjectName).lib</exefile>
+  <exefile>$(OutDir)\$(ProjectName).exe</exefile>
   <useStdLibPath>1</useStdLibPath>
   <additionalOptions />
   <preBuildCommand />
   <postBuildCommand />
   <filesToClean>*.obj;*.cmd;*.build;*.json;*.dep</filesToClean>
  </Config>
- <Folder name="ddbc">
-  <File path="source\ddbc\common.d" />
-  <File path="source\ddbc\core.d" />
-  <File path="libs\win32\libpq.lib" />
-  <File path="source\ddbc\drivers\mysqlddbc.d" />
-  <File path="source\ddbc\drivers\pgsql.d" />
-  <File path="source\ddbc\drivers\pgsqlddbc.d" />
-  <File path="source\ddbc\pods.d" />
-  <File path="libs\win32\sqlite3.lib" />
-  <File path="source\ddbc\drivers\sqliteddbc.d" />
-  <File path="source\ddbc\drivers\utils.d" />
+ <Folder name="ddbctest">
+  <File path="main.d" />
  </Folder>
 </DProject>

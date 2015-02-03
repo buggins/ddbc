@@ -92,7 +92,7 @@ private:
 
 public:
 
-	this(Driver driver, string url, string[string]params, int maxPoolSize = 1, int timeToLive = 600, int waitTimeOut = 30) {
+	this(Driver driver, string url, string[string]params = null, int maxPoolSize = 1, int timeToLive = 600, int waitTimeOut = 30) {
 		super(driver, url, params);
 		this.maxPoolSize = maxPoolSize;
 		this.timeToLive = timeToLive;
