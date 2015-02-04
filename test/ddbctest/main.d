@@ -33,13 +33,21 @@ void main() {
         writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
     }
 
-    writeln("reading user table rows with where and order by");
+    writeln("\nreading user table rows with where and order by");
     foreach(ref e; stmt.select!User.where("id < 6").orderBy("name desc")) {
         writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
     }
 
-    writeln("reading all user table rows, but fetching only id and name (you will see default value 0 in flags field)");
+    writeln("\nreading all user table rows, but fetching only id and name (you will see default value 0 in flags field)");
     foreach(ref e; stmt.select!(User, "id", "name")) {
         writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
     }
+
+    writeln("\nreading all user table rows, but fetching only id and name, placing result into vars");
+    long id;
+    string name;
+    foreach(e; select!()(stmt, "SELECT id, name FROM user", id, name)) {
+        writeln("id:", id, " name:", name);
+    }
+
 }

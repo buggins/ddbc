@@ -297,76 +297,80 @@ template isSupportedSimpleType(T, string m) {
     }
 }
 
+PropertyMemberType getPropertyType(ti)() {
+    //pragma(msg, T.stringof);
+    //alias typeof(T) ti;
+	static if (is(ti == bool)) {
+		return PropertyMemberType.BOOL_TYPE;
+    } else if (is(ti == byte)) {
+        return PropertyMemberType.BYTE_TYPE;
+    } else if (is(ti == short)) {
+        return PropertyMemberType.SHORT_TYPE;
+    } else if (is(ti == int)) {
+        return PropertyMemberType.INT_TYPE;
+    } else if (is(ti == long)) {
+        return PropertyMemberType.LONG_TYPE;
+    } else if (is(ti == ubyte)) {
+        return PropertyMemberType.UBYTE_TYPE;
+    } else if (is(ti == ushort)) {
+        return PropertyMemberType.USHORT_TYPE;
+    } else if (is(ti == uint)) {
+        return PropertyMemberType.UINT_TYPE;
+    } else if (is(ti == ulong)) {
+        return PropertyMemberType.ULONG_TYPE;
+    } else if (is(ti == float)) {
+        return PropertyMemberType.FLOAT_TYPE;
+    } else if (is(ti == double)) {
+        return PropertyMemberType.DOUBLE_TYPE;
+    } else if (is(ti == Nullable!byte)) {
+        return PropertyMemberType.NULLABLE_BYTE_TYPE;
+    } else if (is(ti == Nullable!short)) {
+        return PropertyMemberType.NULLABLE_SHORT_TYPE;
+    } else if (is(ti == Nullable!int)) {
+        return PropertyMemberType.NULLABLE_INT_TYPE;
+    } else if (is(ti == Nullable!long)) {
+        return PropertyMemberType.NULLABLE_LONG_TYPE;
+    } else if (is(ti == Nullable!ubyte)) {
+        return PropertyMemberType.NULLABLE_UBYTE_TYPE;
+    } else if (is(ti == Nullable!ushort)) {
+        return PropertyMemberType.NULLABLE_USHORT_TYPE;
+    } else if (is(ti == Nullable!uint)) {
+        return PropertyMemberType.NULLABLE_UINT_TYPE;
+    } else if (is(ti == Nullable!ulong)) {
+        return PropertyMemberType.NULLABLE_ULONG_TYPE;
+    } else if (is(ti == Nullable!float)) {
+        return PropertyMemberType.NULLABLE_FLOAT_TYPE;
+    } else if (is(ti == Nullable!double)) {
+        return PropertyMemberType.NULLABLE_DOUBLE_TYPE;
+    } else if (is(ti == string)) {
+        return PropertyMemberType.STRING_TYPE;
+    } else if (is(ti == String)) {
+        return PropertyMemberType.NULLABLE_STRING_TYPE;
+    } else if (is(ti == DateTime)) {
+        return PropertyMemberType.DATETIME_TYPE;
+    } else if (is(ti == Date)) {
+        return PropertyMemberType.DATE_TYPE;
+    } else if (is(ti == TimeOfDay)) {
+        return PropertyMemberType.TIME_TYPE;
+    } else if (is(ti == Nullable!DateTime)) {
+        return PropertyMemberType.NULLABLE_DATETIME_TYPE;
+    } else if (is(ti == Nullable!Date)) {
+        return PropertyMemberType.NULLABLE_DATE_TYPE;
+    } else if (is(ti == Nullable!TimeOfDay)) {
+        return PropertyMemberType.NULLABLE_TIME_TYPE;
+    } else if (is(ti == byte[])) {
+        return PropertyMemberType.BYTE_ARRAY_TYPE;
+    } else if (is(ti == ubyte[])) {
+        return PropertyMemberType.UBYTE_ARRAY_TYPE;
+    } else {
+        assert (false, "has unsupported type " ~ ti.stringof);
+    }
+}
+
 PropertyMemberType getPropertyMemberType(T, string m)() {
     alias typeof(__traits(getMember, T, m)) ti;
-    static if (is(ti == function)) {
-		static if (is(ReturnType!(ti) == bool)) {
-			return PropertyMemberType.BOOL_TYPE;
-		} else static if (is(ReturnType!(ti) == byte)) {
-            return PropertyMemberType.BYTE_TYPE;
-        } else if (is(ReturnType!(ti) == short)) {
-            return PropertyMemberType.SHORT_TYPE;
-        } else if (is(ReturnType!(ti) == int)) {
-            return PropertyMemberType.INT_TYPE;
-        } else if (is(ReturnType!(ti) == long)) {
-            return PropertyMemberType.LONG_TYPE;
-        } else if (is(ReturnType!(ti) == ubyte)) {
-            return PropertyMemberType.UBYTE_TYPE;
-        } else if (is(ReturnType!(ti) == ushort)) {
-            return PropertyMemberType.USHORT_TYPE;
-        } else if (is(ReturnType!(ti) == uint)) {
-            return PropertyMemberType.UINT_TYPE;
-        } else if (is(ReturnType!(ti) == ulong)) {
-            return PropertyMemberType.ULONG_TYPE;
-        } else if (is(ReturnType!(ti) == float)) {
-            return PropertyMemberType.FLOAT_TYPE;
-        } else if (is(ReturnType!(ti) == double)) {
-            return PropertyMemberType.DOUBLE_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!byte)) {
-            return PropertyMemberType.NULLABLE_BYTE_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!short)) {
-            return PropertyMemberType.NULLABLE_SHORT_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!int)) {
-            return PropertyMemberType.NULLABLE_INT_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!long)) {
-            return PropertyMemberType.NULLABLE_LONG_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!ubyte)) {
-            return PropertyMemberType.NULLABLE_UBYTE_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!ushort)) {
-            return PropertyMemberType.NULLABLE_USHORT_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!uint)) {
-            return PropertyMemberType.NULLABLE_UINT_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!ulong)) {
-            return PropertyMemberType.NULLABLE_ULONG_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!float)) {
-            return PropertyMemberType.NULLABLE_FLOAT_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!double)) {
-            return PropertyMemberType.NULLABLE_DOUBLE_TYPE;
-        } else if (is(ReturnType!(ti) == string)) {
-            return PropertyMemberType.STRING_TYPE;
-        } else if (is(ReturnType!(ti) == String)) {
-            return PropertyMemberType.NULLABLE_STRING_TYPE;
-        } else if (is(ReturnType!(ti) == DateTime)) {
-            return PropertyMemberType.DATETIME_TYPE;
-        } else if (is(ReturnType!(ti) == Date)) {
-            return PropertyMemberType.DATE_TYPE;
-        } else if (is(ReturnType!(ti) == TimeOfDay)) {
-            return PropertyMemberType.TIME_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!DateTime)) {
-            return PropertyMemberType.NULLABLE_DATETIME_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!Date)) {
-            return PropertyMemberType.NULLABLE_DATE_TYPE;
-        } else if (is(ReturnType!(ti) == Nullable!TimeOfDay)) {
-            return PropertyMemberType.NULLABLE_TIME_TYPE;
-        } else if (is(ReturnType!(ti) == byte[])) {
-            return PropertyMemberType.BYTE_ARRAY_TYPE;
-        } else if (is(ReturnType!(ti) == ubyte[])) {
-            return PropertyMemberType.UBYTE_ARRAY_TYPE;
-        } else {
-            assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
-        }
-	} else if (is(ti == bool)) {
-		return PropertyMemberType.BOOL_TYPE;
+    static if (is(ti == bool)) {
+        return PropertyMemberType.BOOL_TYPE;
     } else if (is(ti == byte)) {
         return PropertyMemberType.BYTE_TYPE;
     } else if (is(ti == short)) {
@@ -430,11 +434,14 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
     } else {
         assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
     }
-    //static assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
 }
 
 string getPropertyReadCode(T, string m)() {
     return "entity." ~ m;
+}
+
+string getPropertyReadCode(alias T)() {
+    return "entity." ~ T.stringof;
 }
 
 static immutable bool[] ColumnTypeCanHoldNulls = 
@@ -663,11 +670,22 @@ string getColumnTypeDatasetReadCode(T, string m)() {
     return ColumnTypeDatasetReaderCode[getPropertyMemberType!(T,m)()];
 }
 
+string getVarTypeDatasetReadCode(T)() {
+    return ColumnTypeDatasetReaderCode[getPropertyType!T];
+}
+
 string getPropertyWriteCode(T, string m)() {
     //immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
     immutable string nullValueCode = ColumnTypeSetNullCode[getPropertyMemberType!(T,m)()];
     immutable string datasetReader = "(!r.isNull(index) ? " ~ getColumnTypeDatasetReadCode!(T, m)() ~ " : nv)";
     return nullValueCode ~ "entity." ~ m ~ " = " ~ datasetReader ~ ";";
+}
+
+string getPropertyWriteCode(T)() {
+    //immutable PropertyMemberKind kind = getPropertyMemberKind!(T, m)();
+    immutable string nullValueCode = ColumnTypeSetNullCode[getPropertyType!T];
+    immutable string datasetReader = "(!r.isNull(index) ? " ~ getVarTypeDatasetReadCode!T ~ " : nv)";
+    return nullValueCode ~ "a = " ~ datasetReader ~ ";";
 }
 
 /// returns array of field names
@@ -779,7 +797,7 @@ unittest {
 }
 
 /// range for select query
-struct select(T, fieldList...) {
+struct select(T, fieldList...) if (__traits(isPOD, T)) {
     T entity;
     private Statement stmt;
     private ResultSet r;
@@ -814,4 +832,142 @@ struct select(T, fieldList...) {
         if (r)
             r.close();
     }
+}
+
+template isSupportedSimpleTypeRef(M) {
+    alias typeof(M) ti;
+    static if (!__traits(isRef, M)) {
+        enum bool isSupportedSimpleTypeRef = false;
+    } else static if (is(ti == bool)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == byte)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == short)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == int)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == long)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == ubyte)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == ushort)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == uint)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == ulong)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == float)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == double)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!byte)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!short)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!int)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!long)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!ubyte)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!ushort)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!uint)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!ulong)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!float)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!double)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == string)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == String)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == DateTime)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Date)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == TimeOfDay)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!DateTime)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!Date)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!TimeOfDay)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == byte[])) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == ubyte[])) {
+        enum bool isSupportedSimpleType = true;
+    } else {
+        enum bool isSupportedSimpleType = false;
+    }
+}
+
+// TODO: use better way to count parameters
+int paramCount(destList...)() {
+    int res = 0;
+    foreach(p; destList) {
+        res++;
+    }
+    return res;
+}
+
+bool isSupportedSimpleTypeRefList(destList...)() {
+    foreach(p; destList) {
+        static if (!isSupportedSimpleTypeRef!p) {
+            return false;
+        }
+    }
+    return true;
+}
+
+struct select(Args...)  {//if (isSupportedSimpleTypeRefList!Args())
+    private Statement stmt;
+    private ResultSet r;
+    private void delegate() _copyFunction;
+    private int rowIndex;
+    
+    this(Args...)(Statement stmt, string sql, ref Args args) {
+        this.stmt = stmt;
+        selectSQL = sql;
+        _copyFunction = delegate() {
+            foreach(i, ref a; args) {
+                int index = i + 1;
+                mixin(getPropertyWriteCode!(typeof(a)));
+            }
+        };
+    }
+
+    string selectSQL;
+    string whereCondSQL;
+    string orderBySQL;
+    ref select where(string whereCond) {
+        whereCondSQL = " WHERE " ~ whereCond;
+        return this;
+    }
+    ref select orderBy(string order) {
+        orderBySQL = " ORDER BY " ~ order;
+        return this;
+    }
+    int front() {
+        return rowIndex;
+    }
+    void popFront() {
+        rowIndex++;
+    }
+    @property bool empty() {
+        if (!r)
+            r = stmt.executeQuery(selectSQL ~ whereCondSQL ~ orderBySQL);
+        if (!r.next())
+            return true;
+        _copyFunction();
+        return false;
+    }
+    ~this() {
+        if (r)
+            r.close();
+    }
+
 }
