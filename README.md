@@ -12,11 +12,15 @@ Currently supports MySQL, PostgreSQL and SQLite.
 Project homepage: https://github.com/buggins/ddbc
 Documentation: https://github.com/buggins/ddbc/wiki
 
+
 See also: https://github.com/buggins/hibernated - ORM for D language which uses DDBC.
+
 
 NOTE: project has been moved from SourceForge to GitHub
 
+
 Example:
+
 
     import ddbc.all;
     import std.stdio;
@@ -67,7 +71,13 @@ Example:
 
 
 
+Module ddbc.pods implement SELECT support for POD structs (plain old data).
+
+Instead of manual reading fields one by one, it's possible to put result set value to struct fields, 
+and generate select statements automatically.
+
 Sample of easy reading from DB using PODs support:
+
 
     import ddbc.core;
     import ddbc.common;
