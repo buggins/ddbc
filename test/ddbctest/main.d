@@ -46,7 +46,7 @@ void main() {
     writeln("\nreading all user table rows, but fetching only id and name, placing result into vars");
     long id;
     string name;
-    foreach(e; select!()(stmt, "SELECT id, name FROM user", id, name)) {
+    foreach(e; stmt.select!()("SELECT id, name FROM user", id, name)) {
         writeln("id:", id, " name:", name);
     }
 
