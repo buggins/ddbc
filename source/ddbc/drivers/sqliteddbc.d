@@ -971,10 +971,18 @@ version(USE_SQLITE) {
             }
             {
                 //writeln("populating table");
-                PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test1'), ('test2')");
+                PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test1')");
                 scope(exit) stmt.close();
                 Variant id = 0;
-                assert(stmt.executeUpdate(id) == 2);
+                assert(stmt.executeUpdate(id) == 1);
+                assert(id.get!long > 0);
+            }
+            {
+                //writeln("populating table");
+                PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test2')");
+                scope(exit) stmt.close();
+                Variant id = 0;
+                assert(stmt.executeUpdate(id) == 1);
                 assert(id.get!long > 0);
             }
             {
