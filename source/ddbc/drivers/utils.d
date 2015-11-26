@@ -18,6 +18,8 @@
  */
 module ddbc.drivers.utils;
 
+import std.datetime;
+
 string copyCString(const char* c, int actualLength = -1) {
     const(char)* a = c;
     if(a is null)
@@ -34,4 +36,22 @@ string copyCString(const char* c, int actualLength = -1) {
     }
     
     return ret;
+}
+
+TimeOfDay parseTimeoid(const string timeoid)
+{
+    import std.format;
+    string input = timeoid.dup;
+    int hour, min, sec;
+    formattedRead(input, "%s:%s:%s", &hour, &min, &sec);
+    return TimeOfDay(hour, min, sec);
+}
+
+Date parseDateoid(const string dateoid)
+{
+    import std.format: formattedRead;
+    string input = dateoid.dup;
+    int year, month, day;
+    formattedRead(input, "%s-%s-%s", &year, &month, &day);
+    return Date(year, month, day);
 }

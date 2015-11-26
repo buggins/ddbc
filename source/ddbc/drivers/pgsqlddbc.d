@@ -397,6 +397,12 @@ version(USE_PGSQL) {
                                 case TIMESTAMPOID:
                                     v[col] = DateTime.fromISOExtString( s.translate( [ ' ': 'T' ] ).split( '.' ).front() );
                                     break;
+                                case TIMEOID:
+                                    v[col] = parseTimeoid(s);
+                                    break;
+                                case DATEOID:
+                                    v[col] = parseDateoid(s);
+                                    break;
                                 default:
                                     throw new SQLException("Unsupported column type " ~ to!string(t));
                             }
