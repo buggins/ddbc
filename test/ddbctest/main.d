@@ -20,7 +20,12 @@ void main() {
     // fill database with test data
     stmt.executeUpdate("DROP TABLE IF EXISTS user");
     stmt.executeUpdate("CREATE TABLE user (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)");
-    stmt.executeUpdate(`INSERT INTO user (id, name, flags) VALUES (1, "John", 5), (2, "Andrei", 2), (3, "Walter", 2), (4, "Rikki", 3), (5, "Iain", 0), (6, "Robert", 1)`);
+    stmt.executeUpdate(`INSERT INTO user (id, name, flags) VALUES (1, "John", 5)`);
+    stmt.executeUpdate(`INSERT INTO user (id, name, flags) VALUES (2, "Andrei", 2)`);
+    stmt.executeUpdate(`INSERT INTO user (id, name, flags) VALUES (3, "Walter", 2)`);
+    stmt.executeUpdate(`INSERT INTO user (id, name, flags) VALUES (4, "Rikki", 3)`);
+    stmt.executeUpdate(`INSERT INTO user (id, name, flags) VALUES (5, "Iain", 0)`);
+    stmt.executeUpdate(`INSERT INTO user (id, name, flags) VALUES (6, "Robert", 1)`);
 
     // our POD object
     struct User {
