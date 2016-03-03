@@ -59,6 +59,7 @@ import std.typecons;
 import std.conv;
 import std.datetime;
 import std.string;
+import std.variant;
 
 import ddbc.core;
 
@@ -832,6 +833,119 @@ struct select(T, fieldList...) if (__traits(isPOD, T)) {
         if (r)
             r.close();
     }
+}
+
+/// returns "INSERT INTO <table name> (<field list>) VALUES (value list)
+string generateInsertSQL(T)() {
+    string res = "INSERT INTO " ~ getTableNameForType!(T)();
+    string []values;
+    foreach(m; __traits(allMembers, T)) {
+      if (m != "id") {
+        static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+          // skip non-public members
+          static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
+            values ~= m;
+          }
+        }
+      }
+    }
+    res ~= "(" ~ join(values, ",") ~ ")";
+    res ~= " VALUES ";
+    return res;
+}
+
+string addFieldValue(T)(string m) {
+  string tmp = `{Variant v = o.`~m~`;`;
+  tmp ~=  `if (isColumnTypeNullableByDefault!(T, "`~m~`")()) {`;
+  tmp ~= `	if(v.peek!T is null) {`;
+  tmp ~= `		values ~= "NULL";`;
+  tmp ~= `	} else {`;
+  tmp ~= `		values ~= "\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+  tmp ~= `}} else {`;
+  tmp ~= `		values ~= "\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+  tmp ~= `}}`;
+  return tmp;
+  // return `values ~= "\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+}
+
+bool insert(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
+    auto insertSQL = generateInsertSQL!(T)();
+    string []values;
+    foreach(m; __traits(allMembers, T)) {
+      if (m != "id") {
+        static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+          // skip non-public members
+          static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
+            // pragma(msg,addFieldValue!(T)(m));
+            mixin(addFieldValue!(T)(m));
+          }
+        }
+      }
+    }
+    insertSQL ~= "(" ~ join(values, ",") ~ ")";
+    Variant insertId;
+    stmt.executeUpdate(insertSQL, insertId);
+    o.id = insertId.get!long;
+    return true;
+}
+
+/// returns "UPDATE <table name> SET field1=value1 WHERE id=id
+string generateUpdateSQL(T)() {
+  string res = "UPDATE " ~ getTableNameForType!(T)();
+  string []values;
+  foreach(m; __traits(allMembers, T)) {
+    if (m != "id") {
+      static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+        // skip non-public members
+        static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
+          values ~= m;
+        }
+      }
+    }
+  }
+  res ~= " SET ";
+  return res;
+}
+
+string addUpdateValue(T)(string m) {
+  return `values ~= "` ~ m ~ `=\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+}
+
+bool update(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
+    auto updateSQL = generateUpdateSQL!(T)();
+    string []values;
+    foreach(m; __traits(allMembers, T)) {
+      if (m != "id") {
+        static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+          // skip non-public members
+          static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
+            // pragma(msg, addUpdateValue!(T)(m));
+            mixin(addUpdateValue!(T)(m));
+          }
+        }
+      }
+    }
+    updateSQL ~= join(values, ",");
+    updateSQL ~= mixin(`" WHERE id="~ to!string(o.id) ~ ";"`);
+    Variant updateId;
+    stmt.executeUpdate(updateSQL, updateId);
+    o.id = updateId.get!long;
+    return true;
+}
+
+/// returns "DELETE FROM <table name> WHERE id=id
+string generateDeleteSQL(T)() {
+  string res = "DELETE FROM " ~ getTableNameForType!(T)();
+  return res;
+}
+
+bool remove(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
+  auto deleteSQL = generateDeleteSQL!(T)();
+  deleteSQL ~= mixin(`" WHERE id="~ to!string(o.id) ~ ";"`);
+  Variant deleteId;
+  stmt.executeUpdate(deleteSQL, deleteId);
+  o.id = deleteId.get!long;
+  return true;
 }
 
 template isSupportedSimpleTypeRef(M) {

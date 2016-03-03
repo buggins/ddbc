@@ -11,10 +11,11 @@ void main() {
     import std.stdio;
 
     // prepare database connectivity
-    auto ds = new ConnectionPoolDataSourceImpl(new SQLITEDriver(), "ddbctest.sqlite");
+    auto ds = new ConnectionPoolDataSourceImpl(new SQLITEDriver(), ":memory:");
     auto conn = ds.getConnection();
     scope(exit) conn.close();
     Statement stmt = conn.createStatement();
+    Statement stmt2 = conn.createStatement();
     scope(exit) stmt.close();
     // fill database with test data
     stmt.executeUpdate("DROP TABLE IF EXISTS user");
@@ -48,6 +49,30 @@ void main() {
     string name;
     foreach(e; stmt.select!()("SELECT id, name FROM user", id, name)) {
         writeln("id:", id, " name:", name);
+    }
+
+    writeln("\nupdating user id=1, change name to 'JB' (:))");
+    foreach(ref john; stmt.select!User.where("id=1")) {
+        writeln(john);
+        john.name = "JB";
+        stmt2.update(john);
+    }
+    User[1] jb_users;
+    foreach(jb; stmt.select!User.where("id=1")) {
+        jb_users[0] = jb;
+        writeln(jb);
+    }
+
+    writeln("reading all user table rows");
+    foreach(ref e; stmt.select!User) {
+        writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
+    }
+
+    writeln("\ndelete user id=1");
+    stmt.remove(jb_users[0]);
+    writeln("reading all user table rows");
+    foreach(ref e; stmt.select!User) {
+        writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
     }
 
 }

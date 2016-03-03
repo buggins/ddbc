@@ -37,6 +37,18 @@
             "libs-windows": ["libpq"],
             "copyFiles-windows-x86": [ "libs/win32/libpq.dll", "libs/win32/intl.dll" ],
             "sourceFiles-windows-x86" : [ "libs/win32/libpq.lib" ]
+        },
+        {
+            "name": "test",
+            "sourcePaths" : ["test/ddbctest"],
+            "targetName": "ddbc-tests",
+            "targetPath": "test",
+            "targetType": "executable",
+            "versions": ["USE_SQLITE"],
+            "libs-posix": ["sqlite3"],
+            "libs-windows": ["sqlite3"],
+            "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
+            "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib" ]
         }
     ]
 }
