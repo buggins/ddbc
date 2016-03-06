@@ -4,9 +4,6 @@
     "authors": ["Vadim Lopatin"],
     "homepage": "https://github.com/buggins/ddbc",
     "license": "Boost Software License (BSL 1.0)",
-    "dependencies": {
-        "mysql-native": ">=0.0.12"
-    },
     "targetPath": "lib",
     "targetType": "staticLibrary",
     "configurations": [
@@ -20,7 +17,10 @@
         },
         {
             "name": "MySQL",
-            "versions": ["USE_MYSQL"]
+            "versions": ["USE_MYSQL"],
+            "dependencies": {
+                "mysql-native": ">=0.0.12"
+            },
         },
         {
             "name": "SQLite",
