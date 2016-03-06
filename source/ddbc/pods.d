@@ -856,8 +856,8 @@ string generateInsertSQL(T)() {
 
 string addFieldValue(T)(string m) {
   string tmp = `{Variant v = o.`~m~`;`;
-  tmp ~=  `if (isColumnTypeNullableByDefault!(T, "`~m~`")()) {`;
-  tmp ~= `	if(v.peek!T is null) {`;
+  tmp ~=  `static if (isColumnTypeNullableByDefault!(T, "`~m~`")()) {`;
+  tmp ~= `	if(o.`~m~`.isNull) {`;
   tmp ~= `		values ~= "NULL";`;
   tmp ~= `	} else {`;
   tmp ~= `		values ~= "\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
