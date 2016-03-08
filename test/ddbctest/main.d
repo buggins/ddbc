@@ -80,4 +80,15 @@ void main() {
         writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
     }
 
+    writeln("\nGet user id=2");
+    User u = stmt.get!User(2L);
+    writeln(u);
+
+    writeln("\nGet user id=789 (throws!)");
+    try {
+      u = stmt.get!User(789L);
+    } catch (SQLException e) {
+      writeln("Exception thrown as expected.");
+    }
+
 }

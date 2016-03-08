@@ -797,6 +797,25 @@ unittest {
     //pragma(msg, "select SQL: " ~ generateSelectSQL!(User)());
 }
 
+/// returns "SELECT <field list> FROM <table name>"
+string generateSelectForGetSQL(T)() {
+    string res = generateSelectSQL!T();
+    res ~= " WHERE id=";
+    return res;
+}
+
+T get(T)(Statement stmt, long id) {
+  T entity;
+  static immutable getSQL = generateSelectForGetSQL!T();
+  ResultSet r;
+  writeln(getSQL ~ to!string(id));
+  r = stmt.executeQuery(getSQL ~ to!string(id));
+  pragma(msg, getAllColumnsReadCode!T());
+  r.next();
+  mixin(getAllColumnsReadCode!T());
+  return entity;
+}
+
 /// range for select query
 struct select(T, fieldList...) if (__traits(isPOD, T)) {
     T entity;
