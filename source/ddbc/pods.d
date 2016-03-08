@@ -808,7 +808,6 @@ T get(T)(Statement stmt, long id) {
   T entity;
   static immutable getSQL = generateSelectForGetSQL!T();
   ResultSet r;
-  writeln(getSQL ~ to!string(id));
   r = stmt.executeQuery(getSQL ~ to!string(id));
   r.next();
   mixin(getAllColumnsReadCode!T());
