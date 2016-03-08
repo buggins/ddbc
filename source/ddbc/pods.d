@@ -810,7 +810,6 @@ T get(T)(Statement stmt, long id) {
   ResultSet r;
   writeln(getSQL ~ to!string(id));
   r = stmt.executeQuery(getSQL ~ to!string(id));
-  pragma(msg, getAllColumnsReadCode!T());
   r.next();
   mixin(getAllColumnsReadCode!T());
   return entity;
