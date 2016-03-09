@@ -946,7 +946,6 @@ bool update(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
     updateSQL ~= mixin(`" WHERE id="~ to!string(o.id) ~ ";"`);
     Variant updateId;
     stmt.executeUpdate(updateSQL, updateId);
-    o.id = updateId.get!long;
     return true;
 }
 
@@ -961,7 +960,6 @@ bool remove(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
   deleteSQL ~= mixin(`" WHERE id="~ to!string(o.id) ~ ";"`);
   Variant deleteId;
   stmt.executeUpdate(deleteSQL, deleteId);
-  o.id = deleteId.get!long;
   return true;
 }
 
