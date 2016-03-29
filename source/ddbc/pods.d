@@ -804,6 +804,12 @@ string generateSelectForGetSQL(T)() {
     return res;
 }
 
+string generateSelectForGetSQLWithFilter(T)() {
+  string res = generateSelectSQL!T();
+  res ~= " WHERE ";
+  return res;
+}
+
 T get(T)(Statement stmt, long id) {
   T entity;
   static immutable getSQL = generateSelectForGetSQL!T();
@@ -814,42 +820,53 @@ T get(T)(Statement stmt, long id) {
   return entity;
 }
 
+T get(T)(Statement stmt, string filter) {
+  T entity;
+  static immutable getSQL = generateSelectForGetSQLWithFilter!T();
+  ResultSet r;
+  writeln(getSQL ~ filter);
+  r = stmt.executeQuery(getSQL ~ filter);
+  r.next();
+  mixin(getAllColumnsReadCode!T());
+  return entity;
+}
+
 /// range for select query
 struct select(T, fieldList...) if (__traits(isPOD, T)) {
-    T entity;
-    private Statement stmt;
-    private ResultSet r;
-    static immutable selectSQL = generateSelectSQL!(T, fieldList)();
-    string whereCondSQL;
-    string orderBySQL;
-    this(Statement stmt) {
-        this.stmt = stmt;
-    }
-    ref select where(string whereCond) {
-        whereCondSQL = " WHERE " ~ whereCond;
-        return this;
-    }
-    ref select orderBy(string order) {
-        orderBySQL = " ORDER BY " ~ order;
-        return this;
-    }
-    ref T front() {
-        return entity;
-    }
-    void popFront() {
-    }
-    @property bool empty() {
-        if (!r)
-            r = stmt.executeQuery(selectSQL ~ whereCondSQL ~ orderBySQL);
-        if (!r.next())
-            return true;
-        mixin(getAllColumnsReadCode!(T, fieldList));
-        return false;
-    }
-    ~this() {
-        if (r)
-            r.close();
-    }
+  T entity;
+  private Statement stmt;
+  private ResultSet r;
+  static immutable selectSQL = generateSelectSQL!(T, fieldList)();
+  string whereCondSQL;
+  string orderBySQL;
+  this(Statement stmt) {
+    this.stmt = stmt;
+  }
+  ref select where(string whereCond) {
+    whereCondSQL = " WHERE " ~ whereCond;
+    return this;
+  }
+  ref select orderBy(string order) {
+    orderBySQL = " ORDER BY " ~ order;
+    return this;
+  }
+  ref T front() {
+    return entity;
+  }
+  void popFront() {
+  }
+  @property bool empty() {
+    if (!r)
+      r = stmt.executeQuery(selectSQL ~ whereCondSQL ~ orderBySQL);
+    if (!r.next())
+      return true;
+    mixin(getAllColumnsReadCode!(T, fieldList));
+    return false;
+  }
+  ~this() {
+    if (r)
+      r.close();
+  }
 }
 
 /// returns "INSERT INTO <table name> (<field list>) VALUES (value list)
