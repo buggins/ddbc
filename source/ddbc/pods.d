@@ -228,7 +228,7 @@ template isSupportedSimpleType(T, string m) {
             enum bool isSupportedSimpleType = true;
         } else static if (is(ReturnType!(ti) == ubyte[])) {
             enum bool isSupportedSimpleType = true;
-        } else {
+        } else static if (true) {
             enum bool isSupportedSimpleType = false;
         }
     } else static if (is(ti == bool)) {
@@ -293,7 +293,7 @@ template isSupportedSimpleType(T, string m) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == ubyte[])) {
         enum bool isSupportedSimpleType = true;
-    } else {
+    } else static if (true) {
         enum bool isSupportedSimpleType = false;
     }
 }
@@ -303,67 +303,67 @@ PropertyMemberType getPropertyType(ti)() {
     //alias typeof(T) ti;
 	static if (is(ti == bool)) {
 		return PropertyMemberType.BOOL_TYPE;
-    } else if (is(ti == byte)) {
+    } else static if (is(ti == byte)) {
         return PropertyMemberType.BYTE_TYPE;
-    } else if (is(ti == short)) {
+    } else static if (is(ti == short)) {
         return PropertyMemberType.SHORT_TYPE;
-    } else if (is(ti == int)) {
+    } else static if (is(ti == int)) {
         return PropertyMemberType.INT_TYPE;
-    } else if (is(ti == long)) {
+    } else static if (is(ti == long)) {
         return PropertyMemberType.LONG_TYPE;
-    } else if (is(ti == ubyte)) {
+    } else static if (is(ti == ubyte)) {
         return PropertyMemberType.UBYTE_TYPE;
-    } else if (is(ti == ushort)) {
+    } else static if (is(ti == ushort)) {
         return PropertyMemberType.USHORT_TYPE;
-    } else if (is(ti == uint)) {
+    } else static if (is(ti == uint)) {
         return PropertyMemberType.UINT_TYPE;
-    } else if (is(ti == ulong)) {
+    } else static if (is(ti == ulong)) {
         return PropertyMemberType.ULONG_TYPE;
-    } else if (is(ti == float)) {
+    } else static if (is(ti == float)) {
         return PropertyMemberType.FLOAT_TYPE;
-    } else if (is(ti == double)) {
+    } else static if (is(ti == double)) {
         return PropertyMemberType.DOUBLE_TYPE;
-    } else if (is(ti == Nullable!byte)) {
+    } else static if (is(ti == Nullable!byte)) {
         return PropertyMemberType.NULLABLE_BYTE_TYPE;
-    } else if (is(ti == Nullable!short)) {
+    } else static if (is(ti == Nullable!short)) {
         return PropertyMemberType.NULLABLE_SHORT_TYPE;
-    } else if (is(ti == Nullable!int)) {
+    } else static if (is(ti == Nullable!int)) {
         return PropertyMemberType.NULLABLE_INT_TYPE;
-    } else if (is(ti == Nullable!long)) {
+    } else static if (is(ti == Nullable!long)) {
         return PropertyMemberType.NULLABLE_LONG_TYPE;
-    } else if (is(ti == Nullable!ubyte)) {
+    } else static if (is(ti == Nullable!ubyte)) {
         return PropertyMemberType.NULLABLE_UBYTE_TYPE;
-    } else if (is(ti == Nullable!ushort)) {
+    } else static if (is(ti == Nullable!ushort)) {
         return PropertyMemberType.NULLABLE_USHORT_TYPE;
-    } else if (is(ti == Nullable!uint)) {
+    } else static if (is(ti == Nullable!uint)) {
         return PropertyMemberType.NULLABLE_UINT_TYPE;
-    } else if (is(ti == Nullable!ulong)) {
+    } else static if (is(ti == Nullable!ulong)) {
         return PropertyMemberType.NULLABLE_ULONG_TYPE;
-    } else if (is(ti == Nullable!float)) {
+    } else static if (is(ti == Nullable!float)) {
         return PropertyMemberType.NULLABLE_FLOAT_TYPE;
-    } else if (is(ti == Nullable!double)) {
+    } else static if (is(ti == Nullable!double)) {
         return PropertyMemberType.NULLABLE_DOUBLE_TYPE;
-    } else if (is(ti == string)) {
+    } else static if (is(ti == string)) {
         return PropertyMemberType.STRING_TYPE;
-    } else if (is(ti == String)) {
+    } else static if (is(ti == String)) {
         return PropertyMemberType.NULLABLE_STRING_TYPE;
-    } else if (is(ti == DateTime)) {
+    } else static if (is(ti == DateTime)) {
         return PropertyMemberType.DATETIME_TYPE;
-    } else if (is(ti == Date)) {
+    } else static if (is(ti == Date)) {
         return PropertyMemberType.DATE_TYPE;
-    } else if (is(ti == TimeOfDay)) {
+    } else static if (is(ti == TimeOfDay)) {
         return PropertyMemberType.TIME_TYPE;
-    } else if (is(ti == Nullable!DateTime)) {
+    } else static if (is(ti == Nullable!DateTime)) {
         return PropertyMemberType.NULLABLE_DATETIME_TYPE;
-    } else if (is(ti == Nullable!Date)) {
+    } else static if (is(ti == Nullable!Date)) {
         return PropertyMemberType.NULLABLE_DATE_TYPE;
-    } else if (is(ti == Nullable!TimeOfDay)) {
+    } else static if (is(ti == Nullable!TimeOfDay)) {
         return PropertyMemberType.NULLABLE_TIME_TYPE;
-    } else if (is(ti == byte[])) {
+    } else static if (is(ti == byte[])) {
         return PropertyMemberType.BYTE_ARRAY_TYPE;
-    } else if (is(ti == ubyte[])) {
+    } else static if (is(ti == ubyte[])) {
         return PropertyMemberType.UBYTE_ARRAY_TYPE;
-    } else {
+    } else static if (true) {
         assert (false, "has unsupported type " ~ ti.stringof);
     }
 }
@@ -372,67 +372,67 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
     alias typeof(__traits(getMember, T, m)) ti;
     static if (is(ti == bool)) {
         return PropertyMemberType.BOOL_TYPE;
-    } else if (is(ti == byte)) {
+    } else static if (is(ti == byte)) {
         return PropertyMemberType.BYTE_TYPE;
-    } else if (is(ti == short)) {
+    } else static if (is(ti == short)) {
         return PropertyMemberType.SHORT_TYPE;
-    } else if (is(ti == int)) {
+    } else static if (is(ti == int)) {
         return PropertyMemberType.INT_TYPE;
-    } else if (is(ti == long)) {
+    } else static if (is(ti == long)) {
         return PropertyMemberType.LONG_TYPE;
-    } else if (is(ti == ubyte)) {
+    } else static if (is(ti == ubyte)) {
         return PropertyMemberType.UBYTE_TYPE;
-    } else if (is(ti == ushort)) {
+    } else static if (is(ti == ushort)) {
         return PropertyMemberType.USHORT_TYPE;
-    } else if (is(ti == uint)) {
+    } else static if (is(ti == uint)) {
         return PropertyMemberType.UINT_TYPE;
-    } else if (is(ti == ulong)) {
+    } else static if (is(ti == ulong)) {
         return PropertyMemberType.ULONG_TYPE;
-    } else if (is(ti == float)) {
+    } else static if (is(ti == float)) {
         return PropertyMemberType.FLOAT_TYPE;
-    } else if (is(ti == double)) {
+    } else static if (is(ti == double)) {
         return PropertyMemberType.DOUBLE_TYPE;
-    } else if (is(ti == Nullable!byte)) {
+    } else static if (is(ti == Nullable!byte)) {
         return PropertyMemberType.NULLABLE_BYTE_TYPE;
-    } else if (is(ti == Nullable!short)) {
+    } else static if (is(ti == Nullable!short)) {
         return PropertyMemberType.NULLABLE_SHORT_TYPE;
-    } else if (is(ti == Nullable!int)) {
+    } else static if (is(ti == Nullable!int)) {
         return PropertyMemberType.NULLABLE_INT_TYPE;
-    } else if (is(ti == Nullable!long)) {
+    } else static if (is(ti == Nullable!long)) {
         return PropertyMemberType.NULLABLE_LONG_TYPE;
-    } else if (is(ti == Nullable!ubyte)) {
+    } else static if (is(ti == Nullable!ubyte)) {
         return PropertyMemberType.NULLABLE_UBYTE_TYPE;
-    } else if (is(ti == Nullable!ushort)) {
+    } else static if (is(ti == Nullable!ushort)) {
         return PropertyMemberType.NULLABLE_USHORT_TYPE;
-    } else if (is(ti == Nullable!uint)) {
+    } else static if (is(ti == Nullable!uint)) {
         return PropertyMemberType.NULLABLE_UINT_TYPE;
-    } else if (is(ti == Nullable!ulong)) {
+    } else static if (is(ti == Nullable!ulong)) {
         return PropertyMemberType.NULLABLE_ULONG_TYPE;
-    } else if (is(ti == Nullable!float)) {
+    } else static if (is(ti == Nullable!float)) {
         return PropertyMemberType.NULLABLE_FLOAT_TYPE;
-    } else if (is(ti == Nullable!double)) {
+    } else static if (is(ti == Nullable!double)) {
         return PropertyMemberType.NULLABLE_DOUBLE_TYPE;
-    } else if (is(ti == string)) {
+    } else static if (is(ti == string)) {
         return PropertyMemberType.STRING_TYPE;
-    } else if (is(ti == String)) {
+    } else static if (is(ti == String)) {
         return PropertyMemberType.NULLABLE_STRING_TYPE;
-    } else if (is(ti == DateTime)) {
+    } else static if (is(ti == DateTime)) {
         return PropertyMemberType.DATETIME_TYPE;
-    } else if (is(ti == Date)) {
+    } else static if (is(ti == Date)) {
         return PropertyMemberType.DATE_TYPE;
-    } else if (is(ti == TimeOfDay)) {
+    } else static if (is(ti == TimeOfDay)) {
         return PropertyMemberType.TIME_TYPE;
-    } else if (is(ti == Nullable!DateTime)) {
+    } else static if (is(ti == Nullable!DateTime)) {
         return PropertyMemberType.NULLABLE_DATETIME_TYPE;
-    } else if (is(ti == Nullable!Date)) {
+    } else static if (is(ti == Nullable!Date)) {
         return PropertyMemberType.NULLABLE_DATE_TYPE;
-    } else if (is(ti == Nullable!TimeOfDay)) {
+    } else static if (is(ti == Nullable!TimeOfDay)) {
         return PropertyMemberType.NULLABLE_TIME_TYPE;
-    } else if (is(ti == byte[])) {
+    } else static if (is(ti == byte[])) {
         return PropertyMemberType.BYTE_ARRAY_TYPE;
-    } else if (is(ti == ubyte[])) {
+    } else static if (is(ti == ubyte[])) {
         return PropertyMemberType.UBYTE_ARRAY_TYPE;
-    } else {
+    } else static if (true) {
         assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
     }
 }
@@ -1046,7 +1046,7 @@ template isSupportedSimpleTypeRef(M) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == ubyte[])) {
         enum bool isSupportedSimpleType = true;
-    } else {
+    } else static if (true) {
         enum bool isSupportedSimpleType = false;
     }
 }
