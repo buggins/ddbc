@@ -59,6 +59,7 @@ import std.typecons;
 import std.conv;
 import std.datetime;
 import std.string;
+import std.variant;
 
 import ddbc.core;
 
@@ -796,42 +797,187 @@ unittest {
     //pragma(msg, "select SQL: " ~ generateSelectSQL!(User)());
 }
 
+/// returns "SELECT <field list> FROM <table name>"
+string generateSelectForGetSQL(T)() {
+    string res = generateSelectSQL!T();
+    res ~= " WHERE id=";
+    return res;
+}
+
+string generateSelectForGetSQLWithFilter(T)() {
+  string res = generateSelectSQL!T();
+  res ~= " WHERE ";
+  return res;
+}
+
+T get(T)(Statement stmt, long id) {
+  T entity;
+  static immutable getSQL = generateSelectForGetSQL!T();
+  ResultSet r;
+  r = stmt.executeQuery(getSQL ~ to!string(id));
+  r.next();
+  mixin(getAllColumnsReadCode!T());
+  return entity;
+}
+
+T get(T)(Statement stmt, string filter) {
+  T entity;
+  static immutable getSQL = generateSelectForGetSQLWithFilter!T();
+  ResultSet r;
+  writeln(getSQL ~ filter);
+  r = stmt.executeQuery(getSQL ~ filter);
+  r.next();
+  mixin(getAllColumnsReadCode!T());
+  return entity;
+}
+
 /// range for select query
 struct select(T, fieldList...) if (__traits(isPOD, T)) {
-    T entity;
-    private Statement stmt;
-    private ResultSet r;
-    static immutable selectSQL = generateSelectSQL!(T, fieldList)();
-    string whereCondSQL;
-    string orderBySQL;
-    this(Statement stmt) {
-        this.stmt = stmt;
+  T entity;
+  private Statement stmt;
+  private ResultSet r;
+  static immutable selectSQL = generateSelectSQL!(T, fieldList)();
+  string whereCondSQL;
+  string orderBySQL;
+  this(Statement stmt) {
+    this.stmt = stmt;
+  }
+  ref select where(string whereCond) {
+    whereCondSQL = " WHERE " ~ whereCond;
+    return this;
+  }
+  ref select orderBy(string order) {
+    orderBySQL = " ORDER BY " ~ order;
+    return this;
+  }
+  ref T front() {
+    return entity;
+  }
+  void popFront() {
+  }
+  @property bool empty() {
+    if (!r)
+      r = stmt.executeQuery(selectSQL ~ whereCondSQL ~ orderBySQL);
+    if (!r.next())
+      return true;
+    mixin(getAllColumnsReadCode!(T, fieldList));
+    return false;
+  }
+  ~this() {
+    if (r)
+      r.close();
+  }
+}
+
+/// returns "INSERT INTO <table name> (<field list>) VALUES (value list)
+string generateInsertSQL(T)() {
+    string res = "INSERT INTO " ~ getTableNameForType!(T)();
+    string []values;
+    foreach(m; __traits(allMembers, T)) {
+      if (m != "id") {
+        static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+          // skip non-public members
+          static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
+            values ~= m;
+          }
+        }
+      }
     }
-    ref select where(string whereCond) {
-        whereCondSQL = " WHERE " ~ whereCond;
-        return this;
+    res ~= "(" ~ join(values, ",") ~ ")";
+    res ~= " VALUES ";
+    return res;
+}
+
+string addFieldValue(T)(string m) {
+  string tmp = `{Variant v = o.`~m~`;`;
+  tmp ~=  `static if (isColumnTypeNullableByDefault!(T, "`~m~`")()) {`;
+  tmp ~= `	if(o.`~m~`.isNull) {`;
+  tmp ~= `		values ~= "NULL";`;
+  tmp ~= `	} else {`;
+  tmp ~= `		values ~= "\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+  tmp ~= `}} else {`;
+  tmp ~= `		values ~= "\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+  tmp ~= `}}`;
+  return tmp;
+  // return `values ~= "\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+}
+
+bool insert(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
+    auto insertSQL = generateInsertSQL!(T)();
+    string []values;
+    foreach(m; __traits(allMembers, T)) {
+      if (m != "id") {
+        static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+          // skip non-public members
+          static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
+            // pragma(msg,addFieldValue!(T)(m));
+            mixin(addFieldValue!(T)(m));
+          }
+        }
+      }
     }
-    ref select orderBy(string order) {
-        orderBySQL = " ORDER BY " ~ order;
-        return this;
+    insertSQL ~= "(" ~ join(values, ",") ~ ")";
+    Variant insertId;
+    stmt.executeUpdate(insertSQL, insertId);
+    o.id = insertId.get!long;
+    return true;
+}
+
+/// returns "UPDATE <table name> SET field1=value1 WHERE id=id
+string generateUpdateSQL(T)() {
+  string res = "UPDATE " ~ getTableNameForType!(T)();
+  string []values;
+  foreach(m; __traits(allMembers, T)) {
+    if (m != "id") {
+      static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+        // skip non-public members
+        static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
+          values ~= m;
+        }
+      }
     }
-    ref T front() {
-        return entity;
+  }
+  res ~= " SET ";
+  return res;
+}
+
+string addUpdateValue(T)(string m) {
+  return `values ~= "` ~ m ~ `=\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+}
+
+bool update(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
+    auto updateSQL = generateUpdateSQL!(T)();
+    string []values;
+    foreach(m; __traits(allMembers, T)) {
+      if (m != "id") {
+        static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+          // skip non-public members
+          static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
+            // pragma(msg, addUpdateValue!(T)(m));
+            mixin(addUpdateValue!(T)(m));
+          }
+        }
+      }
     }
-    void popFront() {
-    }
-    @property bool empty() {
-        if (!r)
-            r = stmt.executeQuery(selectSQL ~ whereCondSQL ~ orderBySQL);
-        if (!r.next())
-            return true;
-        mixin(getAllColumnsReadCode!(T, fieldList));
-        return false;
-    }
-    ~this() {
-        if (r)
-            r.close();
-    }
+    updateSQL ~= join(values, ",");
+    updateSQL ~= mixin(`" WHERE id="~ to!string(o.id) ~ ";"`);
+    Variant updateId;
+    stmt.executeUpdate(updateSQL, updateId);
+    return true;
+}
+
+/// returns "DELETE FROM <table name> WHERE id=id
+string generateDeleteSQL(T)() {
+  string res = "DELETE FROM " ~ getTableNameForType!(T)();
+  return res;
+}
+
+bool remove(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
+  auto deleteSQL = generateDeleteSQL!(T)();
+  deleteSQL ~= mixin(`" WHERE id="~ to!string(o.id) ~ ";"`);
+  Variant deleteId;
+  stmt.executeUpdate(deleteSQL, deleteId);
+  return true;
 }
 
 template isSupportedSimpleTypeRef(M) {

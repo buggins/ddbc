@@ -22,3 +22,7 @@ _ReSharper*/
 code.visualdproj
 HibernatedTest/*
 Unittest/*
+.dub/
+dub.selections.json
+test/ddbc-tests
+lib/
