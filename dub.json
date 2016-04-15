@@ -10,6 +10,9 @@
         {
             "name": "full",
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL"],
+            "dependencies": {
+                "mysql-native": ">=0.0.12"
+            },
             "libs-posix": ["sqlite3", "pq"],
             "libs-windows": ["sqlite3", "libpq"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll", "libs/win32/intl.dll" ],
