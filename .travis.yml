@@ -1,4 +1,23 @@
 language: d
+
+sudo: required
+dist: trusty
+
+d:
+  - dmd
+  - dmd-2.069.2
+  - ldc
+  - gdc
+
+os:
+ - linux
+ - osx
+
 script:
   - dub test --config=SQLite
   - dub run -c test
+  
+# GDC lags behind DMD
+matrix:
+  allow_failures:
+    - d: gdc
