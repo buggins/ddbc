@@ -20,4 +20,5 @@ script:
 # GDC lags behind DMD
 matrix:
   allow_failures:
+    - os: osx
     - d: gdc
