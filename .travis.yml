@@ -9,6 +9,9 @@ d:
   - ldc
   - gdc
 
+before_install:
+ - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew install sqlite; fi"
+
 os:
  - linux
  - osx
@@ -16,9 +19,9 @@ os:
 script:
   - dub test --config=SQLite
   - dub run -c test
+  - cd example && dub build && ./ddbctest --connection=sqlite:ddbc-test.sqlite
   
 # GDC lags behind DMD
 matrix:
   allow_failures:
-    - os: osx
     - d: gdc

@@ -140,6 +140,8 @@ enum PropertyMemberType : int {
 string camelCaseToUnderscoreDelimited(immutable string s) {
     string res;
     bool lastLower = false;
+    static import std.ascii;
+
     foreach(ch; s) {
         if (ch >= 'A' && ch <= 'Z') {
             if (lastLower) {

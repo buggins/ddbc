@@ -11,7 +11,7 @@
             "name": "full",
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL"],
             "dependencies": {
-                "mysql-native": ">=0.0.12"
+                "mysql-native": ">=0.1.4"
             },
             "libs-posix": ["sqlite3", "pq"],
             "libs-windows": ["sqlite3", "libpq"],
@@ -22,8 +22,8 @@
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
             "dependencies": {
-                "mysql-native": ">=0.0.12"
-            },
+                "mysql-native": ">=0.1.4"
+            }
         },
         {
             "name": "SQLite",
