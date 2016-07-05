@@ -10,7 +10,7 @@ d:
   - gdc
 
 before_install:
- - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew install sqlite; fi"
+ - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew install sqlite && brew link --force sqlite; fi"
 
 os:
  - linux
