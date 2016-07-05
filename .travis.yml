@@ -9,6 +9,9 @@ d:
   - ldc
   - gdc
 
+# make sure our Mac build uses OS X 10.11 rather than default (10.9) so we have more recent sqlite
+osx_image: xcode7.3
+
 before_install:
  - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew install sqlite && brew link --force sqlite; fi"
 
