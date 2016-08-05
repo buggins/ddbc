@@ -261,7 +261,7 @@ version(USE_PGSQL) {
     		lock();
     		scope(exit) unlock();
 
-			assert(0, "AUTOCOMMIT is no longer supported.");
+                assert(0, "AUTOCOMMIT is no longer supported.");
     	}
     }
 

@@ -61,6 +61,8 @@ import std.datetime;
 import std.string;
 import std.variant;
 
+static import std.ascii;
+
 import ddbc.core;
 
 alias Nullable!byte Byte;
