@@ -26,3 +26,4 @@ Unittest/*
 .dub/
 dub.selections.json
 ddbctest
+*.sqlite

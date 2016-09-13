@@ -28,3 +28,4 @@ Unittest/*
 dub.selections.json
 test/ddbc-tests
 lib/
+*.sqlite
