@@ -20,10 +20,14 @@ os:
  - osx
 
 script:
-  - dub test --config=SQLite
-  - dub run -c test
-  - cd example && dub build && ./ddbctest --connection=sqlite:ddbc-test.sqlite
-  
+  - dub build --config=full --compiler=${DC}
+  - dub run --config=test --compiler=${DC}
+  - cd example && dub build --compiler=${DC} && ./ddbctest --connection=sqlite:ddbc-test.sqlite
+
+addons:
+  apt:
+    packages: [ libsqlite3-dev ]
+
 # GDC lags behind DMD
 matrix:
   allow_failures:
