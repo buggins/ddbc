@@ -23,4 +23,7 @@ code.visualdproj
 HibernatedTest/*
 main.d
 Unittest/*
+.dub/
+dub.selections.json
 ddbctest
+*.sqlite

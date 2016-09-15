@@ -1,4 +1,34 @@
 language: d
+
+sudo: required
+dist: trusty
+
+d:
+  - dmd
+  - dmd-2.069.2
+  - ldc
+  - gdc
+
+# make sure our Mac build uses OS X 10.11 rather than default (10.9) so we have more recent sqlite
+osx_image: xcode7.3
+
+before_install:
+ - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew install sqlite && brew link --force sqlite; fi"
+
+os:
+ - linux
+ - osx
+
 script:
-  - dub test --config=SQLite
-  - dub run -c test
+  - dub build --config=full --compiler=${DC}
+  - dub run --config=test --compiler=${DC}
+  - cd example && dub build --compiler=${DC} && ./ddbctest --connection=sqlite:ddbc-test.sqlite
+
+addons:
+  apt:
+    packages: [ libsqlite3-dev ]
+
+# GDC lags behind DMD
+matrix:
+  allow_failures:
+    - d: gdc

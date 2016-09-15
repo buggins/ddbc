@@ -54,12 +54,13 @@ short getDefaultPort(string driver)
 string syntaxMessage	= 	"\nsyntax:\n"
 				"\neither:\n"
 				"\tddbctest --connection=sqlite://relative/path/to/file\n"
-				"or:"
-				 "\tddbctest --connection=<uri> --database=<database_name> --user=<user> --password=<password> [--port=<port>\n\n"
-				"\t\tURI is format driver://hostname:port\n"
-				"\t\tor sqlite://filename\n"
-				"\t\taccepted drivers are [sqlite|pgsql|mysql]\n"
-				"\t\tdatabase name must not be specifed for sqlite and must be specified for other drivers\n";
+				"or:\n"
+				"\tddbctest --connection=sqlite::memory:\n"
+                "or:\n"
+                "\tddbctest --connection=<uri> --database=<database_name> --user=<user> --password=<password> [--port=<port>]\n\n"
+				"\tURI is format 'driver://hostname:port' or 'sqlite://filename'\n"
+				"\tAccepted drivers are [sqlite|pgsql|mysql]\n"
+				"\tdatabase name must not be specifed for sqlite and must be specified for other drivers\n";
 
 struct ConnectionParams
 {
@@ -84,19 +85,20 @@ int main(string[] args)
 	catch (GetOptException)
 	{
 		stderr.writefln(syntaxMessage);
-		return 0;
+		return 1;
 	}
 	par.driver=getURIPrefix(URI);
 	par.host=getURIHost(URI);
 	if (par.driver!="sqlite")
 		par.port=getURIPort(URI,true);
-	writefln("*** %s: ",par.driver);
+
+	writefln("Database Driver: %s", par.driver);
 
 	if (["sqlite","pgsql","mysql"].count(par.driver)==0)
 	{
 		stderr.writefln(syntaxMessage);
 		stderr.writefln("\n\t*** Error: unknown driver type:"~par.driver);
-		return 0;
+		return 1;
 	}
 
 	string[string] params;
@@ -109,16 +111,17 @@ int main(string[] args)
 					stderr.writefln(syntaxMessage);
 					stderr.writefln("\n *** Error: must specify file name in format --connection=sqlite://path/to/file");
 					stderr.writefln("\n");
-					return 0;
+					return 1;
 				}
 				if (par.database.length>0)
 				{
 					stderr.writefln(syntaxMessage);
 					stderr.writef("\n"" *** Error: should not specify database name for sqlite: you specified - "~par.database);
 					stderr.writefln("\n");
-					return 0;
+					return 1;
 				}
 				driver = new SQLITEDriver();
+				url = chompPrefix(URI, "sqlite:");
 				break;
 
 		case "pgsql":
@@ -128,7 +131,7 @@ int main(string[] args)
 					stderr.writefln("\n *** Error: must specify connection and database names for pgsql "
 								"eg --connection=pgsql://localhost:5432 -- database=test");
 					stderr.writefln("\n");
-					return 0;
+					return 1;
 				}
 				driver = new PGSQLDriver();
 				url = PGSQLDriver.generateUrl( par.host, par.port,par.database );
@@ -144,7 +147,7 @@ int main(string[] args)
 					stderr.writefln("\n *** Error: must specify connection and database names for mysql "
 								"eg --connection=pgsql://localhost:5432 -- database=test");
 					stderr.writefln("\n");
-					return 0;
+					return 1;
 				}
 				driver = new MySQLDriver();
 				url = MySQLDriver.generateUrl(par.host, par.port, par.database);
@@ -169,12 +172,11 @@ int main(string[] args)
 
 	// execute simple queries to create and fill table
 	stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1(id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name varchar(250), comment mediumtext, ts datetime)");
-	stmt.executeUpdate("INSERT INTO ddbct1 (id,name,comment) VALUES (1, 'name1', 'comment for line 1')");
-	stmt.executeUpdate("INSERT INTO ddbct1 (id,name,comment) VALUES(2, 'name2','comment for line 2 - can be very long')");
+	stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
 
 	// reading DB
 	auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
 	while (rs.next())
 	writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ rs.getString(3)); // rs.getString(3) was wrapped with strNull - not sure what this did
-	return 1;
+	return 0;
 }

@@ -5,10 +5,19 @@
     "homepage": "https://github.com/buggins/ddbc",
     "license": "Boost Software License (BSL 1.0)",
     "dependencies": {
-        "mysql-native": ">=0.0.12",
-	"ddbc": ">=0.2.16",
+        "mysql-native": ">=0.1.4",
+        "ddbc": {"version": "~master", "path": "../"}
     },
     "targetType": "executable",
     "libs-posix": ["sqlite3", "pq"],
-     "versions": ["VibeCustomMain"],
+    "libs-windows": ["sqlite3", "libpq"],
+    "versions": ["VibeCustomMain"],
+    "configurations": [
+        {
+            "name": "default",
+            "subConfigurations": {
+                "ddbc": "full"
+            }
+        }
+    ]
 }
