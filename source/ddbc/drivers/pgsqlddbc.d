@@ -76,7 +76,7 @@ version(USE_PGSQL) {
     	int port = 5432;
     	PGconn * conn;
     	bool closed;
-    	bool autocommit;
+		bool autocommit = true;
     	Mutex mutex;
     	
     	
@@ -260,11 +260,8 @@ version(USE_PGSQL) {
     			return;
     		lock();
     		scope(exit) unlock();
-    		
-    		Statement stmt = createStatement();
-    		scope(exit) stmt.close();
-    		stmt.executeUpdate("SET autocommit = " ~ (autoCommit ? "ON" : "OFF"));
-    		this.autocommit = autoCommit;
+
+                assert(0, "AUTOCOMMIT is no longer supported.");
     	}
     }
 

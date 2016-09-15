@@ -1,8 +1,8 @@
 {
-    "name": "ddbc",
+    "name": "lesderid-ddbc",
     "description": "DB Connector for D language, similar to JDBC",
-    "authors": ["Vadim Lopatin"],
-    "homepage": "https://github.com/buggins/ddbc",
+    "authors": ["Vadim Lopatin", "Les De Ridder"],
+    "homepage": "https://github.com/lesderid/ddbc",
     "license": "Boost Software License (BSL 1.0)",
     "targetPath": "lib",
     "targetType": "staticLibrary",
@@ -22,7 +22,7 @@
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
             "dependencies": {
-                "mysql-native": ">=0.1.6"
+                "mysql-native": ">=0.0.12"
             }
         },
         {
