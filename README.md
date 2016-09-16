@@ -26,54 +26,61 @@ import ddbc.all;
 import std.stdio;
 import std.conv;
 
-// Create driver and fill connection params. You can leave only one section - for RDBMS you want to use
-string[string] params;
-// This part depends on RDBMS
-version( USE_SQLITE )
-{
-    SQLITEDriver driver = new SQLITEDriver();
-    string url = "zzz.db"; // file with DB
+int main(string[] args) {
+    // Create driver and fill connection params. You can leave only one section - for RDBMS you want to use
+    string[string] params;
+    // This part depends on RDBMS
+    version( USE_SQLITE )
+    {
+        SQLITEDriver driver = new SQLITEDriver();
+        string url = "zzz.db"; // file with DB
+    }
+    else version( USE_PGSQL )
+    {
+        PGSQLDriver driver = new PGSQLDriver();
+        string url = PGSQLDriver.generateUrl( "/tmp", 5432, "testdb" );
+        params["user"] = "hdtest";
+        params["password"] = "secret";
+        params["ssl"] = "true";
+    }
+    else version(USE_MYSQL)
+    {
+        // MySQL driver - you can use PostgreSQL or SQLite instead as well
+        MySQLDriver driver = new MySQLDriver();
+        string url = MySQLDriver.generateUrl("localhost", 3306, "test_db");
+        params = MySQLDriver.setUserAndPassword("testuser", "testpassword");
+    }
+
+    // create connection pool
+    DataSource ds = new ConnectionPoolDataSourceImpl(driver, url, params);
+
+    // creating Connection
+    auto conn = ds.getConnection();
+    scope(exit) conn.close();
+
+    // creating Statement
+    auto stmt = conn.createStatement();
+    scope(exit) stmt.close();
+
+    // execute simple queries to create and fill table
+    stmt.executeUpdate("DROP TABLE ddbct1");
+    stmt.executeUpdate("CREATE TABLE ddbct1 
+                    (id bigint not null primary key, 
+                     name varchar(250),
+                     comment mediumtext, 
+                     ts datetime)");
+    stmt.executeUpdate("INSERT INTO ddbct1 (id, name, comment, ts) VALUES
+                        (1, 'name1', 'comment for line 1', '2016/09/14 15:24:01')");
+    stmt.executeUpdate("INSERT INTO ddbct1 (id, name, comment) VALUES
+                        (2, 'name2', 'comment for line 2 - can be very long')");
+    stmt.executeUpdate("INSERT INTO ddbct1 (id, name) values(3, 'name3')"); // comment is null here
+
+    // reading DB
+    auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
+    while (rs.next())
+        writeln(to!string(rs.getLong(1)), "\t", rs.getString(2), "\t", rs.getString(3), "\t", rs.getString(4));
+    return 0;
 }
-else version( USE_PGSQL )
-{
-    PGSQLDriver driver = new PGSQLDriver();
-    string url = PGSQLDriver.generateUrl( "/tmp", 5432, "testdb" );
-    params["user"] = "hdtest";
-    params["password"] = "secret";
-    params["ssl"] = "true";
-}
-else version(USE_MYSQL)
-{
-    // MySQL driver - you can use PostgreSQL or SQLite instead as well
-    MySQLDriver driver = new MySQLDriver();
-    string url = MySQLDriver.generateUrl("localhost", 3306, "test_db");
-    params = MySQLDriver.setUserAndPassword("testuser", "testpassword");
-}
-
-// create connection pool
-DataSource ds = new ConnectionPoolDataSourceImpl(driver, url, params);
-
-// creating Connection
-auto conn = ds.getConnection();
-scope(exit) conn.close();
-
-// creating Statement
-auto stmt = conn.createStatement();
-scope(exit) stmt.close();
-
-// execute simple queries to create and fill table
-stmt.executeUpdate("CREATE TABLE IF NOT EXISTS
-                    ddbct1 (id bigint not null primary key AUTO_INCREMENT, name varchar(250),
-                            comment mediumtext, ts datetime)");
-stmt.executeUpdate("INSERT INTO ddbct1
-                    SET id=1, name='name1', comment='comment for line 1', ts='20130202123025'");
-stmt.executeUpdate("INSERT INTO ddbct1
-                    SET id=2, name='name2', comment='comment for line 2 - can be very long'");
-
-// reading DB
-auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
-while (rs.next())
-    writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ strNull(rs.getString(3)));
 ```
 
 Module ddbc.pods implement SELECT support for POD structs (plain old data).
