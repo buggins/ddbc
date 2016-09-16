@@ -1,8 +1,8 @@
 {
-    "name": "lesderid-ddbc",
+    "name": "ddbc",
     "description": "DB Connector for D language, similar to JDBC",
-    "authors": ["Vadim Lopatin", "Les De Ridder"],
-    "homepage": "https://github.com/lesderid/ddbc",
+    "authors": ["Vadim Lopatin"],
+    "homepage": "https://github.com/buggins/ddbc",
     "license": "Boost Software License (BSL 1.0)",
     "targetPath": "lib",
     "targetType": "staticLibrary",
