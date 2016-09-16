@@ -1,0 +1,3 @@
+[submodule "deps/mysql-native"]
+	path = deps/mysql-native
+	url = https://github.com/mysql-d/mysql-native.git

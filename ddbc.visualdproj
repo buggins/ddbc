@@ -8,10 +8,12 @@
   <multiobj>0</multiobj>
   <singleFileCompilation>0</singleFileCompilation>
   <oneobj>0</oneobj>
+  <mscoff>0</mscoff>
   <trace>0</trace>
   <quiet>0</quiet>
   <verbose>0</verbose>
   <vtls>0</vtls>
+  <vgc>0</vgc>
   <symdebug>1</symdebug>
   <optimize>0</optimize>
   <cpu>0</cpu>
@@ -44,8 +46,12 @@
   <nofloat>0</nofloat>
   <Dversion>2.043</Dversion>
   <ignoreUnsupportedPragmas>0</ignoreUnsupportedPragmas>
+  <allinst>0</allinst>
+  <stackStomp>0</stackStomp>
   <compiler>0</compiler>
   <otherDMD>0</otherDMD>
+  <cccmd>$(CC) -c</cccmd>
+  <ccTransOpt>1</ccTransOpt>
   <program>$(DMDInstallDir)windows\bin\dmd.exe</program>
   <imppath />
   <fileImppath />
@@ -66,7 +72,7 @@
   <debuglevel>0</debuglevel>
   <debugids />
   <versionlevel>0</versionlevel>
-  <versionids>USE_SQLITE</versionids>
+  <versionids>USE_SQLITE USE_MYSQL</versionids>
   <dump_source>0</dump_source>
   <mapverbosity>0</mapverbosity>
   <createImplib>0</createImplib>
@@ -89,6 +95,8 @@
   <resfile />
   <exefile>$(OutDir)\$(ProjectName).lib</exefile>
   <useStdLibPath>1</useStdLibPath>
+  <cRuntime>2</cRuntime>
+  <privatePhobos>0</privatePhobos>
   <additionalOptions />
   <preBuildCommand />
   <postBuildCommand />
@@ -102,10 +110,12 @@
   <multiobj>0</multiobj>
   <singleFileCompilation>0</singleFileCompilation>
   <oneobj>0</oneobj>
+  <mscoff>0</mscoff>
   <trace>0</trace>
   <quiet>0</quiet>
   <verbose>0</verbose>
   <vtls>0</vtls>
+  <vgc>0</vgc>
   <symdebug>0</symdebug>
   <optimize>0</optimize>
   <cpu>0</cpu>
@@ -138,8 +148,12 @@
   <nofloat>0</nofloat>
   <Dversion>2.043</Dversion>
   <ignoreUnsupportedPragmas>0</ignoreUnsupportedPragmas>
+  <allinst>0</allinst>
+  <stackStomp>0</stackStomp>
   <compiler>0</compiler>
   <otherDMD>0</otherDMD>
+  <cccmd>$(CC) -c</cccmd>
+  <ccTransOpt>1</ccTransOpt>
   <program>$(DMDInstallDir)windows\bin\dmd.exe</program>
   <imppath />
   <fileImppath />
@@ -183,12 +197,29 @@
   <resfile />
   <exefile>$(OutDir)\$(ProjectName).lib</exefile>
   <useStdLibPath>1</useStdLibPath>
+  <cRuntime>2</cRuntime>
+  <privatePhobos>0</privatePhobos>
   <additionalOptions />
   <preBuildCommand />
   <postBuildCommand />
   <filesToClean>*.obj;*.cmd;*.build;*.json;*.dep</filesToClean>
  </Config>
  <Folder name="ddbc">
+  <Folder name="deps">
+   <Folder name="mysql-native">
+    <File path="deps\mysql-native\source\mysql\protocol\commands.d" />
+    <File path="deps\mysql-native\source\mysql\common.d" />
+    <File path="deps\mysql-native\source\mysql\connection.d" />
+    <File path="deps\mysql-native\source\mysql\protocol\constants.d" />
+    <File path="deps\mysql-native\source\mysql\db.d" />
+    <File path="deps\mysql-native\source\mysql\escape.d" />
+    <File path="deps\mysql-native\source\mysql\protocol\extra_types.d" />
+    <File path="deps\mysql-native\source\mysql\package.d" />
+    <File path="deps\mysql-native\source\mysql\protocol\packets.d" />
+    <File path="deps\mysql-native\source\mysql\protocol\packet_helpers.d" />
+    <File path="deps\mysql-native\source\mysql\result.d" />
+   </Folder>
+  </Folder>
   <File path="source\ddbc\common.d" />
   <File path="source\ddbc\core.d" />
   <File path="libs\win32\libpq.lib" />

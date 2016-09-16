@@ -681,7 +681,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            if (x == null)
+            if (x.ptr is null)
                 setNull(parameterIndex);
             else
                 cmd.param(parameterIndex-1) = x;
@@ -695,7 +695,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            if (x == null)
+            if (x.ptr is null)
                 setNull(parameterIndex);
             else
                 cmd.param(parameterIndex-1) = x;
@@ -709,7 +709,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            if (x == null)
+            if (x.ptr is null)
                 setNull(parameterIndex);
             else
                 cmd.param(parameterIndex-1) = x;

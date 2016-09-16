@@ -525,7 +525,7 @@ version(USE_SQLITE) {
             lock();
             scope(exit) unlock();
             checkIndex(parameterIndex);
-            if (x is null) {
+            if (x.ptr is null) {
                 setNull(parameterIndex);
                 return;
             }
@@ -537,7 +537,7 @@ version(USE_SQLITE) {
             lock();
             scope(exit) unlock();
             checkIndex(parameterIndex);
-            if (x is null) {
+            if (x.ptr is null) {
                 setNull(parameterIndex);
                 return;
             }
@@ -549,7 +549,7 @@ version(USE_SQLITE) {
             lock();
             scope(exit) unlock();
             checkIndex(parameterIndex);
-            if (x is null) {
+            if (x.ptr is null) {
                 setNull(parameterIndex);
                 return;
             }
