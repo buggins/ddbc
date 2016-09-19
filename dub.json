@@ -6,6 +6,7 @@
     "license": "Boost Software License (BSL 1.0)",
     "targetPath": "lib",
     "targetType": "staticLibrary",
+    "systemDependencies": "Depending on configuration: PostgreSQL and/or SQLite v3",
     "configurations": [
         {
             "name": "full",
@@ -22,7 +23,7 @@
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
             "dependencies": {
-                "mysql-native": ">=0.0.12"
+                "mysql-native": ">=0.1.6"
             }
         },
         {
@@ -44,6 +45,7 @@
         {
             "name": "test",
             "sourcePaths" : ["test/ddbctest"],
+            "mainSourceFile": "test/ddbctest/main.d",
             "targetName": "ddbc-tests",
             "targetPath": "test",
             "targetType": "executable",
