@@ -12,12 +12,14 @@
             "name": "full",
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL"],
             "dependencies": {
-                "mysql-native": ">=0.1.6"
+                "mysql-native": ">=0.1.6",
+                "derelict-pq": "~>2.0.2"
             },
-            "libs-posix": ["sqlite3", "pq"],
-            "libs-windows": ["sqlite3", "libpq"],
-            "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll", "libs/win32/intl.dll" ],
-            "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib", "libs/win32/libpq.lib" ]
+            "libs-posix": ["sqlite3"],
+            "libs-windows": ["sqlite3"],
+            "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll"],
+            "copyFiles-windows-x86_64": [ "libs/win64/libpq.dll"],
+            "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib"]
         },
         {
             "name": "MySQL",
@@ -37,10 +39,11 @@
         {
             "name": "PGSQL",
             "versions": ["USE_PGSQL"],
-            "libs-posix": ["pq"],
-            "libs-windows": ["libpq"],
-            "copyFiles-windows-x86": [ "libs/win32/libpq.dll", "libs/win32/intl.dll" ],
-            "sourceFiles-windows-x86" : [ "libs/win32/libpq.lib" ]
+            "copyFiles-windows-x86": [ "libs/win32/libpq.dll"],
+            "copyFiles-windows-x86_64": [ "libs/win64/libpq.dll"],
+            "dependencies": {
+                "derelict-pq": "~>2.0.2"
+            }
         },
         {
             "name": "test",

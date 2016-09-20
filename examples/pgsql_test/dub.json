@@ -1,0 +1,18 @@
+{
+    "name": "ddbc_pgsql_test",
+    "description": "Testing Postgress support in DDBC",
+    "homepage": "https://github.com/buggins/ddbc",
+    "license": "Boost Software License (BSL 1.0)",
+    "dependencies": {
+        "ddbc": {"version": "~master", "path": "../../"}
+    },
+    "targetType": "executable",
+    "configurations": [
+        {
+            "name": "default",
+            "subConfigurations": {
+                "ddbc": "PGSQL"
+            }
+        }
+    ]
+}

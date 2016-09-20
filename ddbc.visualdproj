@@ -72,7 +72,7 @@
   <debuglevel>0</debuglevel>
   <debugids />
   <versionlevel>0</versionlevel>
-  <versionids>USE_SQLITE USE_MYSQL</versionids>
+  <versionids>USE_SQLITE USE_MYSQL USE_PGSQL</versionids>
   <dump_source>0</dump_source>
   <mapverbosity>0</mapverbosity>
   <createImplib>0</createImplib>
@@ -89,8 +89,8 @@
   <cv2pdbOptions />
   <objfiles />
   <linkswitches />
-  <libfiles>libpq.lib;sqlite.lib</libfiles>
-  <libpaths>lib/win32</libpaths>
+  <libfiles>sqlite3.lib</libfiles>
+  <libpaths>libs/win32</libpaths>
   <deffile />
   <resfile />
   <exefile>$(OutDir)\$(ProjectName).lib</exefile>
@@ -174,7 +174,7 @@
   <debuglevel>0</debuglevel>
   <debugids />
   <versionlevel>0</versionlevel>
-  <versionids />
+  <versionids>USE_SQLITE USE_MYSQL USE_PGSQL</versionids>
   <dump_source>0</dump_source>
   <mapverbosity>0</mapverbosity>
   <createImplib>0</createImplib>
@@ -191,8 +191,8 @@
   <cv2pdbOptions />
   <objfiles />
   <linkswitches />
-  <libfiles />
-  <libpaths />
+  <libfiles>sqlite3.lib</libfiles>
+  <libpaths>libs/win32</libpaths>
   <deffile />
   <resfile />
   <exefile>$(OutDir)\$(ProjectName).lib</exefile>
@@ -206,6 +206,16 @@
  </Config>
  <Folder name="ddbc">
   <Folder name="deps">
+   <Folder name="DerelictPQ">
+    <File path="deps\DerelictPQ\source\derelict\pq\pq.d" />
+   </Folder>
+   <Folder name="DerelictUtil">
+    <File path="deps\DerelictUtil\source\derelict\util\exception.d" />
+    <File path="deps\DerelictUtil\source\derelict\util\loader.d" />
+    <File path="deps\DerelictUtil\source\derelict\util\sharedlib.d" />
+    <File path="deps\DerelictUtil\source\derelict\util\system.d" />
+    <File path="deps\DerelictUtil\source\derelict\util\wintypes.d" />
+   </Folder>
    <Folder name="mysql-native">
     <File path="deps\mysql-native\source\mysql\protocol\commands.d" />
     <File path="deps\mysql-native\source\mysql\common.d" />
@@ -220,14 +230,12 @@
     <File path="deps\mysql-native\source\mysql\result.d" />
    </Folder>
   </Folder>
+  <File path="source\ddbc\all.d" />
   <File path="source\ddbc\common.d" />
   <File path="source\ddbc\core.d" />
-  <File path="libs\win32\libpq.lib" />
   <File path="source\ddbc\drivers\mysqlddbc.d" />
-  <File path="source\ddbc\drivers\pgsql.d" />
   <File path="source\ddbc\drivers\pgsqlddbc.d" />
   <File path="source\ddbc\pods.d" />
-  <File path="libs\win32\sqlite3.lib" />
   <File path="source\ddbc\drivers\sqliteddbc.d" />
   <File path="source\ddbc\drivers\utils.d" />
  </Folder>

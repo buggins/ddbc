@@ -37,9 +37,201 @@ version(USE_PGSQL) {
     
     import ddbc.common;
     import ddbc.core;
-    import ddbc.drivers.pgsql;
+    import derelict.pq.pq;
+    //import ddbc.drivers.pgsql;
     import ddbc.drivers.utils;
 
+    const int BOOLOID = 16;
+    const int BYTEAOID = 17;
+    const int CHAROID = 18;
+    const int NAMEOID = 19;
+    const int INT8OID = 20;
+    const int INT2OID = 21;
+    const int INT2VECTOROID = 22;
+    const int INT4OID = 23;
+    const int REGPROCOID = 24;
+    const int TEXTOID = 25;
+    const int OIDOID = 26;
+    const int TIDOID = 27;
+    const int XIDOID = 28;
+    const int CIDOID = 29;
+    const int OIDVECTOROID = 30;
+    const int JSONOID = 114;
+    const int XMLOID = 142;
+    const int PGNODETREEOID = 194;
+    const int POINTOID = 600;
+    const int LSEGOID = 601;
+    const int PATHOID = 602;
+    const int BOXOID = 603;
+    const int POLYGONOID = 604;
+    const int LINEOID = 628;
+    const int FLOAT4OID = 700;
+    const int FLOAT8OID = 701;
+    const int ABSTIMEOID = 702;
+    const int RELTIMEOID = 703;
+    const int TINTERVALOID = 704;
+    const int UNKNOWNOID = 705;
+    const int CIRCLEOID = 718;
+    const int CASHOID = 790;
+    const int MACADDROID = 829;
+    const int INETOID = 869;
+    const int CIDROID = 650;
+    const int INT4ARRAYOID = 1007;
+    const int TEXTARRAYOID = 1009;
+    const int FLOAT4ARRAYOID = 1021;
+    const int ACLITEMOID = 1033;
+    const int CSTRINGARRAYOID = 1263;
+    const int BPCHAROID = 1042;
+    const int VARCHAROID = 1043;
+    const int DATEOID = 1082;
+    const int TIMEOID = 1083;
+    const int TIMESTAMPOID = 1114;
+    const int TIMESTAMPTZOID = 1184;
+    const int INTERVALOID = 1186;
+    const int TIMETZOID = 1266;
+    const int BITOID = 1560;
+    const int VARBITOID = 1562;
+    const int NUMERICOID = 1700;
+    const int REFCURSOROID = 1790;
+    const int REGPROCEDUREOID = 2202;
+    const int REGOPEROID = 2203;
+    const int REGOPERATOROID = 2204;
+    const int REGCLASSOID = 2205;
+    const int REGTYPEOID = 2206;
+    const int REGTYPEARRAYOID = 2211;
+    const int UUIDOID = 2950;
+    const int TSVECTOROID = 3614;
+    const int GTSVECTOROID = 3642;
+    const int TSQUERYOID = 3615;
+    const int REGCONFIGOID = 3734;
+    const int REGDICTIONARYOID = 3769;
+    const int INT4RANGEOID = 3904;
+    const int RECORDOID = 2249;
+    const int RECORDARRAYOID = 2287;
+    const int CSTRINGOID = 2275;
+    const int ANYOID = 2276;
+    const int ANYARRAYOID = 2277;
+    const int VOIDOID = 2278;
+    const int TRIGGEROID = 2279;
+    const int EVTTRIGGEROID = 3838;
+    const int LANGUAGE_HANDLEROID = 2280;
+    const int INTERNALOID = 2281;
+    const int OPAQUEOID = 2282;
+    const int ANYELEMENTOID = 2283;
+    const int ANYNONARRAYOID = 2776;
+    const int ANYENUMOID = 3500;
+    const int FDW_HANDLEROID = 3115;
+    const int ANYRANGEOID = 3831;
+
+    string bytesToBytea(byte[] bytes) {
+        if (bytes is null)
+            return null;
+        string res;
+        foreach(b; bytes) {
+            if (b == 0)
+                res ~= "\\0";
+            else if (b == '\r')
+                res ~= "\\r";
+            else if (b == '\n')
+                res ~= "\\n";
+            else if (b == '\t')
+                res ~= "\\t";
+            else if (b == '\\')
+                res ~= "\\\\";
+            else
+                res ~= cast(char)b;
+        }
+        return res;
+    }
+
+    string ubytesToBytea(ubyte[] bytes) {
+        if (bytes is null)
+            return null;
+        string res;
+        foreach(b; bytes) {
+            if (b == 0)
+                res ~= "\\0";
+            else if (b == '\r')
+                res ~= "\\r";
+            else if (b == '\n')
+                res ~= "\\n";
+            else if (b == '\t')
+                res ~= "\\t";
+            else if (b == '\\')
+                res ~= "\\\\";
+            else
+                res ~= cast(char)b;
+        }
+        return res;
+    }
+
+    byte[] byteaToBytes(string s) {
+        if (s is null)
+            return null;
+        byte[] res;
+        bool lastBackSlash = 0;
+        foreach(ch; s) {
+            if (ch == '\\') {
+                if (lastBackSlash) {
+                    res ~= '\\';
+                    lastBackSlash = false;
+                } else {
+                    lastBackSlash = true;
+                }
+            } else {
+                if (lastBackSlash) {
+                    if (ch == '0') {
+                        res ~= 0;
+                    } else if (ch == 'r') {
+                        res ~= '\r';
+                    } else if (ch == 'n') {
+                        res ~= '\n';
+                    } else if (ch == 't') {
+                        res ~= '\t';
+                    } else {
+                    }
+                } else {
+                    res ~= cast(byte)ch;
+                }
+                lastBackSlash = false;
+            }
+        }
+        return res;
+    }
+
+    ubyte[] byteaToUbytes(string s) {
+        if (s is null)
+            return null;
+        ubyte[] res;
+        bool lastBackSlash = 0;
+        foreach(ch; s) {
+            if (ch == '\\') {
+                if (lastBackSlash) {
+                    res ~= '\\';
+                    lastBackSlash = false;
+                } else {
+                    lastBackSlash = true;
+                }
+            } else {
+                if (lastBackSlash) {
+                    if (ch == '0') {
+                        res ~= 0;
+                    } else if (ch == 'r') {
+                        res ~= '\r';
+                    } else if (ch == 'n') {
+                        res ~= '\n';
+                    } else if (ch == 't') {
+                        res ~= '\t';
+                    } else {
+                    }
+                } else {
+                    res ~= cast(byte)ch;
+                }
+                lastBackSlash = false;
+            }
+        }
+        return res;
+    }
     version(unittest) {
     	/*
             To allow unit tests using PostgreSQL server,
@@ -349,7 +541,7 @@ version(USE_PGSQL) {
                         v[col] = null;
                     } else {
                         int len = PQgetlength(res, row, col);
-                        const char * value = PQgetvalue(res, row, col);
+                        const ubyte * value = PQgetvalue(res, row, col);
                         int t = types[col];
                         //writeln("[" ~ to!string(row) ~ "][" ~ to!string(col) ~ "] type = " ~ to!string(t) ~ " len = " ~ to!string(len));
                         if (fmts[col] == 0) {
@@ -455,7 +647,7 @@ version(USE_PGSQL) {
             //writeln("readInsertId - rows " ~ to!string(rows) ~ " " ~ to!string(fieldCount));
             if (rows == 1 && fieldCount == 1) {
                 int len = PQgetlength(res, 0, 0);
-                const char * value = PQgetvalue(res, 0, 0);
+                const ubyte * value = PQgetvalue(res, 0, 0);
                 string s = copyCString(value, len);
                 insertId = parse!long(s);
             }
@@ -603,10 +795,10 @@ version(USE_PGSQL) {
 //                                            cast(const int *)formats.ptr,
 //                                            0);
             PGresult * res = PQexecParams(conn.getConnection(),
-                                 toStringz(query),
+                                 cast(const char *)toStringz(query),
                                  paramCount,
                                  null,
-                                 cast(const char * *)values.ptr,
+                                 cast(const (ubyte *) *)values.ptr,
                                  cast(const int *)lengths.ptr,
                                  cast(const int *)formats.ptr,
                                  0);
@@ -1203,7 +1395,14 @@ version(USE_PGSQL) {
     //props.setProperty("password","secret");
     //props.setProperty("ssl","true");
     //Connection conn = DriverManager.getConnection(url, props);
+    private __gshared static bool _pqIsLoaded = false;
     class PGSQLDriver : Driver {
+        this() {
+            if (!_pqIsLoaded) {
+                DerelictPQ.load();
+                _pqIsLoaded = true;
+            }
+        }
     	// helper function
     	public static string generateUrl(string host, ushort port, string dbname) {
     		return "postgresql://" ~ host ~ ":" ~ to!string(port) ~ "/" ~ dbname;

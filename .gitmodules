@@ -1,3 +1,9 @@
 [submodule "deps/mysql-native"]
 	path = deps/mysql-native
 	url = https://github.com/mysql-d/mysql-native.git
+[submodule "deps/DerelictPQ"]
+	path = deps/DerelictPQ
+	url = https://github.com/DerelictOrg/DerelictPQ.git
+[submodule "deps/DerelictUtil"]
+	path = deps/DerelictUtil
+	url = https://github.com/DerelictOrg/DerelictUtil.git
