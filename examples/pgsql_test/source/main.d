@@ -1,6 +1,7 @@
 import std.stdio;
 
 import ddbc.all;
+import ddbc.pods;
 
 int main(string[] argv)
 {
@@ -65,6 +66,14 @@ int main(string[] argv)
     PreparedStatement ps = conn.prepareStatement("INSERT INTO bintest (id, blob1) VALUES (1, ?)");
     ps.setUbytes(1, bin_data);
     ps.executeUpdate();
+    struct Bintest {
+        long id;
+        ubyte[] blob1;
+    }
+    Bintest[] rows;
+    foreach(e; stmt.select!Bintest)
+        rows ~= e;
+    //stmt!
     auto rs2 = stmt.executeQuery("SELECT id, blob1 FROM bintest WHERE id=1");
     if (rs2.next()) {
         ubyte[] res = rs2.getUbytes(2);
