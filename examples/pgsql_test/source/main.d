@@ -79,5 +79,18 @@ int main(string[] argv)
         ubyte[] res = rs2.getUbytes(2);
         assert(res == bin_data);
     }
+
+    stmt.executeUpdate("DROP TABLE IF EXISTS guidtest");
+    stmt.executeUpdate("CREATE TABLE guidtest (guid uuid not null primary key, name text)");
+    stmt.executeUpdate("INSERT INTO guidtest (guid, name) VALUES ('cd3c7ffd-7919-f6c5-999d-5586d9f3b261', 'vasia')");
+    struct Guidtest {
+        string guid;
+        string name;
+    }
+    Guidtest[] guidrows;
+    foreach(e; stmt.select!Guidtest)
+        guidrows ~= e;
+    writeln(guidrows);
+
     return 0;
 }

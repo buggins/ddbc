@@ -559,6 +559,9 @@ version(USE_PGSQL) {
                                 case DATEOID:
                                     v[col] = parseDateoid(s);
                                     break;
+                                case UUIDOID:
+                                    v[col] = s;
+                                    break;
                                 default:
                                     throw new SQLException("Unsupported column type " ~ to!string(t));
                             }
