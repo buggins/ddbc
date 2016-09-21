@@ -234,6 +234,7 @@ version(USE_PGSQL) {
     	PGconn * conn;
     	bool closed;
 		bool autocommit = true;
+        bool useSsl = true;
     	Mutex mutex;
     	
     	
@@ -284,6 +285,19 @@ version(USE_PGSQL) {
     			urlParams = url[qmIndex + 1 .. $];
     			url = url[0 .. qmIndex];
     			// TODO: parse params
+                string[] list = urlParams.split(",");
+                foreach(item; list) {
+                    string[] keyValue = item.split("=");
+                    if (keyValue.length == 2) {
+                        if (keyValue[0] == "user")
+                            username = keyValue[1];
+                        else if (keyValue[0] == "password")
+                            password = keyValue[1];
+                        else if (keyValue[0] == "ssl") {
+                            useSsl = (keyValue[1] == "true");
+                        }
+                    }
+                }
     		}
     		string dbName = "";
     		ptrdiff_t firstSlashes = std.string.indexOf(url, "//");
@@ -305,10 +319,16 @@ version(USE_PGSQL) {
     			if (port < 1 || port > 65535)
     				port = 5432;
     		}
-    		username = params["user"];
-    		password = params["password"];
+            if ("user" in params)
+    		    username = params["user"];
+            if ("password" in params)
+    		    password = params["password"];
+            if ("ssl" in params)
+                useSsl = (params["ssl"] == "true");
+
     		
     		//writeln("host " ~ hostname ~ " : " ~ to!string(port) ~ " db=" ~ dbName ~ " user=" ~ username ~ " pass=" ~ password);
+            // TODO: support SSL param
 
     		const char ** keywords = [std.string.toStringz("host"), std.string.toStringz("port"), std.string.toStringz("dbname"), std.string.toStringz("user"), std.string.toStringz("password"), null].ptr;
     		const char ** values = [std.string.toStringz(hostname), std.string.toStringz(to!string(port)), std.string.toStringz(dbName), std.string.toStringz(username), std.string.toStringz(password), null].ptr;

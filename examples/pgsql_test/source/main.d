@@ -10,9 +10,10 @@ int main(string[] argv)
     version( USE_PGSQL )
     {
         PGSQLDriver driver = new PGSQLDriver();
-        string url = PGSQLDriver.generateUrl( "/tmp", 5432, "ddbctestdb" );
-        params["user"] = "ddbctest";
-        params["password"] = "ddbctestpass";
+        //string url = PGSQLDriver.generateUrl( "/tmp", 5432, "ddbctestdb" ) ~ "?user=ddbctest,password=ddbctestpass";
+        string url = PGSQLDriver.generateUrl( "localhost", 5432, "ddbctestdb" ) ~ "?user=ddbctest,password=ddbctestpass";
+        //params["user"] = "ddbctest";
+        //params["password"] = "ddbctestpass";
         params["ssl"] = "true";
     }
     else version( USE_SQLITE )
