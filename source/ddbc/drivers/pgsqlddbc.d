@@ -124,110 +124,75 @@ version(USE_PGSQL) {
     const int ANYRANGEOID = 3831;
 
     string bytesToBytea(byte[] bytes) {
-        if (bytes is null)
-            return null;
-        string res;
-        foreach(b; bytes) {
-            if (b == 0)
-                res ~= "\\0";
-            else if (b == '\r')
-                res ~= "\\r";
-            else if (b == '\n')
-                res ~= "\\n";
-            else if (b == '\t')
-                res ~= "\\t";
-            else if (b == '\\')
-                res ~= "\\\\";
-            else
-                res ~= cast(char)b;
-        }
-        return res;
+        return ubytesToBytea(cast(ubyte[])bytes);
     }
 
     string ubytesToBytea(ubyte[] bytes) {
-        if (bytes is null)
+        if (bytes is null || !bytes.length)
             return null;
-        string res;
+        char[] res;
+        res.assumeSafeAppend;
+        res ~= "\\x";
+        immutable static char[16] hex_digits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'];
         foreach(b; bytes) {
-            if (b == 0)
-                res ~= "\\0";
-            else if (b == '\r')
-                res ~= "\\r";
-            else if (b == '\n')
-                res ~= "\\n";
-            else if (b == '\t')
-                res ~= "\\t";
-            else if (b == '\\')
-                res ~= "\\\\";
-            else
-                res ~= cast(char)b;
+            res ~= hex_digits[(b >> 4) & 0x0F];
+            res ~= hex_digits[b & 0x0F];
         }
-        return res;
+        return cast(string)res;
     }
 
     byte[] byteaToBytes(string s) {
-        if (s is null)
-            return null;
-        byte[] res;
-        bool lastBackSlash = 0;
-        foreach(ch; s) {
-            if (ch == '\\') {
-                if (lastBackSlash) {
-                    res ~= '\\';
-                    lastBackSlash = false;
-                } else {
-                    lastBackSlash = true;
-                }
-            } else {
-                if (lastBackSlash) {
-                    if (ch == '0') {
-                        res ~= 0;
-                    } else if (ch == 'r') {
-                        res ~= '\r';
-                    } else if (ch == 'n') {
-                        res ~= '\n';
-                    } else if (ch == 't') {
-                        res ~= '\t';
-                    } else {
-                    }
-                } else {
-                    res ~= cast(byte)ch;
-                }
-                lastBackSlash = false;
-            }
-        }
-        return res;
+        return cast(byte[])byteaToUbytes(s);
     }
 
+    private static int fromHexDigit(char ch, int defValue = -1) {
+        if (ch >= '0' && ch <= '9')
+            return ch - '0';
+        if (ch >= 'A' && ch <= 'F')
+            return ch - 'A' + 10;
+        if (ch >= 'a' && ch <= 'f')
+            return ch - 'a' + 10;
+        return defValue;
+    }
     ubyte[] byteaToUbytes(string s) {
-        if (s is null)
+        if (s is null || !s.length)
             return null;
         ubyte[] res;
-        bool lastBackSlash = 0;
-        foreach(ch; s) {
-            if (ch == '\\') {
-                if (lastBackSlash) {
-                    res ~= '\\';
-                    lastBackSlash = false;
-                } else {
-                    lastBackSlash = true;
-                }
-            } else {
-                if (lastBackSlash) {
-                    if (ch == '0') {
-                        res ~= 0;
-                    } else if (ch == 'r') {
-                        res ~= '\r';
-                    } else if (ch == 'n') {
-                        res ~= '\n';
-                    } else if (ch == 't') {
-                        res ~= '\t';
+        if (s.length > 2 && s[0] == '\\' && s[1] == 'x') {
+            // hex string format
+            for (int i = 2; i + 1 < s.length; i += 2) {
+                int d1 = fromHexDigit(s[i], 0);
+                int d2 = fromHexDigit(s[i + 1], 0);
+                res ~= cast(ubyte)((d1 << 4) | (d2));
+            }
+        } else {
+            // escaped string format
+            bool lastBackSlash = 0;
+            foreach(ch; s) {
+                if (ch == '\\') {
+                    if (lastBackSlash) {
+                        res ~= '\\';
+                        lastBackSlash = false;
                     } else {
+                        lastBackSlash = true;
                     }
                 } else {
-                    res ~= cast(byte)ch;
+                    if (lastBackSlash) {
+                        if (ch == '0') {
+                            res ~= 0;
+                        } else if (ch == 'r') {
+                            res ~= '\r';
+                        } else if (ch == 'n') {
+                            res ~= '\n';
+                        } else if (ch == 't') {
+                            res ~= '\t';
+                        } else {
+                        }
+                    } else {
+                        res ~= cast(byte)ch;
+                    }
+                    lastBackSlash = false;
                 }
-                lastBackSlash = false;
             }
         }
         return res;

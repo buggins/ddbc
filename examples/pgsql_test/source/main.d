@@ -58,5 +58,17 @@ int main(string[] argv)
     auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
     while (rs.next())
         writeln(to!string(rs.getLong(1)), "\t", rs.getString(2), "\t", rs.getString(3), "\t", rs.getString(4));
+
+    ubyte[] bin_data = [1, 2, 3, 'a', 'b', 'c', 0xFE, 0xFF, 0, 1, 2];
+    stmt.executeUpdate("DROP TABLE IF EXISTS bintest");
+    stmt.executeUpdate("CREATE TABLE bintest (id bigint not null primary key, blob1 bytea)");
+    PreparedStatement ps = conn.prepareStatement("INSERT INTO bintest (id, blob1) VALUES (1, ?)");
+    ps.setUbytes(1, bin_data);
+    ps.executeUpdate();
+    auto rs2 = stmt.executeQuery("SELECT id, blob1 FROM bintest WHERE id=1");
+    if (rs2.next()) {
+        ubyte[] res = rs2.getUbytes(2);
+        assert(res == bin_data);
+    }
     return 0;
 }
