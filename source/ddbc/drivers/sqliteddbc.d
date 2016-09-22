@@ -122,8 +122,9 @@ version(USE_SQLITE) {
         
         this(string url, string[string] params) {
             mutex = new Mutex();
-            if (url.startsWith("sqlite::"))
-                url = url[8 .. $];
+            extractParamsFromURL(url, params);
+            if (url.startsWith("sqlite:"))
+                url = url[7 .. $];
             this.filename = url;
             //writeln("trying to connect");
             int res = sqlite3_open(toStringz(filename), &conn);
@@ -927,7 +928,6 @@ version(USE_SQLITE) {
     //Properties props = new Properties();
     //props.setProperty("user","fred");
     //props.setProperty("password","secret");
-    //props.setProperty("ssl","true");
     //Connection conn = DriverManager.getConnection(url, props);
     class SQLITEDriver : Driver {
         // helper function
@@ -938,7 +938,6 @@ version(USE_SQLITE) {
             string[string] params;
             params["user"] = username;
             params["password"] = password;
-            params["ssl"] = "true";
             return params;
         }
         override ddbc.core.Connection connect(string url, string[string] params) {
@@ -1038,6 +1037,13 @@ version(USE_SQLITE) {
             }
         }
     }
+
+    __gshared static this() {
+        // register SQLiteDriver
+        import ddbc.common;
+        DriverFactory.registerDriverFactory("sqlite", delegate() { return new SQLITEDriver(); });
+    }
+
 
 } else { // version(USE_SQLITE)
     version(unittest) {

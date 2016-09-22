@@ -161,13 +161,7 @@ public:
         this.params = params;
         try {
             //writeln("parsing url " ~ url);
-            string urlParams;
-            ptrdiff_t qmIndex = std.string.indexOf(url, '?');
-            if (qmIndex >=0 ) {
-                urlParams = url[qmIndex + 1 .. $];
-                url = url[0 .. qmIndex];
-                // TODO: parse params
-            }
+            extractParamsFromURL(url, this.params);
             string dbName = "";
     		ptrdiff_t firstSlashes = std.string.indexOf(url, "//");
     		ptrdiff_t lastSlash = std.string.lastIndexOf(url, '/');
@@ -188,8 +182,10 @@ public:
                 if (port < 1 || port > 65535)
                     port = 3306;
             }
-            username = params["user"];
-            password = params["password"];
+            if ("user" in this.params)
+                username = this.params["user"];
+            if ("password" in this.params)
+                password = this.params["password"];
 
             //writeln("host " ~ hostname ~ " : " ~ to!string(port) ~ " db=" ~ dbName ~ " user=" ~ username ~ " pass=" ~ password);
 
@@ -1292,6 +1288,13 @@ unittest {
 
 	}
 }
+
+__gshared static this() {
+    // register MySQLDriver
+    import ddbc.common;
+    DriverFactory.registerDriverFactory("mysql", delegate() { return new MySQLDriver(); });
+}
+
 
 } else { // version(USE_MYSQL)
     version(unittest) {

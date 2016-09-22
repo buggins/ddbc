@@ -247,6 +247,10 @@ version(USE_PGSQL) {
     		}
     	}
     	
+        void onStatementClosed(PGSQLStatement stmt) {
+            myRemove(activeStatements, stmt);
+        }
+
     	void checkClosed() {
     		if (closed)
     			throw new SQLException("Connection is already closed");
@@ -265,40 +269,12 @@ version(USE_PGSQL) {
     	PGconn * getConnection() { return conn; }
     	
     	
-    	void onStatementClosed(PGSQLStatement stmt) {
-    		foreach(index, item; activeStatements) {
-    			if (item == stmt) {
-    				remove(activeStatements, index);
-    				return;
-    			}
-    		}
-    	}
-    	
     	this(string url, string[string] params) {
     		mutex = new Mutex();
     		this.url = url;
     		this.params = params;
     		//writeln("parsing url " ~ url);
-    		string urlParams;
-    		ptrdiff_t qmIndex = std.string.indexOf(url, '?');
-    		if (qmIndex >=0 ) {
-    			urlParams = url[qmIndex + 1 .. $];
-    			url = url[0 .. qmIndex];
-    			// TODO: parse params
-                string[] list = urlParams.split(",");
-                foreach(item; list) {
-                    string[] keyValue = item.split("=");
-                    if (keyValue.length == 2) {
-                        if (keyValue[0] == "user")
-                            username = keyValue[1];
-                        else if (keyValue[0] == "password")
-                            password = keyValue[1];
-                        else if (keyValue[0] == "ssl") {
-                            useSsl = (keyValue[1] == "true");
-                        }
-                    }
-                }
-    		}
+            extractParamsFromURL(url, this.params);
     		string dbName = "";
     		ptrdiff_t firstSlashes = std.string.indexOf(url, "//");
     		ptrdiff_t lastSlash = std.string.lastIndexOf(url, '/');
@@ -319,12 +295,12 @@ version(USE_PGSQL) {
     			if (port < 1 || port > 65535)
     				port = 5432;
     		}
-            if ("user" in params)
-    		    username = params["user"];
-            if ("password" in params)
-    		    password = params["password"];
-            if ("ssl" in params)
-                useSsl = (params["ssl"] == "true");
+            if ("user" in this.params)
+    		    username = this.params["user"];
+            if ("password" in this.params)
+    		    password = this.params["password"];
+            if ("ssl" in this.params)
+                useSsl = (this.params["ssl"] == "true");
 
     		
     		//writeln("host " ~ hostname ~ " : " ~ to!string(port) ~ " db=" ~ dbName ~ " user=" ~ username ~ " pass=" ~ password);
@@ -669,6 +645,7 @@ version(USE_PGSQL) {
     		scope(exit) unlock();
     		closeResultSet();
     		closed = true;
+            conn.onStatementClosed(this);
     	}
 
     	void closeResultSet() {
@@ -1405,6 +1382,7 @@ version(USE_PGSQL) {
     		return params;
     	}
     	override ddbc.core.Connection connect(string url, string[string] params) {
+            url = stripDdbcPrefix(url);
     		//writeln("PGSQLDriver.connect " ~ url);
     		return new PGSQLConnection(url, params);
     	}
@@ -1518,6 +1496,12 @@ version(USE_PGSQL) {
                 }
             }
         }
+    }
+
+    __gshared static this() {
+        // register PGSQLDriver
+        import ddbc.common;
+        DriverFactory.registerDriverFactory("postgresql", delegate() { return new PGSQLDriver(); });
     }
 
 } else { // version(USE_PGSQL)

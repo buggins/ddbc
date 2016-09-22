@@ -385,6 +385,32 @@ interface Driver {
 	Connection connect(string url, string[string] params);
 }
 
+/// Helper function to make url in form driverName://host:port/dbname?param1=value1,param2=value2
+string makeDDBCUrl(string driverName, string host, int port, string dbName, string[string] params = null) {
+    import std.conv : to;
+    char[] res;
+    res.assumeSafeAppend;
+    res ~= driverName;
+    res ~= "://";
+    res ~= host;
+    res ~= to!string(port);
+    res ~= "/";
+    res ~= dbName;
+    bool firstParam = true;
+    foreach(key, value; params) {
+        if (firstParam) {
+            res ~= "?";
+            firstParam = false;
+        } else {
+            res ~= ",";
+        }
+        res ~= key;
+        res ~= "=";
+        res ~= value;
+    }
+    return res.dup;
+}
+
 interface DataSource {
 	Connection getConnection();
 }

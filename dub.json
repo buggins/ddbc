@@ -46,6 +46,9 @@
             }
         },
         {
+            "name": "API"
+        },
+        {
             "name": "test",
             "sourcePaths" : ["test/ddbctest"],
             "mainSourceFile": "test/ddbctest/main.d",

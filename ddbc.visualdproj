@@ -233,10 +233,13 @@
   <File path="source\ddbc\all.d" />
   <File path="source\ddbc\common.d" />
   <File path="source\ddbc\core.d" />
-  <File path="source\ddbc\drivers\mysqlddbc.d" />
-  <File path="source\ddbc\drivers\pgsqlddbc.d" />
+  <File path="source\ddbc\package.d" />
   <File path="source\ddbc\pods.d" />
-  <File path="source\ddbc\drivers\sqliteddbc.d" />
-  <File path="source\ddbc\drivers\utils.d" />
+  <Folder name="drivers">
+   <File path="source\ddbc\drivers\mysqlddbc.d" />
+   <File path="source\ddbc\drivers\pgsqlddbc.d" />
+   <File path="source\ddbc\drivers\sqliteddbc.d" />
+   <File path="source\ddbc\drivers\utils.d" />
+  </Folder>
  </Folder>
 </DProject>

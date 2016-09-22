@@ -17,6 +17,7 @@ module ddbc.all;
 
 public import ddbc.core;
 public import ddbc.common;
+public import ddbc.pods;
 
 version( USE_SQLITE )
 {
