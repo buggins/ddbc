@@ -40,14 +40,13 @@ class DataSourceImpl : DataSource {
 	override Connection getConnection() {
 		return driver.connect(url, params);
 	}
-}
 
 /// extracts driver name from DDBC URL
 /// e.g., for "ddbc:postgresql://localhost/test" it will return "postgresql"
 string extractDriverNameFromURL(string url) {
     url = stripDdbcPrefix(url);
     import std.string;
-    int colonPos = url.indexOf(":");
+    int colonPos = cast(int)url.indexOf(":");
     if (colonPos < 0)
         return url;
     return url[0 .. colonPos];
