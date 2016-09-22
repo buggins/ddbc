@@ -8,7 +8,8 @@ http://docs.oracle.com/javase/7/docs/technotes/guides/jdbc/
 
 For using DDBC, import this file:
 
-import ddbc;
+
+    import ddbc;
 
 
 
@@ -79,6 +80,9 @@ For creation of DDBC drivers or data sources, you can use DDBC URL.
 
 Common form of DDBC URL: driver://host:port/dbname?param1=value1,param2=value2
 
+As well, you can prefix url with "ddbc:"
+    ddbc:driver://host:port/dbname?param1=value1,param2=value2
+
 Following helper function may be used to create URL
 
     string makeDDBCUrl(string driverName, string host, int port, string dbName, string[string] params = null);
@@ -106,6 +110,11 @@ For SQLite, use following form of URL:
 
     sqlite:db_file_path_name
 
+Sample urls:
+
+    string pgsqlurl = "postgresql://localhost:5432/ddbctestdb?user=ddbctest,password=ddbctestpass,ssl=true";
+    string mysqlurl = "mysql://localhost:3306/ddbctestdb?user=ddbctest,password=ddbctestpass";
+    string sqliteurl = "sqlite:testdb.sqlite";
 
 
 Drivers, connections, data sources and connection pools.

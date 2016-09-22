@@ -4,9 +4,9 @@ import ddbc;
 
 int main(string[] argv)
 {
-    string url = "ddbc:postgresql://localhost:5432/ddbctestdb?user=ddbctest,password=ddbctestpass,ssl=true";
-    //string url = "ddbc:mysql://lx4-vlopatin.nn.five9.com:3306/ddbctestdb?user=db59,password=admin";
-    //immutable string url = "ddbc:sqlite:testdb.sqlite";
+    string url = "postgresql://localhost:5432/ddbctestdb?user=ddbctest,password=ddbctestpass,ssl=true";
+    //string url = "mysql://localhost:3306/ddbctestdb?user=ddbctest,password=ddbctestpass";
+    //immutable string url = "sqlite:testdb.sqlite";
     immutable string driverName = extractDriverNameFromURL(url);
 
     // creating Connection
