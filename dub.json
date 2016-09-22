@@ -1,6 +1,6 @@
 {
     "name": "ddbc",
-    "description": "DB Connector for D language, similar to JDBC",
+    "description": "DB Connector for D language, similar to JDBC (mysql, sqlite, postgresql)",
     "authors": ["Vadim Lopatin"],
     "homepage": "https://github.com/buggins/ddbc",
     "license": "Boost Software License (BSL 1.0)",

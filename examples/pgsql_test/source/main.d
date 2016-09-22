@@ -6,7 +6,7 @@ int main(string[] argv)
 {
     string url = "postgresql://localhost:5432/ddbctestdb?user=ddbctest,password=ddbctestpass,ssl=true";
     //string url = "mysql://localhost:3306/ddbctestdb?user=ddbctest,password=ddbctestpass";
-    //immutable string url = "sqlite:testdb.sqlite";
+    //string url = "sqlite:testdb.sqlite";
     immutable string driverName = extractDriverNameFromURL(url);
 
     // creating Connection
@@ -76,6 +76,34 @@ int main(string[] argv)
             guidrows ~= e;
         writeln(guidrows);
     }
+
+    // fill database with test data
+    stmt.executeUpdate(`DROP TABLE IF EXISTS user_data`);
+    stmt.executeUpdate(`CREATE TABLE user_data (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)`);
+    stmt.executeUpdate(`INSERT INTO user_data (id, name, flags) VALUES (1, 'John', 5), (2, 'Andrei', 2), (3, 'Walter', 2), (4, 'Rikki', 3), (5, 'Iain', 0), (6, 'Robert', 1)`);
+
+    // our POD object
+    struct UserData {
+        long id;
+        string name;
+        int flags;
+    }
+
+    writeln("reading all user table rows");
+    foreach(ref e; stmt.select!UserData) {
+        writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
+    }
+
+    writeln("reading user table rows with where and order by");
+    foreach(ref e; stmt.select!UserData.where("id < 6").orderBy("name desc")) {
+        writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
+    }
+
+    writeln("reading all user table rows, but fetching only id and name (you will see default value 0 in flags field)");
+    foreach(ref e; stmt.select!(UserData, "id", "name")) {
+        writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
+    }
+
 
     return 0;
 }
