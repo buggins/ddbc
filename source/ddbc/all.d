@@ -3,11 +3,11 @@
  * 
  * Source file ddbc/all.d.
  *
- * DDBC library attempts to provide implementation independent interface to different databases.
+ * DDBC library provides implementation independent interface to different databases.
  * 
  * This module allows to import all necessary modules.
  *
- * Just use import ddbc.all to use DDBC library. 
+ * This module is deprecated. Use `import ddbc;` instead.
  *
  * Copyright: Copyright 2014
  * License:   $(LINK www.boost.org/LICENSE_1_0.txt, Boost License 1.0).

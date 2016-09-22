@@ -11,15 +11,11 @@ Source file ddbc/drivers/pgsqlddbc.d.
 
  This module contains implementation POD utilities.
 ----
-import ddbc.core;
-import ddbc.common;
-import ddbc.drivers.sqliteddbc;
-import ddbc.pods;
+import ddbc;
 import std.stdio;
 
 // prepare database connectivity
-auto ds = new ConnectionPoolDataSourceImpl(new SQLITEDriver(), "ddbctest.sqlite");
-auto conn = ds.getConnection();
+auto conn = createConnection("sqlite:ddbctest.sqlite");
 scope(exit) conn.close();
 Statement stmt = conn.createStatement();
 scope(exit) stmt.close();

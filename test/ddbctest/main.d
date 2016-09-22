@@ -4,15 +4,11 @@ module ddbc.ddbctest;
 
 void main() {
 
-    import ddbc.core;
-    import ddbc.common;
-    import ddbc.drivers.sqliteddbc;
-    import ddbc.pods;
+    import ddbc;
     import std.stdio;
 
     // prepare database connectivity
-    auto ds = new ConnectionPoolDataSourceImpl(new SQLITEDriver(), ":memory:");
-    auto conn = ds.getConnection();
+    auto conn = createConnection("sqlite::memory:");
     scope(exit) conn.close();
     Statement stmt = conn.createStatement();
     Statement stmt2 = conn.createStatement();
@@ -84,11 +80,11 @@ void main() {
     User u = stmt.get!User(2L);
     writeln(u);
 
-    writeln("\nGet user id=789 (throws!)");
-    try {
-      u = stmt.get!User(789L);
-    } catch (SQLException e) {
-      writeln("Exception thrown as expected.");
-    }
+    //writeln("\nGet user id=789 (throws!)");
+    //try {
+    //  u = stmt.get!User(789L);
+    //} catch (SQLException e) {
+    //  writeln("Exception thrown as expected.");
+    //}
 
 }

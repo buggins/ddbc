@@ -28,6 +28,8 @@ import std.stdio;
 import std.conv;
 import std.variant;
 
+/// Implementation of simple DataSource: it just holds connection parameters, and can create new Connection by getConnection().
+/// Method close() on such connection will really close connection.
 class DataSourceImpl : DataSource {
 	Driver driver;
 	string url;
@@ -40,47 +42,12 @@ class DataSourceImpl : DataSource {
 	override Connection getConnection() {
 		return driver.connect(url, params);
 	}
-
-/// extracts driver name from DDBC URL
-/// e.g., for "ddbc:postgresql://localhost/test" it will return "postgresql"
-string extractDriverNameFromURL(string url) {
-    url = stripDdbcPrefix(url);
-    import std.string;
-    int colonPos = cast(int)url.indexOf(":");
-    if (colonPos < 0)
-        return url;
-    return url[0 .. colonPos];
-}
-
-/// extract parameters from URL string to string[string] map, update url to strip params
-void extractParamsFromURL(ref string url, ref string[string] params) {
-    url = stripDdbcPrefix(url);
-    import std.string : lastIndexOf, split;
-    ptrdiff_t qmIndex = lastIndexOf(url, '?');
-    if (qmIndex >= 0) {
-        string urlParams = url[qmIndex + 1 .. $];
-        url = url[0 .. qmIndex];
-        string[] list = urlParams.split(",");
-        foreach(item; list) {
-            string[] keyValue = item.split("=");
-            if (keyValue.length == 2) {
-                params[keyValue[0]] = keyValue[1];
-            }
-        }
-    }
-}
-
-/// removes ddbc: prefix from string (if any)
-/// e.g., for "ddbc:postgresql://localhost/test" it will return "postgresql://localhost/test"
-string stripDdbcPrefix(string url) {
-    if (url.startsWith("ddbc:"))
-        return url[5 .. $]; // strip out ddbc: prefix
-    return url;
 }
 
 /// Delegate type to create DDBC driver instance.
 alias DriverFactoryDelegate = Driver delegate();
-/// DDBC Driver factory
+/// DDBC Driver factory.
+/// Can create driver by name or DDBC URL.
 class DriverFactory {
     private __gshared static DriverFactoryDelegate[string] _factoryMap;
 
@@ -106,10 +73,12 @@ class DriverFactory {
     }
 }
 
+/// To be called on connection close
 interface ConnectionCloseHandler {
 	void onConnectionClosed(Connection connection);
 }
 
+/// Wrapper class for connection
 class ConnectionWrapper : Connection {
 	private ConnectionCloseHandler pool;
 	private Connection base;
@@ -134,13 +103,14 @@ class ConnectionWrapper : Connection {
 	override void setAutoCommit(bool autoCommit) { base.setAutoCommit(autoCommit); }
 	override void setCatalog(string catalog) { base.setCatalog(catalog); }
 }
+
 // remove array item inplace
 static void myRemove(T)(ref T[] array, size_t index) {
     for (auto i = index; i < array.length - 1; i++) {
         array[i] = array[i + 1];
     }
-    array[array.length - 1] = T.init;
-    array.length--;
+    array[$ - 1] = T.init;
+    array.length = array.length - 1;
 }
 
 // remove array item inplace
@@ -157,12 +127,15 @@ static void myRemove(T : Object)(ref T[] array, T item) {
     for (auto i = index; i < array.length - 1; i++) {
         array[i] = array[i + 1];
     }
-    array[array.length - 1] = T.init;
-    array.length--;
+    array[$ - 1] = T.init;
+    array.length = array.length - 1;
 }
 
 // TODO: implement limits
 // TODO: thread safety
+/// Simple connection pool DataSource implementation.
+/// When close() is called on connection received from this pool, it will be returned to pool instead of closing.
+/// Next getConnection() will just return existing connection from pool, instead of slow connection establishment process.
 class ConnectionPoolDataSourceImpl : DataSourceImpl, ConnectionCloseHandler {
 private:
 	int maxPoolSize;
@@ -240,25 +213,8 @@ public:
     }
 }
 
-/// Helper function to create DDBC connection, automatically selecting driver based on URL
-Connection createConnection(string url, string[string]params = null) {
-    Driver driver = DriverFactory.createDriverForURL(url);
-    return driver.connect(url, params);
-}
-
-/// Helper function to create simple DDBC DataSource, automatically selecting driver based on URL
-DataSource createDataSource(string url, string[string]params = null) {
-    Driver driver = DriverFactory.createDriverForURL(url);
-    return new DataSourceImpl(driver, url, params);
-}
-
-/// Helper function to create connection pool data source, automatically selecting driver based on URL
-DataSource createConnectionPool(string url, string[string]params = null, int maxPoolSize = 1, int timeToLive = 600, int waitTimeOut = 30) {
-    Driver driver = DriverFactory.createDriverForURL(url);
-    return new ConnectionPoolDataSourceImpl(driver, url, params, maxPoolSize, timeToLive, waitTimeOut);
-}
-
-// Helper implementation of ResultSet - throws Method not implemented for most of methods.
+/// Helper implementation of ResultSet - throws Method not implemented for most of methods.
+/// Useful for driver implementations
 class ResultSetImpl : ddbc.core.ResultSet {
 public:
     override int opApply(int delegate(DataSetReader) dg) { 
@@ -416,6 +372,7 @@ public:
 	}
 }
 
+/// Column metadata object to be used in driver implementations
 class ColumnMetadataItem {
 	string 	catalogName;
 	int	    displaySize;
@@ -438,6 +395,7 @@ class ColumnMetadataItem {
 	bool 	isWritable;
 }
 
+/// parameter metadata object - to be used in driver implementations
 class ParameterMetaDataItem {
 	/// Retrieves the designated parameter's mode.
 	int mode;
@@ -455,6 +413,7 @@ class ParameterMetaDataItem {
 	bool isSigned;
 }
 
+/// parameter set metadate implementation object - to be used in driver implementations
 class ParameterMetaDataImpl : ParameterMetaData {
 	ParameterMetaDataItem [] cols;
 	this(ParameterMetaDataItem [] cols) {
@@ -486,6 +445,7 @@ class ParameterMetaDataImpl : ParameterMetaData {
 	bool isSigned(int param) { return col(param).isSigned; }
 }
 
+/// Metadata for result set - to be used in driver implementations
 class ResultSetMetaDataImpl : ResultSetMetaData {
 	ColumnMetadataItem [] cols;
 	this(ColumnMetadataItem [] cols) {
@@ -548,3 +508,69 @@ version (unittest) {
         }
     }
 }
+
+// utility functions
+
+/// removes ddbc: prefix from string (if any)
+/// e.g., for "ddbc:postgresql://localhost/test" it will return "postgresql://localhost/test"
+string stripDdbcPrefix(string url) {
+    if (url.startsWith("ddbc:"))
+        return url[5 .. $]; // strip out ddbc: prefix
+    return url;
+}
+
+/// extracts driver name from DDBC URL
+/// e.g., for "ddbc:postgresql://localhost/test" it will return "postgresql"
+string extractDriverNameFromURL(string url) {
+    url = stripDdbcPrefix(url);
+    import std.string;
+    int colonPos = cast(int)url.indexOf(":");
+    if (colonPos < 0)
+        return url;
+    return url[0 .. colonPos];
+}
+
+/// extract parameters from URL string to string[string] map, update url to strip params
+void extractParamsFromURL(ref string url, ref string[string] params) {
+    url = stripDdbcPrefix(url);
+    import std.string : lastIndexOf, split;
+    ptrdiff_t qmIndex = lastIndexOf(url, '?');
+    if (qmIndex >= 0) {
+        string urlParams = url[qmIndex + 1 .. $];
+        url = url[0 .. qmIndex];
+        string[] list = urlParams.split(",");
+        foreach(item; list) {
+            string[] keyValue = item.split("=");
+            if (keyValue.length == 2) {
+                params[keyValue[0]] = keyValue[1];
+            }
+        }
+    }
+}
+
+/// sets user and password parameters in parameter map
+public void setUserAndPassword(ref string[string] params, string username, string password) {
+    params["user"] = username;
+    params["password"] = password;
+}
+
+// factory methods
+
+/// Helper function to create DDBC connection, automatically selecting driver based on URL
+Connection createConnection(string url, string[string]params = null) {
+    Driver driver = DriverFactory.createDriverForURL(url);
+    return driver.connect(url, params);
+}
+
+/// Helper function to create simple DDBC DataSource, automatically selecting driver based on URL
+DataSource createDataSource(string url, string[string]params = null) {
+    Driver driver = DriverFactory.createDriverForURL(url);
+    return new DataSourceImpl(driver, url, params);
+}
+
+/// Helper function to create connection pool data source, automatically selecting driver based on URL
+DataSource createConnectionPool(string url, string[string]params = null, int maxPoolSize = 1, int timeToLive = 600, int waitTimeOut = 30) {
+    Driver driver = DriverFactory.createDriverForURL(url);
+    return new ConnectionPoolDataSourceImpl(driver, url, params, maxPoolSize, timeToLive, waitTimeOut);
+}
+

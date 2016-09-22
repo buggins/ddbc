@@ -61,11 +61,12 @@ version(unittest) {
 
     static if (MYSQL_TESTS_ENABLED) {
         /// use this data source for tests
+        
         DataSource createUnitTestMySQLDataSource() {
-            MySQLDriver driver = new MySQLDriver();
-            string url = MySQLDriver.generateUrl(MYSQL_UNITTEST_HOST, MYSQL_UNITTEST_PORT, MYSQL_UNITTEST_DB);
-            string[string] params = MySQLDriver.setUserAndPassword(MYSQL_UNITTEST_USER, MYSQL_UNITTEST_PASSWORD);
-            return new ConnectionPoolDataSourceImpl(driver, url, params);
+            string url = makeDDBCUrl("mysql", MYSQL_UNITTEST_HOST, MYSQL_UNITTEST_PORT, MYSQL_UNITTEST_DB);
+            string[string] params;
+            setUserAndPassword(params, MYSQL_UNITTEST_USER, MYSQL_UNITTEST_PASSWORD);
+            return createConnectionPool(url, params);
         }
     }
 }
@@ -146,12 +147,7 @@ public:
 
 
 	void onStatementClosed(MySQLStatement stmt) {
-		foreach(index, item; activeStatements) {
-			if (item == stmt) {
-				remove(activeStatements, index);
-				return;
-			}
-		}
+        myRemove(activeStatements, stmt);
 	}
 
     this(string url, string[string] params) {
@@ -426,6 +422,7 @@ public:
         try {
             closeResultSet();
             closed = true;
+            conn.onStatementClosed(this);
         } catch (Throwable e) {
             throw new SQLException(e);
         }

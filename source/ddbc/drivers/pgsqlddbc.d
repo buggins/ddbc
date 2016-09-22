@@ -213,10 +213,10 @@ version(USE_PGSQL) {
     	static if (PGSQL_TESTS_ENABLED) {
     		/// use this data source for tests
     		DataSource createUnitTestPGSQLDataSource() {
-    			PGSQLDriver driver = new PGSQLDriver();
-    			string url = PGSQLDriver.generateUrl(PGSQL_UNITTEST_HOST, PGSQL_UNITTEST_PORT, PGSQL_UNITTEST_DB);
-    			string[string] params = PGSQLDriver.setUserAndPassword(PGSQL_UNITTEST_USER, PGSQL_UNITTEST_PASSWORD);
-    			return new ConnectionPoolDataSourceImpl(driver, url, params);
+                string url = makeDDBCUrl("postgresql", PGSQL_UNITTEST_HOST, PGSQL_UNITTEST_PORT, PGSQL_UNITTEST_DB);
+                string[string] params;
+                setUserAndPassword(params, PGSQL_UNITTEST_USER, PGSQL_UNITTEST_PASSWORD);
+                return createConnectionPool(url, params);
     		}
     	}
     }

@@ -62,9 +62,7 @@ version(USE_SQLITE) {
         static if (SQLITE_TESTS_ENABLED) {
             /// use this data source for tests
             DataSource createUnitTestSQLITEDataSource() {
-                SQLITEDriver driver = new SQLITEDriver();
-                string[string] params;
-                return new ConnectionPoolDataSourceImpl(driver, SQLITE_UNITTEST_FILENAME, params);
+                return createConnectionPool("sqlite:" ~ SQLITE_UNITTEST_FILENAME);
             }
         }
     }
@@ -112,12 +110,7 @@ version(USE_SQLITE) {
         
         
         void onStatementClosed(SQLITEStatement stmt) {
-            foreach(index, item; activeStatements) {
-                if (item == stmt) {
-                    remove(activeStatements, index);
-                    return;
-                }
-            }
+            myRemove(activeStatements, stmt);
         }
         
         this(string url, string[string] params) {
@@ -177,7 +170,7 @@ version(USE_SQLITE) {
             scope(exit) unlock();
             
             SQLITEPreparedStatement stmt = new SQLITEPreparedStatement(this, sql);
-            activeStatements ~= stmt;
+            activeStatements ~= cast(SQLITEStatement)stmt;
             return stmt;
         }
         
@@ -298,6 +291,7 @@ version(USE_SQLITE) {
             scope(exit) unlock();
             closePreparedStatement();
             closed = true;
+            conn.onStatementClosed(this);
         }
         
         void closeResultSet() {
@@ -405,6 +399,8 @@ version(USE_SQLITE) {
         }
 
         override void close() {
+            if (closed)
+                return;
             checkClosed();
             lock();
             scope(exit) unlock();
@@ -413,6 +409,7 @@ version(USE_SQLITE) {
             int res = sqlite3_finalize(stmt);
             enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while closing prepared statement " ~ query ~ " : " ~ conn.getError());
             closed = true;
+            conn.onStatementClosed(this);
         }
 
         
