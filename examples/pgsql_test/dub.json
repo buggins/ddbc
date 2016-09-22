@@ -11,7 +11,7 @@
         {
             "name": "default",
             "subConfigurations": {
-                "ddbc": "PGSQL"
+                "ddbc": "full"
             }
         }
     ]

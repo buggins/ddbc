@@ -293,7 +293,7 @@
   <cv2pdbOptions />
   <objfiles />
   <linkswitches />
-  <libfiles />
+  <libfiles>sqlite3.lib</libfiles>
   <libpaths>$(SolutionDir)/../ddbc/libs/win64</libpaths>
   <deffile />
   <resfile />
@@ -395,13 +395,13 @@
   <cv2pdbOptions />
   <objfiles />
   <linkswitches />
-  <libfiles />
+  <libfiles>sqlite3.lib</libfiles>
   <libpaths>$(SolutionDir)/../ddbc/libs/win64</libpaths>
   <deffile />
   <resfile />
   <exefile>$(OutDir)\$(ProjectName).exe</exefile>
   <useStdLibPath>1</useStdLibPath>
-  <cRuntime>2</cRuntime>
+  <cRuntime>1</cRuntime>
   <privatePhobos>0</privatePhobos>
   <additionalOptions />
   <preBuildCommand />
