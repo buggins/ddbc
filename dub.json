@@ -18,7 +18,8 @@
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll"],
-            "copyFiles-windows-x86_64": [ "libs/win64/libpq.dll"],
+            "copyFiles-windows-x86_64": [ "libs/win64/libpq.dll", "libs/win64/sqlite3.dll"],
+            "sourceFiles-windows-x86_64" : [ "libs/win64/sqlite3.lib" ],
             "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib"]
         },
         {
@@ -34,6 +35,8 @@
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
+            "copyFiles-windows-x86_64": [ "libs/win64/sqlite3.dll" ],
+            "sourceFiles-windows-x86_64" : [ "libs/win64/sqlite3.lib" ],
             "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib" ]
         },
         {
