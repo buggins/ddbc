@@ -14,6 +14,7 @@
             "dependencies": {
                 "mysql-native": ">=0.1.6"
             },
+            "lflags-osx": ["-L/usr/local/opt/sqlite/lib"],
             "libs-posix": ["sqlite3", "pq"],
             "libs-windows": ["sqlite3", "libpq"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll", "libs/win32/intl.dll" ],
@@ -29,6 +30,7 @@
         {
             "name": "SQLite",
             "versions": ["USE_SQLITE"],
+            "lflags-osx": ["-L/usr/local/opt/sqlite/lib"],
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
@@ -50,6 +52,7 @@
             "targetPath": "test",
             "targetType": "executable",
             "versions": ["USE_SQLITE"],
+            "lflags-osx": ["-L/usr/local/opt/sqlite/lib"],
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
