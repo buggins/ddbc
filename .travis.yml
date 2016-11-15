@@ -1,21 +1,21 @@
 language: d
 
+# See: https://docs.travis-ci.com/user/trusty-ci-environment/#Routing-to-Trusty
 sudo: required
 dist: trusty
 
-# start most recent dmd and ldc first, then pre-release & older versions
+# start most recent dmd and ldc first, then older versions. (don't bother with pre-release')
 d:
   - dmd
   - ldc
   - dmd-2.071.2
   - dmd-2.070.0
   - dmd-2.069.2
-  - ldc-1.1.0-beta3
   - ldc-0.17.2
-  - gdc
+  - gdc-2.066.1r2_gcc4.8
 
-# make sure our Mac build uses OS X 10.11 rather than default (10.9) so we have more recent sqlite
-osx_image: xcode7.3
+# make sure our Mac build uses latest OS X. See: https://docs.travis-ci.com/user/osx-ci-environment/#OS-X-Version
+osx_image: xcode8
 
 before_install:
  - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew update && brew install sqlite && brew link --force sqlite; fi"
@@ -31,9 +31,13 @@ script:
 
 addons:
   apt:
-    packages: [ libsqlite3-dev ]
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - libsqlite3-dev
+      - gcc-4.8
 
-# GDC lags behind DMD.
+# GDC versions need to be setup with correct version of gcc
 matrix:
   allow_failures:
-    - d: gdc
+    - d: gdc-2.066.1r2_gcc4.8
