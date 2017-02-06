@@ -357,7 +357,7 @@ version (USE_ODBC)
 
             //writeln("parsing url " ~ url);
             extractParamsFromURL(url, this.params);
-            writeln(url);
+            //writeln(url);
 
             // Allocate environment handle
             checkenv!SQLAllocHandle(cast(ushort) SQL_HANDLE_ENV, SQL_NULL_HANDLE, &henv);
@@ -392,7 +392,7 @@ version (USE_ODBC)
             addToConnectionString("password", "Pwd");
             addToConnectionString("database", "Database");
             string connectionString = connectionProps.join(';');
-            writeln(connectionString);
+            //writeln(connectionString);
 
             SQLCHAR[1024] outstr;
             SQLSMALLINT outstrlen;
@@ -786,7 +786,6 @@ version (USE_ODBC)
                 if (len == SQL_NULL_DATA)
                     return Variant();
 
-                writeln("len: ", len);
 
                 // A char-array contains a null-termination.
                 static if (is(T == char[]))
@@ -796,7 +795,6 @@ version (USE_ODBC)
 
                 checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), val.ptr, len, null);
 
-                writeln("val(", val.length, "):", val);
                 // A char-array contains a null-termination.
                 static if (is(T == char[]))
                     val = val[0 .. ($ - 1)];
@@ -1221,11 +1219,10 @@ version (USE_ODBC)
 
             ColumnMetadataItem[] items;
             items.length = stmt.cols.length;
-            writeln(items.length);
+   
             foreach (i, col; stmt.cols)
             {
                 colsByName[col.name] = col;
-                writeln(items.length, " ", i);
                 items[i] = new ColumnMetadataItem();
                 items[i].catalogName = stmt.conn.getCatalog();
                 items[i].name = col.name;
@@ -1645,9 +1642,9 @@ version (USE_ODBC)
                 //writeln("row = ", rs.getRow());
                 //assert(rowIndex == index);
                 long id = rs.getLong(1);
-                writeln("id = ", id);
+                //writeln("id = ", id);
 
-                writeln("field2 = '" ~ rs.getString(2) ~ "'");
+                //writeln("field2 = '" ~ rs.getString(2) ~ "'");
                 assert(id == index);
                 //writeln("field2 = '" ~ rs.getString(2) ~ "'");
                 //writeln("field3 = '" ~ rs.getString(3) ~ "'");
