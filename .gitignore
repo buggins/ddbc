@@ -35,3 +35,6 @@ launch.json
 settings.json
 dub.userprefs
 ddbc.userprefs
+
+#private files used for tests
+test_connection.txt
