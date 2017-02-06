@@ -29,3 +29,9 @@ dub.selections.json
 test/ddbc-tests
 lib/
 *.sqlite
+
+#Ignore files build by Visual Studio code
+launch.json
+settings.json
+dub.userprefs
+ddbc.userprefs
