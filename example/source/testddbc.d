@@ -51,15 +51,15 @@ short getDefaultPort(string driver)
 	}
 }
 
-string syntaxMessage	= 	"\nsyntax:\n"
-				"\neither:\n"
-				"\tddbctest --connection=sqlite://relative/path/to/file\n"
-				"or:\n"
-				"\tddbctest --connection=sqlite::memory:\n"
-                "or:\n"
-                "\tddbctest --connection=<uri> --database=<database_name> --user=<user> --password=<password> [--port=<port>]\n\n"
-				"\tURI is format 'driver://hostname:port' or 'sqlite://filename'\n"
-				"\tAccepted drivers are [sqlite|pgsql|mysql]\n"
+string syntaxMessage	= 	"\nsyntax:\n" ~
+				"\neither:\n" ~
+				"\tddbctest --connection=sqlite://relative/path/to/file\n" ~
+				"or:\n" ~
+				"\tddbctest --connection=sqlite::memory:\n" ~
+                "or:\n" ~
+                "\tddbctest --connection=<uri> --database=<database_name> --user=<user> --password=<password> [--port=<port>]\n\n" ~
+				"\tURI is format 'driver://hostname:port' or 'sqlite://filename'\n" ~
+				"\tAccepted drivers are [sqlite|pgsql|mysql]\n" ~
 				"\tdatabase name must not be specifed for sqlite and must be specified for other drivers\n";
 
 struct ConnectionParams
@@ -116,7 +116,7 @@ int main(string[] args)
 				if (par.database.length>0)
 				{
 					stderr.writefln(syntaxMessage);
-					stderr.writef("\n"" *** Error: should not specify database name for sqlite: you specified - "~par.database);
+					stderr.writef("\n *** Error: should not specify database name for sqlite: you specified - "~par.database);
 					stderr.writefln("\n");
 					return 1;
 				}
@@ -128,7 +128,7 @@ int main(string[] args)
 				if ((par.host.length==0) || (par.database.length==0) )
 				{
 					stderr.writefln(syntaxMessage);
-					stderr.writefln("\n *** Error: must specify connection and database names for pgsql "
+					stderr.writefln("\n *** Error: must specify connection and database names for pgsql " ~
 								"eg --connection=pgsql://localhost:5432 -- database=test");
 					stderr.writefln("\n");
 					return 1;
@@ -144,7 +144,7 @@ int main(string[] args)
 				if ((par.host.length==0) || (par.database.length==0) )
 				{
 					stderr.writefln(syntaxMessage);
-					stderr.writefln("\n *** Error: must specify connection and database names for mysql "
+					stderr.writefln("\n *** Error: must specify connection and database names for mysql " ~
 								"eg --connection=pgsql://localhost:5432 -- database=test");
 					stderr.writefln("\n");
 					return 1;
