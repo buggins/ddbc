@@ -981,6 +981,7 @@ version (USE_ODBC)
             try
             {
                 checkstmt!SQLExecute(stmt);
+                bind();
                 resultSet = new ODBCResultSet(this);
                 return resultSet;
             }
