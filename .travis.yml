@@ -7,10 +7,11 @@ dist: trusty
 # start most recent dmd and ldc first, then older versions. (don't bother with pre-release')
 d:
   - dmd
-  - ldc
+  - ldc-1.1.0
+  - ldc-1.0.0
+  - dmd-2.072.2
   - dmd-2.071.2
-  - dmd-2.070.0
-  - dmd-2.069.2
+  - dmd-2.070.2
   - gdc-4.8.2
 
 # make sure our Mac build uses latest OS X. See: https://docs.travis-ci.com/user/osx-ci-environment/#OS-X-Version
