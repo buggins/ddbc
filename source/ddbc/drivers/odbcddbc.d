@@ -1027,12 +1027,16 @@ version (USE_ODBC)
 
             auto param = &params[parameterIndex - 1];
 
-            static if (isArray!(T))
+            static if (is(T == char[])) 
+            param.data = cast(void[]) (x ~ '\0');
+            else static if (isArray!(T))
                 param.data = cast(void[]) x;
             else
                 param.data = cast(void[])[x];
             param.bindType = TypeToCIdentifier!(T);
             param.dbtype = ctypeToSQLType(TypeToCIdentifier!(T));
+
+            
 
             SQLBindParameter(stmt, cast(ushort) parameterIndex, SQL_PARAM_INPUT,
                     param.bindType, param.dbtype, 0, 0, param.data.ptr,
