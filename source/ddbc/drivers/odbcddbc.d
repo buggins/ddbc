@@ -799,7 +799,10 @@ version (USE_ODBC)
                 static if (is(T == char[]))
                     val = val[0 .. ($ - 1)];
 
-                return Variant(val);
+                static if(is(T == char[]))
+                    return Variant(val.idup);
+                else
+                    return Variant(val);
             }
 
             Variant readValue(T)() if (is(T == DateTime))
