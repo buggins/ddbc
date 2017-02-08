@@ -1,0 +1,54 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.24720.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{002A2DE9-8BB6-484D-9802-7E4AD4084715}") = "ddbc", "ddbc.visualdproj", "{73F0CBE2-F09C-4141-866B-352226CA8029}"
+EndProject
+Project("{002A2DE9-8BB6-484D-9802-7E4AD4084715}") = "ddbctest", "test\ddbctest\ddbctest.visualdproj", "{2D9D91AB-FB57-41E6-9769-A82E95235A40}"
+	ProjectSection(ProjectDependencies) = postProject
+		{73F0CBE2-F09C-4141-866B-352226CA8029} = {73F0CBE2-F09C-4141-866B-352226CA8029}
+	EndProjectSection
+EndProject
+Project("{002A2DE9-8BB6-484D-9802-7E4AD4084715}") = "pgsql_test", "examples\pgsql_test\pgsql_test.visualdproj", "{9398E775-3E49-4795-9D70-4A6D4932A069}"
+	ProjectSection(ProjectDependencies) = postProject
+		{73F0CBE2-F09C-4141-866B-352226CA8029} = {73F0CBE2-F09C-4141-866B-352226CA8029}
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Debug|x64 = Debug|x64
+		Release|Win32 = Release|Win32
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{73F0CBE2-F09C-4141-866B-352226CA8029}.Debug|Win32.ActiveCfg = Debug|Win32
+		{73F0CBE2-F09C-4141-866B-352226CA8029}.Debug|Win32.Build.0 = Debug|Win32
+		{73F0CBE2-F09C-4141-866B-352226CA8029}.Debug|x64.ActiveCfg = Debug|x64
+		{73F0CBE2-F09C-4141-866B-352226CA8029}.Debug|x64.Build.0 = Debug|x64
+		{73F0CBE2-F09C-4141-866B-352226CA8029}.Release|Win32.ActiveCfg = Release|Win32
+		{73F0CBE2-F09C-4141-866B-352226CA8029}.Release|Win32.Build.0 = Release|Win32
+		{73F0CBE2-F09C-4141-866B-352226CA8029}.Release|x64.ActiveCfg = Release|x64
+		{73F0CBE2-F09C-4141-866B-352226CA8029}.Release|x64.Build.0 = Release|x64
+		{2D9D91AB-FB57-41E6-9769-A82E95235A40}.Debug|Win32.ActiveCfg = Debug|Win32
+		{2D9D91AB-FB57-41E6-9769-A82E95235A40}.Debug|Win32.Build.0 = Debug|Win32
+		{2D9D91AB-FB57-41E6-9769-A82E95235A40}.Debug|x64.ActiveCfg = Debug|x64
+		{2D9D91AB-FB57-41E6-9769-A82E95235A40}.Debug|x64.Build.0 = Debug|x64
+		{2D9D91AB-FB57-41E6-9769-A82E95235A40}.Release|Win32.ActiveCfg = Release|Win32
+		{2D9D91AB-FB57-41E6-9769-A82E95235A40}.Release|Win32.Build.0 = Release|Win32
+		{2D9D91AB-FB57-41E6-9769-A82E95235A40}.Release|x64.ActiveCfg = Release|x64
+		{2D9D91AB-FB57-41E6-9769-A82E95235A40}.Release|x64.Build.0 = Release|x64
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Debug|Win32.ActiveCfg = Debug|Win32
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Debug|Win32.Build.0 = Debug|Win32
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Debug|x64.ActiveCfg = Debug|x64
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Debug|x64.Build.0 = Debug|x64
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Release|Win32.ActiveCfg = Release|Win32
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Release|Win32.Build.0 = Release|Win32
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Release|x64.ActiveCfg = Release|x64
+		{9398E775-3E49-4795-9D70-4A6D4932A069}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

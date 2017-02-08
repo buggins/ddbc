@@ -1,9 +1,9 @@
 <DProject>
- <ProjectGuid>{73F0CBE2-F09C-4141-866B-352226CA8029}</ProjectGuid>
+ <ProjectGuid>{9398E775-3E49-4795-9D70-4A6D4932A069}</ProjectGuid>
  <Config name="Debug" platform="Win32">
   <obj>0</obj>
   <link>0</link>
-  <lib>1</lib>
+  <lib>0</lib>
   <subsystem>0</subsystem>
   <multiobj>0</multiobj>
   <singleFileCompilation>0</singleFileCompilation>
@@ -14,7 +14,7 @@
   <verbose>0</verbose>
   <vtls>0</vtls>
   <vgc>0</vgc>
-  <symdebug>1</symdebug>
+  <symdebug>3</symdebug>
   <optimize>0</optimize>
   <cpu>0</cpu>
   <isX86_64>0</isX86_64>
@@ -53,9 +53,9 @@
   <cccmd>$(CC) -c</cccmd>
   <ccTransOpt>1</ccTransOpt>
   <program>$(DMDInstallDir)windows\bin\dmd.exe</program>
-  <imppath />
+  <imppath>$(SolutionDir)/../ddbc/source $(SolutionDir)/../ddbc/deps/mysql-native/source $(SolutionDir)/../ddbc/deps/DerelictPQ/source $(SolutionDir)/../ddbc/deps/DerelictUtil/source</imppath>
   <fileImppath />
-  <outdir>$(ConfigurationName)</outdir>
+  <outdir>$(PlatformName)\$(ConfigurationName)</outdir>
   <objdir>$(OutDir)</objdir>
   <objname />
   <libname />
@@ -72,7 +72,7 @@
   <debuglevel>0</debuglevel>
   <debugids />
   <versionlevel>0</versionlevel>
-  <versionids>USE_SQLITE USE_MYSQL USE_PGSQL</versionids>
+  <versionids>USE_PGSQL USE_MYSQL USE_SQLITE</versionids>
   <dump_source>0</dump_source>
   <mapverbosity>0</mapverbosity>
   <createImplib>0</createImplib>
@@ -90,10 +90,10 @@
   <objfiles />
   <linkswitches />
   <libfiles>sqlite3.lib</libfiles>
-  <libpaths>libs/win32</libpaths>
+  <libpaths>$(SolutionDir)/../ddbc/libs/win32</libpaths>
   <deffile />
   <resfile />
-  <exefile>$(OutDir)\$(ProjectName).lib</exefile>
+  <exefile>$(OutDir)\$(ProjectName).exe</exefile>
   <useStdLibPath>1</useStdLibPath>
   <cRuntime>2</cRuntime>
   <privatePhobos>0</privatePhobos>
@@ -105,7 +105,7 @@
  <Config name="Release" platform="Win32">
   <obj>0</obj>
   <link>0</link>
-  <lib>1</lib>
+  <lib>0</lib>
   <subsystem>0</subsystem>
   <multiobj>0</multiobj>
   <singleFileCompilation>0</singleFileCompilation>
@@ -117,7 +117,7 @@
   <vtls>0</vtls>
   <vgc>0</vgc>
   <symdebug>0</symdebug>
-  <optimize>0</optimize>
+  <optimize>1</optimize>
   <cpu>0</cpu>
   <isX86_64>0</isX86_64>
   <isLinux>0</isLinux>
@@ -136,7 +136,7 @@
   <noboundscheck>0</noboundscheck>
   <useSwitchError>0</useSwitchError>
   <useUnitTests>0</useUnitTests>
-  <useInline>0</useInline>
+  <useInline>1</useInline>
   <release>1</release>
   <preservePaths>0</preservePaths>
   <warnings>0</warnings>
@@ -155,9 +155,9 @@
   <cccmd>$(CC) -c</cccmd>
   <ccTransOpt>1</ccTransOpt>
   <program>$(DMDInstallDir)windows\bin\dmd.exe</program>
-  <imppath />
+  <imppath>$(SolutionDir)/../ddbc/source $(SolutionDir)/../ddbc/deps/mysql-native/source $(SolutionDir)/../ddbc/deps/DerelictPQ/source $(SolutionDir)/../ddbc/deps/DerelictUtil/source</imppath>
   <fileImppath />
-  <outdir>$(ConfigurationName)</outdir>
+  <outdir>$(PlatformName)\$(ConfigurationName)</outdir>
   <objdir>$(OutDir)</objdir>
   <objname />
   <libname />
@@ -174,7 +174,7 @@
   <debuglevel>0</debuglevel>
   <debugids />
   <versionlevel>0</versionlevel>
-  <versionids>USE_SQLITE USE_MYSQL USE_PGSQL</versionids>
+  <versionids>USE_PGSQL USE_MYSQL USE_SQLITE</versionids>
   <dump_source>0</dump_source>
   <mapverbosity>0</mapverbosity>
   <createImplib>0</createImplib>
@@ -192,10 +192,10 @@
   <objfiles />
   <linkswitches />
   <libfiles>sqlite3.lib</libfiles>
-  <libpaths>libs/win32</libpaths>
+  <libpaths>$(SolutionDir)/../ddbc/libs/win32</libpaths>
   <deffile />
   <resfile />
-  <exefile>$(OutDir)\$(ProjectName).lib</exefile>
+  <exefile>$(OutDir)\$(ProjectName).exe</exefile>
   <useStdLibPath>1</useStdLibPath>
   <cRuntime>2</cRuntime>
   <privatePhobos>0</privatePhobos>
@@ -207,7 +207,7 @@
  <Config name="Debug" platform="x64">
   <obj>0</obj>
   <link>0</link>
-  <lib>1</lib>
+  <lib>0</lib>
   <subsystem>0</subsystem>
   <multiobj>0</multiobj>
   <singleFileCompilation>0</singleFileCompilation>
@@ -218,7 +218,7 @@
   <verbose>0</verbose>
   <vtls>0</vtls>
   <vgc>0</vgc>
-  <symdebug>1</symdebug>
+  <symdebug>3</symdebug>
   <optimize>0</optimize>
   <cpu>0</cpu>
   <isX86_64>1</isX86_64>
@@ -257,9 +257,9 @@
   <cccmd>$(CC) -c</cccmd>
   <ccTransOpt>1</ccTransOpt>
   <program>$(DMDInstallDir)windows\bin\dmd.exe</program>
-  <imppath />
+  <imppath>$(SolutionDir)/../ddbc/source $(SolutionDir)/../ddbc/deps/mysql-native/source $(SolutionDir)/../ddbc/deps/DerelictPQ/source $(SolutionDir)/../ddbc/deps/DerelictUtil/source</imppath>
   <fileImppath />
-  <outdir>$(ConfigurationName)</outdir>
+  <outdir>$(PlatformName)\$(ConfigurationName)</outdir>
   <objdir>$(OutDir)</objdir>
   <objname />
   <libname />
@@ -276,7 +276,7 @@
   <debuglevel>0</debuglevel>
   <debugids />
   <versionlevel>0</versionlevel>
-  <versionids>USE_SQLITE USE_MYSQL USE_PGSQL</versionids>
+  <versionids>USE_PGSQL USE_MYSQL USE_SQLITE</versionids>
   <dump_source>0</dump_source>
   <mapverbosity>0</mapverbosity>
   <createImplib>0</createImplib>
@@ -285,7 +285,7 @@
   <moduleDepsFile />
   <run>0</run>
   <runargs />
-  <runCv2pdb>1</runCv2pdb>
+  <runCv2pdb>0</runCv2pdb>
   <pathCv2pdb>$(VisualDInstallDir)cv2pdb\cv2pdb.exe</pathCv2pdb>
   <cv2pdbPre2043>0</cv2pdbPre2043>
   <cv2pdbNoDemangle>0</cv2pdbNoDemangle>
@@ -294,10 +294,10 @@
   <objfiles />
   <linkswitches />
   <libfiles>sqlite3.lib</libfiles>
-  <libpaths>libs/win64</libpaths>
+  <libpaths>$(SolutionDir)/../ddbc/libs/win64</libpaths>
   <deffile />
   <resfile />
-  <exefile>$(OutDir)\$(ProjectName).lib</exefile>
+  <exefile>$(OutDir)\$(ProjectName).exe</exefile>
   <useStdLibPath>1</useStdLibPath>
   <cRuntime>2</cRuntime>
   <privatePhobos>0</privatePhobos>
@@ -309,7 +309,7 @@
  <Config name="Release" platform="x64">
   <obj>0</obj>
   <link>0</link>
-  <lib>1</lib>
+  <lib>0</lib>
   <subsystem>0</subsystem>
   <multiobj>0</multiobj>
   <singleFileCompilation>0</singleFileCompilation>
@@ -321,7 +321,7 @@
   <vtls>0</vtls>
   <vgc>0</vgc>
   <symdebug>0</symdebug>
-  <optimize>0</optimize>
+  <optimize>1</optimize>
   <cpu>0</cpu>
   <isX86_64>1</isX86_64>
   <isLinux>0</isLinux>
@@ -340,7 +340,7 @@
   <noboundscheck>0</noboundscheck>
   <useSwitchError>0</useSwitchError>
   <useUnitTests>0</useUnitTests>
-  <useInline>0</useInline>
+  <useInline>1</useInline>
   <release>1</release>
   <preservePaths>0</preservePaths>
   <warnings>0</warnings>
@@ -359,9 +359,9 @@
   <cccmd>$(CC) -c</cccmd>
   <ccTransOpt>1</ccTransOpt>
   <program>$(DMDInstallDir)windows\bin\dmd.exe</program>
-  <imppath />
+  <imppath>$(SolutionDir)/../ddbc/source $(SolutionDir)/../ddbc/deps/mysql-native/source $(SolutionDir)/../ddbc/deps/DerelictPQ/source $(SolutionDir)/../ddbc/deps/DerelictUtil/source</imppath>
   <fileImppath />
-  <outdir>$(ConfigurationName)</outdir>
+  <outdir>$(PlatformName)\$(ConfigurationName)</outdir>
   <objdir>$(OutDir)</objdir>
   <objname />
   <libname />
@@ -378,7 +378,7 @@
   <debuglevel>0</debuglevel>
   <debugids />
   <versionlevel>0</versionlevel>
-  <versionids>USE_SQLITE USE_MYSQL USE_PGSQL</versionids>
+  <versionids>USE_PGSQL USE_MYSQL USE_SQLITE</versionids>
   <dump_source>0</dump_source>
   <mapverbosity>0</mapverbosity>
   <createImplib>0</createImplib>
@@ -396,54 +396,19 @@
   <objfiles />
   <linkswitches />
   <libfiles>sqlite3.lib</libfiles>
-  <libpaths>libs/win64</libpaths>
+  <libpaths>$(SolutionDir)/../ddbc/libs/win64</libpaths>
   <deffile />
   <resfile />
-  <exefile>$(OutDir)\$(ProjectName).lib</exefile>
+  <exefile>$(OutDir)\$(ProjectName).exe</exefile>
   <useStdLibPath>1</useStdLibPath>
-  <cRuntime>2</cRuntime>
+  <cRuntime>1</cRuntime>
   <privatePhobos>0</privatePhobos>
   <additionalOptions />
   <preBuildCommand />
   <postBuildCommand />
   <filesToClean>*.obj;*.cmd;*.build;*.json;*.dep</filesToClean>
  </Config>
- <Folder name="ddbc">
-  <Folder name="deps">
-   <Folder name="DerelictPQ">
-    <File path="deps\DerelictPQ\source\derelict\pq\pq.d" />
-   </Folder>
-   <Folder name="DerelictUtil">
-    <File path="deps\DerelictUtil\source\derelict\util\exception.d" />
-    <File path="deps\DerelictUtil\source\derelict\util\loader.d" />
-    <File path="deps\DerelictUtil\source\derelict\util\sharedlib.d" />
-    <File path="deps\DerelictUtil\source\derelict\util\system.d" />
-    <File path="deps\DerelictUtil\source\derelict\util\wintypes.d" />
-   </Folder>
-   <Folder name="mysql-native">
-    <File path="deps\mysql-native\source\mysql\protocol\commands.d" />
-    <File path="deps\mysql-native\source\mysql\common.d" />
-    <File path="deps\mysql-native\source\mysql\connection.d" />
-    <File path="deps\mysql-native\source\mysql\protocol\constants.d" />
-    <File path="deps\mysql-native\source\mysql\db.d" />
-    <File path="deps\mysql-native\source\mysql\escape.d" />
-    <File path="deps\mysql-native\source\mysql\protocol\extra_types.d" />
-    <File path="deps\mysql-native\source\mysql\package.d" />
-    <File path="deps\mysql-native\source\mysql\protocol\packets.d" />
-    <File path="deps\mysql-native\source\mysql\protocol\packet_helpers.d" />
-    <File path="deps\mysql-native\source\mysql\result.d" />
-   </Folder>
-  </Folder>
-  <Folder name="drivers">
-   <File path="source\ddbc\drivers\mysqlddbc.d" />
-   <File path="source\ddbc\drivers\pgsqlddbc.d" />
-   <File path="source\ddbc\drivers\sqliteddbc.d" />
-   <File path="source\ddbc\drivers\utils.d" />
-  </Folder>
-  <File path="source\ddbc\all.d" />
-  <File path="source\ddbc\common.d" />
-  <File path="source\ddbc\core.d" />
-  <File path="source\ddbc\package.d" />
-  <File path="source\ddbc\pods.d" />
+ <Folder name="pgsql_test">
+  <File path="source\main.d" />
  </Folder>
 </DProject>

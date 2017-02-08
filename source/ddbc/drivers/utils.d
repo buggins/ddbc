@@ -20,22 +20,22 @@ module ddbc.drivers.utils;
 
 import std.datetime;
 
-string copyCString(const char* c, int actualLength = -1) {
-    const(char)* a = c;
+string copyCString(T)(const T* c, int actualLength = -1) if (is(T == char) || is (T == ubyte)) {
+    const(T)* a = c;
     if(a is null)
         return null;
     
-    string ret;
-    if(actualLength == -1)
-    while(*a) {
-        ret ~= *a;
-        a++;
-    }
-    else {
-        ret = a[0..actualLength].idup;
+    if(actualLength == -1) {
+        T[] ret;
+        while(*a) {
+            ret ~= *a;
+            a++;
+        }
+        return cast(string)ret;
+    } else {
+        return cast(string)(a[0..actualLength].idup);
     }
     
-    return ret;
 }
 
 TimeOfDay parseTimeoid(const string timeoid)

@@ -22,40 +22,19 @@ NOTE: project has been moved from SourceForge to GitHub
 Example:
 
 ```d
-import ddbc.all;
+import ddbc;
 import std.stdio;
 import std.conv;
 
 int main(string[] args) {
-    // Create driver and fill connection params. You can leave only one section - for RDBMS you want to use
-    string[string] params;
-    // This part depends on RDBMS
-    version( USE_SQLITE )
-    {
-        SQLITEDriver driver = new SQLITEDriver();
-        string url = "zzz.db"; // file with DB
-    }
-    else version( USE_PGSQL )
-    {
-        PGSQLDriver driver = new PGSQLDriver();
-        string url = PGSQLDriver.generateUrl( "/tmp", 5432, "testdb" );
-        params["user"] = "hdtest";
-        params["password"] = "secret";
-        params["ssl"] = "true";
-    }
-    else version(USE_MYSQL)
-    {
-        // MySQL driver - you can use PostgreSQL or SQLite instead as well
-        MySQLDriver driver = new MySQLDriver();
-        string url = MySQLDriver.generateUrl("localhost", 3306, "test_db");
-        params = MySQLDriver.setUserAndPassword("testuser", "testpassword");
-    }
 
-    // create connection pool
-    DataSource ds = new ConnectionPoolDataSourceImpl(driver, url, params);
+    // provide URL for proper type of DB
+    string url = "postgresql://localhost:5432/ddbctestdb?user=ddbctest,password=ddbctestpass,ssl=true";
+    //string url = "mysql://localhost:3306/ddbctestdb?user=ddbctest,password=ddbctestpass";
+    //string url = "sqlite:testdb.sqlite";
 
     // creating Connection
-    auto conn = ds.getConnection();
+    auto conn = createConnection(url);
     scope(exit) conn.close();
 
     // creating Statement
@@ -67,7 +46,7 @@ int main(string[] args) {
     stmt.executeUpdate("CREATE TABLE ddbct1 
                     (id bigint not null primary key, 
                      name varchar(250),
-                     comment mediumtext, 
+                     comment text,
                      ts datetime)");
     stmt.executeUpdate("INSERT INTO ddbct1 (id, name, comment, ts) VALUES
                         (1, 'name1', 'comment for line 1', '2016/09/14 15:24:01')");
@@ -92,22 +71,22 @@ Sample of easy reading from DB using PODs support:
 
 
 ```d
-import ddbc.core;
-import ddbc.common;
-import ddbc.drivers.sqliteddbc;
-import ddbc.pods;
+import ddbc;
 import std.stdio;
 
-// prepare database connectivity
-auto ds = new ConnectionPoolDataSourceImpl(new SQLITEDriver(), "ddbctest.sqlite");
-auto conn = ds.getConnection();
+// provide URL for proper type of DB
+//string url = "postgresql://localhost:5432/ddbctestdb?user=ddbctest,password=ddbctestpass,ssl=true";
+//string url = "mysql://localhost:3306/ddbctestdb?user=ddbctest,password=ddbctestpass";
+string url = "sqlite:testdb.sqlite";
+// creating Connection
+auto conn = createConnection(url);
 scope(exit) conn.close();
 Statement stmt = conn.createStatement();
 scope(exit) stmt.close();
 // fill database with test data
-stmt.executeUpdate("DROP TABLE IF EXISTS user");
-stmt.executeUpdate("CREATE TABLE user (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)");
-stmt.executeUpdate(`INSERT INTO user (id, name, flags) VALUES (1, "John", 5), (2, "Andrei", 2), (3, "Walter", 2), (4, "Rikki", 3), (5, "Iain", 0), (6, "Robert", 1)`);
+stmt.executeUpdate(`DROP TABLE IF EXISTS user_data`);
+stmt.executeUpdate(`CREATE TABLE user_data (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)`);
+stmt.executeUpdate(`INSERT INTO user_data (id, name, flags) VALUES (1, 'John', 5), (2, 'Andrei', 2), (3, 'Walter', 2), (4, 'Rikki', 3), (5, 'Iain', 0), (6, 'Robert', 1)`);
 
 // our POD object
 struct User {

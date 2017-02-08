@@ -62,9 +62,7 @@ version(USE_SQLITE) {
         static if (SQLITE_TESTS_ENABLED) {
             /// use this data source for tests
             DataSource createUnitTestSQLITEDataSource() {
-                SQLITEDriver driver = new SQLITEDriver();
-                string[string] params;
-                return new ConnectionPoolDataSourceImpl(driver, SQLITE_UNITTEST_FILENAME, params);
+                return createConnectionPool("sqlite:" ~ SQLITE_UNITTEST_FILENAME);
             }
         }
     }
@@ -112,18 +110,14 @@ version(USE_SQLITE) {
         
         
         void onStatementClosed(SQLITEStatement stmt) {
-            foreach(index, item; activeStatements) {
-                if (item == stmt) {
-                    remove(activeStatements, index);
-                    return;
-                }
-            }
+            myRemove(activeStatements, stmt);
         }
         
         this(string url, string[string] params) {
             mutex = new Mutex();
-            if (url.startsWith("sqlite::"))
-                url = url[8 .. $];
+            extractParamsFromURL(url, params);
+            if (url.startsWith("sqlite:"))
+                url = url[7 .. $];
             this.filename = url;
             //writeln("trying to connect");
             int res = sqlite3_open(toStringz(filename), &conn);
@@ -176,7 +170,7 @@ version(USE_SQLITE) {
             scope(exit) unlock();
             
             SQLITEPreparedStatement stmt = new SQLITEPreparedStatement(this, sql);
-            activeStatements ~= stmt;
+            activeStatements ~= cast(SQLITEStatement)stmt;
             return stmt;
         }
         
@@ -297,6 +291,7 @@ version(USE_SQLITE) {
             scope(exit) unlock();
             closePreparedStatement();
             closed = true;
+            conn.onStatementClosed(this);
         }
         
         void closeResultSet() {
@@ -404,6 +399,8 @@ version(USE_SQLITE) {
         }
 
         override void close() {
+            if (closed)
+                return;
             checkClosed();
             lock();
             scope(exit) unlock();
@@ -412,6 +409,7 @@ version(USE_SQLITE) {
             int res = sqlite3_finalize(stmt);
             enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while closing prepared statement " ~ query ~ " : " ~ conn.getError());
             closed = true;
+            conn.onStatementClosed(this);
         }
 
         
@@ -927,7 +925,6 @@ version(USE_SQLITE) {
     //Properties props = new Properties();
     //props.setProperty("user","fred");
     //props.setProperty("password","secret");
-    //props.setProperty("ssl","true");
     //Connection conn = DriverManager.getConnection(url, props);
     class SQLITEDriver : Driver {
         // helper function
@@ -938,7 +935,6 @@ version(USE_SQLITE) {
             string[string] params;
             params["user"] = username;
             params["password"] = password;
-            params["ssl"] = "true";
             return params;
         }
         override ddbc.core.Connection connect(string url, string[string] params) {
@@ -1038,6 +1034,13 @@ version(USE_SQLITE) {
             }
         }
     }
+
+    __gshared static this() {
+        // register SQLiteDriver
+        import ddbc.common;
+        DriverFactory.registerDriverFactory("sqlite", delegate() { return new SQLITEDriver(); });
+    }
+
 
 } else { // version(USE_SQLITE)
     version(unittest) {

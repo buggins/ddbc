@@ -61,11 +61,12 @@ version(unittest) {
 
     static if (MYSQL_TESTS_ENABLED) {
         /// use this data source for tests
+        
         DataSource createUnitTestMySQLDataSource() {
-            MySQLDriver driver = new MySQLDriver();
-            string url = MySQLDriver.generateUrl(MYSQL_UNITTEST_HOST, MYSQL_UNITTEST_PORT, MYSQL_UNITTEST_DB);
-            string[string] params = MySQLDriver.setUserAndPassword(MYSQL_UNITTEST_USER, MYSQL_UNITTEST_PASSWORD);
-            return new ConnectionPoolDataSourceImpl(driver, url, params);
+            string url = makeDDBCUrl("mysql", MYSQL_UNITTEST_HOST, MYSQL_UNITTEST_PORT, MYSQL_UNITTEST_DB);
+            string[string] params;
+            setUserAndPassword(params, MYSQL_UNITTEST_USER, MYSQL_UNITTEST_PASSWORD);
+            return createConnectionPool(url, params);
         }
     }
 }
@@ -146,12 +147,7 @@ public:
 
 
 	void onStatementClosed(MySQLStatement stmt) {
-		foreach(index, item; activeStatements) {
-			if (item == stmt) {
-				remove(activeStatements, index);
-				return;
-			}
-		}
+        myRemove(activeStatements, stmt);
 	}
 
     this(string url, string[string] params) {
@@ -161,13 +157,7 @@ public:
         this.params = params;
         try {
             //writeln("parsing url " ~ url);
-            string urlParams;
-            ptrdiff_t qmIndex = std.string.indexOf(url, '?');
-            if (qmIndex >=0 ) {
-                urlParams = url[qmIndex + 1 .. $];
-                url = url[0 .. qmIndex];
-                // TODO: parse params
-            }
+            extractParamsFromURL(url, this.params);
             string dbName = "";
     		ptrdiff_t firstSlashes = std.string.indexOf(url, "//");
     		ptrdiff_t lastSlash = std.string.lastIndexOf(url, '/');
@@ -188,8 +178,10 @@ public:
                 if (port < 1 || port > 65535)
                     port = 3306;
             }
-            username = params["user"];
-            password = params["password"];
+            if ("user" in this.params)
+                username = this.params["user"];
+            if ("password" in this.params)
+                password = this.params["password"];
 
             //writeln("host " ~ hostname ~ " : " ~ to!string(port) ~ " db=" ~ dbName ~ " user=" ~ username ~ " pass=" ~ password);
 
@@ -430,6 +422,7 @@ public:
         try {
             closeResultSet();
             closed = true;
+            conn.onStatementClosed(this);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -1292,6 +1285,13 @@ unittest {
 
 	}
 }
+
+__gshared static this() {
+    // register MySQLDriver
+    import ddbc.common;
+    DriverFactory.registerDriverFactory("mysql", delegate() { return new MySQLDriver(); });
+}
+
 
 } else { // version(USE_MYSQL)
     version(unittest) {

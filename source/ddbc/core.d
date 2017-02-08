@@ -44,8 +44,16 @@ import std.variant;
 import std.datetime;
 
 class SQLException : Exception {
+    protected string _stateString;
+    this(string msg, string stateString, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); _stateString = stateString; }
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
-    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, f, l); }
+    this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, causedBy, f, l); }
+    this(string msg, Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, causedBy, f, l); }
+    this(string msg, string stateString, Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, causedBy, f, l); _stateString = stateString; }
+}
+
+class SQLWarning {
+    // stub
 }
 
 /// JDBC java.sql.Types from http://docs.oracle.com/javase/6/docs/api/java/sql/Types.html
@@ -380,3 +388,30 @@ interface Driver {
 interface DataSource {
 	Connection getConnection();
 }
+
+/// Helper function to make url in form driverName://host:port/dbname?param1=value1,param2=value2
+string makeDDBCUrl(string driverName, string host, int port, string dbName, string[string] params = null) {
+    import std.conv : to;
+    char[] res;
+    res.assumeSafeAppend;
+    res ~= driverName;
+    res ~= "://";
+    res ~= host;
+    res ~= to!string(port);
+    res ~= "/";
+    res ~= dbName;
+    bool firstParam = true;
+    foreach(key, value; params) {
+        if (firstParam) {
+            res ~= "?";
+            firstParam = false;
+        } else {
+            res ~= ",";
+        }
+        res ~= key;
+        res ~= "=";
+        res ~= value;
+    }
+    return res.dup;
+}
+
