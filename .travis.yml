@@ -18,7 +18,7 @@ d:
 osx_image: xcode8
 
 before_install:
- - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew update && brew install sqlite && brew link --force sqlite; fi"
+ - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew update && brew install libevent sqlite && brew link --force sqlite; fi"
 
 os:
  - linux
@@ -34,6 +34,7 @@ addons:
     sources:
       - ubuntu-toolchain-r-test
     packages:
+      - libevent-dev
       - libsqlite3-dev
       - gcc-4.8
 
