@@ -42,5 +42,3 @@ addons:
 matrix:
   allow_failures:
     - d: gdc-4.8.2
-    - os: osx
-      d: ldc
