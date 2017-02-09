@@ -91,9 +91,13 @@ version (USE_ODBC)
 
         SQLRETURN retval = fn(args);
 
-        //writeln("in file: ", file, " at line: ", line);
-        //writeln(" > ", fullyQualifiedName!fn, "(", format("%(%s%|, %)", tuple(args)), ")", " : ", cast(RetVals) retval, " (line: ", line, ")");
-        //writeln();
+        debug
+        {
+            writeln("in file: ", file, " at line: ", line);
+            writeln(" > ", fullyQualifiedName!fn, "(", format("%(%s%|, %)", tuple(args)), ")", " : ", cast(RetVals) retval, " (line: ", line, ")");
+            writeln();
+        }
+
 
         if (retval != SQL_SUCCESS && retval != SQL_SUCCESS_WITH_INFO && retval != SQL_NO_DATA)
         {
@@ -1477,7 +1481,7 @@ version (USE_ODBC)
 
         override string getString(int columnIndex)
         {
-            return getArray!(char[])(columnIndex).idup;
+            return stmt.getColumn(columnIndex).value.get!(string);
         }
 
         override std.datetime.DateTime getDateTime(int columnIndex)
