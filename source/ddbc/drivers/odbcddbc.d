@@ -134,7 +134,7 @@ version (USE_ODBC)
             }
         }
         while (ret == SQL_SUCCESS);
-
+        debug writeln("file: ", file, ", line: ", line, "\n", s);
         throw new Exception(s, file, line);
     }
 
@@ -739,19 +739,19 @@ version (USE_ODBC)
 
                 this.nr = cast(short) nr;
 
-                short nameLen = 0;
-                char[] nameBuff;
+                short nameLen = 1000;
+                char[1000] nameBuff;
 
-                checkstmt!SQLDescribeCol(stmt, cast(ushort) nr, null,
-                        cast(ushort) 0, &nameLen, &this.dataType, null, null, &this.nullAble);
+                // BUG: SQLDescribeCol does not return the length of the of the column-name!
+                /*checkstmt!SQLDescribeCol(stmt, this.nr, null,
+                        0, &nameLen, &this.dataType, null, null, &this.nullAble);
                 nameLen += 1;
-                nameBuff.length = nameLen;
+                nameBuff.length = nameLen;*/
 
-                checkstmt!SQLDescribeCol(stmt, cast(ushort) nr, nameBuff.ptr,
+                checkstmt!SQLDescribeCol(stmt, this.nr, nameBuff.ptr,
                         nameLen, null, &this.dataType, null, null, &this.nullAble);
 
-                this.name = nameBuff[0 .. $ - 1].idup;
-
+                this.name = fromStringz(nameBuff.ptr).idup;
             }
 
             void read()
@@ -1123,7 +1123,7 @@ version (USE_ODBC)
         override void setDateTime(int parameterIndex, DateTime x)
         {
             bindParam(parameterIndex, SQL_TIMESTAMP_STRUCT(x.year, x.month,
-                    x.day, x.hour, x.minute, x.second));
+                    x.day, x.hour, x.minute, x.second, 0));
         }
 
         override void setDate(int parameterIndex, Date x)
@@ -1242,6 +1242,8 @@ version (USE_ODBC)
                 items[i].type = col.dataType.fromODBCType();
                 items[i].typeName = (cast(SqlType) items[i].type).to!(string);
                 items[i].isNullable = col.nullAble == SQL_NULLABLE;
+
+                debug writeln("ColumnMetadataItem: ", items[i].catalogName, "; ", items[i].name, "; ", items[i].typeName);
             }
 
             metadata = new ResultSetMetaDataImpl(items);
