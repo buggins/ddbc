@@ -13,7 +13,7 @@ d:
   - dmd-2.072.2
   - dmd-2.071.2
   - dmd-2.070.2
-  - gdc-6.3.0
+  - gdc-6.3.0+2.068.2
 
 # make sure our Mac build uses latest OS X. See: https://docs.travis-ci.com/user/osx-ci-environment/#OS-X-Version
 osx_image: xcode8
@@ -42,4 +42,4 @@ addons:
 # GDC versions need to be setup with correct version of gcc
 matrix:
   allow_failures:
-    - d: gdc-6.3.0
+    - d: gdc-6.3.0+2.068.2
