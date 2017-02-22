@@ -51,7 +51,7 @@ version (USE_ODBC)
             {
                 import std.file;
 
-                string url = cast(string) read("test_connection.txt");
+                string url = "odbc://localhost,1433?user=sa,password=bbk4k77JKH88g54,driver=FreeTDS";//cast(string) read("test_connection.txt");
 
                 return createConnectionPool(url);
             }
@@ -1606,8 +1606,10 @@ version (USE_ODBC)
 
             assert(stmt.executeUpdate(
                     "IF OBJECT_ID('ddbct1', 'U') IS NOT NULL DROP TABLE ddbct1") == -1);
-            assert(stmt.executeUpdate("CREATE TABLE ddbct1 ( " ~ "id bigint not null primary key, "
-                    ~ "name varchar(250), " ~ "comment varchar(max), " ~ "ts datetime)") == -1);
+            
+            // Some Databases has `not null` as default.
+            assert(stmt.executeUpdate("CREATE TABLE ddbct1 ( " ~ "id int not null primary key, "
+                    ~ "name varchar(250) null, " ~ "comment varchar(max) null, " ~ "ts datetime null)") == -1);
             assert(stmt.executeUpdate("INSERT INTO ddbct1(id, name, comment, ts) VALUES(1, 'name1dfgdfg', 'comment for line 1', '2017-02-03T12:30:25' )") == 1);
             assert(stmt.executeUpdate("INSERT INTO ddbct1(id, name, comment) VALUES"
                     ~ "(2, 'name2', 'comment for line 2 - can be very long'), "
@@ -1655,7 +1657,11 @@ version (USE_ODBC)
                 //int rowIndex = rs.getRow();
                 //writeln("row = ", rs.getRow());
                 //assert(rowIndex == index);
-                long id = rs.getLong(1);
+                
+                // BUG: the Type is defined as `BIGINT` but is read as double on some platforms insted of long! `INT` works with getLong()!
+                // long id = rs.getLong(1);
+                long id = rs.getDouble(1).to!long;
+
                 //writeln("id = ", id);
 
                 //writeln("field2 = '" ~ rs.getString(2) ~ "'");
