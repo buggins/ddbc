@@ -17,7 +17,7 @@ d:
 # make sure our Mac build uses OS X 10.11 rather than default (10.9) so we have more recent sqlite
 osx_image: xcode7.3
 
-service:
+services:
   - docker
 
 
