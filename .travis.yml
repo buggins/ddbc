@@ -17,15 +17,10 @@ d:
 # make sure our Mac build uses OS X 10.11 rather than default (10.9) so we have more recent sqlite
 osx_image: xcode7.3
 
-services:
-  - docker
-
 
 
 before_install:
  - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew update && brew install sqlite && brew link --force sqlite; fi"
- - docker pull microsoft/mssql-server-linux
- - docker run -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=bbk4k77JKH88g54' -p 1433:1433 -d microsoft/mssql-server-linux
 
 
 os:
@@ -39,7 +34,7 @@ script:
 
 addons:
   apt:
-    packages: [ libsqlite3-dev, libevent-dev, unixodbc-dev, tdsodbc ]
+    packages: [ libsqlite3-dev, libevent-dev ]
 
 # GDC lags behind DMD. There's a problem linking sqlite on the Travis OSX with LDC builds
 matrix:
