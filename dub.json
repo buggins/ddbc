@@ -12,7 +12,7 @@
             "name": "full",
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL"],
             "dependencies": {
-                "mysql-native": ">=0.1.6",
+                "mysql-native": "~>0.1.6",
                 "derelict-pq": "~>2.0.2"
             },
             "libs-posix": ["sqlite3"],
@@ -26,7 +26,7 @@
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
             "dependencies": {
-                "mysql-native": ">=0.1.6"
+                "mysql-native": "~>0.1.6"
             }
         },
         {
