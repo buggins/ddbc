@@ -38,6 +38,9 @@ import ddbc.core;
 version(USE_MYSQL) {
 
 import mysql.connection;
+import mysql.commands;
+import mysql.protocol.packets;
+import mysql.protocol.constants;
 
 version(unittest) {
     /*
