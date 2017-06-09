@@ -8,6 +8,7 @@ dist: trusty
 # For available compilers see: https://semitwist.com/travis-d-compilers
 d:
   - dmd
+  - ldc
   - ldc-1.1.0
   - ldc-1.0.0
   - dmd-2.072.2
