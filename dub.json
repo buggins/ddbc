@@ -13,7 +13,7 @@
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL"],
             "dependencies": {
                 "mysql-native": ">=1.1.0",
-                "derelict-pq": "~>2.0.2"
+                "derelict-pq": "~>2.2.0"
             },
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
@@ -47,7 +47,7 @@
             "copyFiles-windows-x86": [ "libs/win32/libpq.dll"],
             "copyFiles-windows-x86_64": [ "libs/win64/libpq.dll"],
             "dependencies": {
-                "derelict-pq": "~>2.0.2"
+                "derelict-pq": "~>2.2.0"
             }
         },
         {
