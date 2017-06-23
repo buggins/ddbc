@@ -27,7 +27,7 @@
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
             "dependencies": {
-                "mysql-native": ">=0.1.6"
+                "mysql-native": "~>0.1.6"
             }
         },
         {
