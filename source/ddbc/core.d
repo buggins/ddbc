@@ -397,6 +397,7 @@ string makeDDBCUrl(string driverName, string host, int port, string dbName, stri
     res ~= driverName;
     res ~= "://";
     res ~= host;
+    res ~= ":";
     res ~= to!string(port);
     res ~= "/";
     res ~= dbName;

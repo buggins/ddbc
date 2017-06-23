@@ -1,0 +1,21 @@
+{
+    "name": "ddbc_odbc_test",
+    "description": "Testing ODBC support in DDBC",
+    "homepage": "https://github.com/buggins/ddbc",
+    "license": "Boost Software License (BSL 1.0)",
+    "dependencies": {
+        "ddbc": {"version": "~master", "path": "../../"}
+    },
+    "targetType": "executable",
+    "configurations": [
+        {
+            "name": "default",
+            "subConfigurations": {
+                "ddbc": "full"
+            }
+        }
+    ],
+    "libs": [
+        "odbc"
+    ]
+}

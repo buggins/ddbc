@@ -17,10 +17,11 @@ Supported (built-in) RDBMS drivers: MySQL, PostgreSQL, SQLite
 
 Configuration name          Version constants                  Drivers included
 --------------------------  ---------------------------------- ---------------------------------
-full                        USE_MYSQL, USE_SQLITE, USE_PGSQL   mysql, sqlite, postgresql
+full                        USE_MYSQL, USE_SQLITE, USE_PGSQL   mysql, sqlite, postgresql, odbc
 MySQL                       USE_MYSQL                          mysql
 SQLite                      USE_SQLITE                         sqlite
 PGSQL                       USE_PGSQL                          postgresql
+ODBC                        USE_ODBC                           odbc
 API                         (none)                             (no drivers, API only)
 
 
@@ -192,4 +193,9 @@ version(USE_MYSQL)
 {
     // register MySQL driver
     private import ddbc.drivers.mysqlddbc;
+}
+version(USE_ODBC)
+{
+    // register ODBC driver
+    private import ddbc.drivers.odbcddbc;
 }

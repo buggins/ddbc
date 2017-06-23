@@ -42,9 +42,9 @@ version(USE_SQLITE) {
         pragma (lib, "sqlite3");
     } else version (linux) {
         pragma (lib, "sqlite3");
+    } else version (OSX) {
+        pragma (lib, "sqlite3");
     } else version (Posix) {
-        pragma (lib, "libsqlite3");
-    } else version (darwin) {
         pragma (lib, "libsqlite3");
     } else {
         pragma (msg, "You will need to manually link in the SQLite library.");
