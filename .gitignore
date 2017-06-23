@@ -32,3 +32,12 @@ dub.selections.json
 test/ddbc-tests
 lib/
 *.sqlite
+
+#Ignore files build by Visual Studio code
+launch.json
+settings.json
+dub.userprefs
+ddbc.userprefs
+
+#private files used for tests
+test_connection.txt

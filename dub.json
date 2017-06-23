@@ -1,6 +1,6 @@
 {
     "name": "ddbc",
-    "description": "DB Connector for D language, similar to JDBC (mysql, sqlite, postgresql)",
+    "description": "DB Connector for D language, similar to JDBC (mysql, sqlite, postgresql, odbc)",
     "authors": ["Vadim Lopatin"],
     "homepage": "https://github.com/buggins/ddbc",
     "license": "Boost Software License (BSL 1.0)",
@@ -51,6 +51,12 @@
             }
         },
         {
+            "name": "ODBC",
+            "versions": ["USE_ODBC"],
+            "libs-posix": ["odbc"],
+            "libs-windows": ["odbc"],
+        },
+        {
             "name": "API"
         },
         {
@@ -60,8 +66,8 @@
             "targetName": "ddbc-tests",
             "targetPath": "test",
             "targetType": "executable",
-            "versions": ["USE_SQLITE"],
-            "libs-posix": ["sqlite3"],
+            "versions": ["USE_SQLITE", "USE_ODBC"],
+            "libs-posix": ["sqlite3", "odbc"],
             "libs-windows": ["sqlite3"],
             "lflags-osx": ["-L/usr/local/opt/sqlite3/lib/"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
