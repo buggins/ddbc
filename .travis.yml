@@ -43,7 +43,7 @@ script:
   - cd example
   - dub build --compiler=${DC}
   - ./ddbctest --connection=sqlite:ddbc-test.sqlite
-  - ./ddbctest --connection=mysql:127.0.0.1 --database=ddbctest --user=travis
+  - ./ddbctest --connection=mysql:127.0.0.1 --database=ddbctest --user=root
   - ./ddbctest --connection=pgsql:127.0.0.1 --database=ddbctest --user=postgres
 
 addons:
