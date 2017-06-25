@@ -35,7 +35,7 @@ os:
  - osx
 
 before_script:
-  - mysql -e 'CREATE DATABASE ddbctest;'
+  - mysql -e 'CREATE DATABASE ddbctest;' -u root
   - psql -c 'create database ddbctest;' -U postgres
 
 script:
