@@ -18,7 +18,7 @@ string getURIHost(string uri)
 	auto i=uri.indexOf(":");
 	if ((i==-1)||(i==uri.length))
 		return uri;
-	return uri[i+1..$];
+	return uri[i+1..$].replace("//", "");
 }
 
 short getURIPort(string uri, bool useDefault)
@@ -145,7 +145,7 @@ int main(string[] args)
 				{
 					stderr.writefln(syntaxMessage);
 					stderr.writefln("\n *** Error: must specify connection and database names for mysql " ~
-								"eg --connection=pgsql://localhost:5432 -- database=test");
+								"eg --connection=mysql://localhost -- database=test");
 					stderr.writefln("\n");
 					return 1;
 				}
@@ -171,8 +171,21 @@ int main(string[] args)
 		stmt.close();
 
 	// execute simple queries to create and fill table
-	stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1(id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name varchar(250), comment mediumtext, ts datetime)");
-	stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
+	final switch(par.driver)
+    {
+        case "sqlite":
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1(id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts DATETIME)");
+            stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
+            break;
+        case "pgsql":
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1(id SERIAL PRIMARY KEY, name VARCHAR(250), comment TEXT, ts TIMESTAMP)");
+            stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
+            break;
+        case "mysql": // MySQL has an underscore in 'AUTO_INCREMENT'
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1(id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts DATETIME)");
+            stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
+            break;
+    }
 
 	// reading DB
 	auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");

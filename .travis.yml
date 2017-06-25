@@ -7,17 +7,24 @@ dist: trusty
 # start most recent dmd and ldc first, then older versions. (don't bother with pre-release')
 # For available compilers see: https://semitwist.com/travis-d-compilers
 d:
-  - dmd
   - ldc
-  - ldc-1.1.0
-  - ldc-1.0.0
+  - dmd
+  - dmd-2.074.0
+  - dmd-2.073.2
   - dmd-2.072.2
   - dmd-2.071.2
   - dmd-2.070.2
-  - gdc-6.3.0+2.068.2
+  - ldc-1.2.0 # eq to dmd v2.072.2
+  - ldc-1.1.1 # eq to dmd v2.071.2
+  - ldc-1.0.0 # eq to dmd v2.070.2
+  - gdc
 
 # make sure our Mac build uses latest OS X. See: https://docs.travis-ci.com/user/osx-ci-environment/#OS-X-Version
 osx_image: xcode8
+
+service:
+  - mysql
+  - postgresql
 
 before_install:
  - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew update && brew install libevent sqlite && brew link --force sqlite; fi"
@@ -26,10 +33,18 @@ os:
  - linux
  - osx
 
+before_script:
+  - mysql -e 'CREATE DATABASE ddbctest;'
+  - psql -c 'create database ddbctest;' -U postgres
+
 script:
   - dub build --config=full --compiler=${DC}
   - dub run --config=test --compiler=${DC}
-  - cd example && dub build --compiler=${DC} && ./ddbctest --connection=sqlite:ddbc-test.sqlite
+  - cd example
+  - dub build --compiler=${DC}
+  - ./ddbctest --connection=sqlite:ddbc-test.sqlite
+  - ./ddbctest --connection=mysql:127.0.0.1 --database=ddbctest --user=travis
+  - ./ddbctest --connection=pgsql:127.0.0.1 --database=ddbctest --user=postgres
 
 addons:
   apt:
@@ -43,4 +58,4 @@ addons:
 # GDC versions need to be setup with correct version of gcc
 matrix:
   allow_failures:
-    - d: gdc-6.3.0+2.068.2
+    - d: gdc
