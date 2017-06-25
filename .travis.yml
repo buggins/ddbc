@@ -29,7 +29,6 @@ service:
 before_install:
  - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew update && brew install libevent sqlite && brew link --force sqlite; fi"
  - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew install mariadb && mysql.server start; fi"
- - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew install postgresql && createdb postgres; fi"
 
 os:
  - linux
