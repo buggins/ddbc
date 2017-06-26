@@ -12,7 +12,7 @@
             "name": "full",
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL"],
             "dependencies": {
-                "mysql-native": ">=1.1.0",
+                "mysql-native": "~>1.1.0",
                 "derelict-pq": "~>2.2.0"
             },
             "libs-posix": ["sqlite3"],
@@ -27,7 +27,7 @@
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
             "dependencies": {
-                "mysql-native": "~>0.1.6"
+                "mysql-native": "~>1.1.0"
             }
         },
         {
@@ -66,8 +66,8 @@
             "targetName": "ddbc-tests",
             "targetPath": "test",
             "targetType": "executable",
-            "versions": ["USE_SQLITE", "USE_ODBC"],
-            "libs-posix": ["sqlite3", "odbc"],
+            "versions": ["USE_SQLITE"],
+            "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
             "lflags-osx": ["-L/usr/local/opt/sqlite3/lib/"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
