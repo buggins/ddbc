@@ -1,6 +1,6 @@
 {
     "name": "ddbc",
-    "description": "DB Connector for D language, similar to JDBC (mysql, sqlite, postgresql)",
+    "description": "DB Connector for D language, similar to JDBC (mysql, sqlite, postgresql, odbc)",
     "authors": ["Vadim Lopatin"],
     "homepage": "https://github.com/buggins/ddbc",
     "license": "Boost Software License (BSL 1.0)",
@@ -12,11 +12,12 @@
             "name": "full",
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL"],
             "dependencies": {
-                "mysql-native": ">=0.1.6",
-                "derelict-pq": "~>2.0.2"
+                "mysql-native": "~>1.1.0",
+                "derelict-pq": "~>2.2.0"
             },
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
+            "lflags-osx": ["-L/usr/local/opt/sqlite3/lib/"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll"],
             "copyFiles-windows-x86_64": [ "libs/win64/libpq.dll", "libs/win64/sqlite3.dll"],
             "sourceFiles-windows-x86_64" : [ "libs/win64/sqlite3.lib" ],
@@ -26,7 +27,7 @@
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
             "dependencies": {
-                "mysql-native": ">=0.1.6"
+                "mysql-native": "~>1.1.0"
             }
         },
         {
@@ -34,6 +35,7 @@
             "versions": ["USE_SQLITE"],
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
+            "lflags-osx": ["-L/usr/local/opt/sqlite3/lib/"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
             "copyFiles-windows-x86_64": [ "libs/win64/sqlite3.dll" ],
             "sourceFiles-windows-x86_64" : [ "libs/win64/sqlite3.lib" ],
@@ -45,8 +47,14 @@
             "copyFiles-windows-x86": [ "libs/win32/libpq.dll"],
             "copyFiles-windows-x86_64": [ "libs/win64/libpq.dll"],
             "dependencies": {
-                "derelict-pq": "~>2.0.2"
+                "derelict-pq": "~>2.2.0"
             }
+        },
+        {
+            "name": "ODBC",
+            "versions": ["USE_ODBC"],
+            "libs-posix": ["odbc"],
+            "libs-windows": ["odbc"],
         },
         {
             "name": "API"
@@ -61,6 +69,7 @@
             "versions": ["USE_SQLITE"],
             "libs-posix": ["sqlite3"],
             "libs-windows": ["sqlite3"],
+            "lflags-osx": ["-L/usr/local/opt/sqlite3/lib/"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
             "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib" ]
         }
