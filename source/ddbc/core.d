@@ -304,6 +304,9 @@ interface ResultSet : DataSetReader {
 	float getFloat(int columnIndex);
 	string getString(int columnIndex);
     Variant getVariant(int columnIndex);
+	DateTime getDateTime(int columnIndex);
+	Date getDate(int columnIndex);
+	TimeOfDay getTime(int columnIndex);
 
     bool isNull(int columnIndex);
 	bool wasNull();
@@ -324,9 +327,9 @@ interface ResultSet : DataSetReader {
 	double getDouble(string columnName);
 	float getFloat(string columnName);
     string getString(string columnName);
-	DateTime getDateTime(int columnIndex);
-	Date getDate(int columnIndex);
-	TimeOfDay getTime(int columnIndex);
+	DateTime getDateTime(string columnName);
+	Date getDate(string columnName);
+	TimeOfDay getTime(string columnName);
 	Variant getVariant(string columnName);
 
     /// to iterate through all rows in result set

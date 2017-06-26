@@ -370,6 +370,16 @@ public:
 	override std.datetime.TimeOfDay getTime(int columnIndex) {
 		throw new SQLException("Method not implemented");
 	}
+
+	override std.datetime.DateTime getDateTime(string columnName) {
+		return getDateTime(findColumn(columnName));
+	}
+	override std.datetime.Date getDate(string columnName) {
+		return getDate(findColumn(columnName));
+	}
+	override std.datetime.TimeOfDay getTime(string columnName) {
+		return getTime(findColumn(columnName));
+	}
 }
 
 /// Column metadata object to be used in driver implementations
