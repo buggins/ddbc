@@ -13,10 +13,8 @@ d:
   - dmd-2.073.2
   - dmd-2.072.2
   - dmd-2.071.2
-  - dmd-2.070.2
   - ldc-1.2.0 # eq to dmd v2.072.2
   - ldc-1.1.1 # eq to dmd v2.071.2
-  - ldc-1.0.0 # eq to dmd v2.070.2
   - gdc
 
 # make sure our Mac build uses latest OS X. See: https://docs.travis-ci.com/user/osx-ci-environment/#OS-X-Version
