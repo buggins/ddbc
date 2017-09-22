@@ -3,22 +3,21 @@ language: d
 # See: https://docs.travis-ci.com/user/trusty-ci-environment/#Routing-to-Trusty
 sudo: required
 dist: trusty
+group: edge
 
 # start most recent dmd and ldc first, then older versions. (don't bother with pre-release')
 # For available compilers see: https://semitwist.com/travis-d-compilers
 d:
   - ldc
-  - dmd
-  - dmd-2.074.0
+  - dmd-2.075.1
+  - dmd-2.074.1
   - dmd-2.073.2
-  - dmd-2.072.2
-  - dmd-2.071.2
-  - ldc-1.2.0 # eq to dmd v2.072.2
-  - ldc-1.1.1 # eq to dmd v2.071.2
+  - ldc-1.4.0 # eq to dmd v2.074.1
+  - ldc-1.3.0 # eq to dmd v2.073.2
   - gdc
 
-# make sure our Mac build uses latest OS X. See: https://docs.travis-ci.com/user/osx-ci-environment/#OS-X-Version
-osx_image: xcode8
+# make sure our Mac build uses latest OS X. See: https://docs.travis-ci.com/user/reference/osx/#OS-X-Version
+osx_image: xcode9
 
 before_install:
  - "if [ ${TRAVIS_OS_NAME} = 'osx' ]; then brew update && brew install libevent sqlite && brew link --force sqlite; fi"
