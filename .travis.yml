@@ -47,6 +47,15 @@ addons:
 # The integration tests can only run in Linux container
 matrix:
   include:
+    - env: NAME="MySQL Integration Test with DUB upgrade"
+      d: dmd
+      os: linux
+      service: mysql
+      before_script: mysql -e 'CREATE DATABASE ddbctest;'
+      script:
+        - dub upgrade
+        - dub build --config=full
+        - cd example && dub build && ./ddbctest --connection=mysql:127.0.0.1 --database=ddbctest --user=root
     - env: NAME="MySQL Integration Test"
       d: dmd
       os: linux

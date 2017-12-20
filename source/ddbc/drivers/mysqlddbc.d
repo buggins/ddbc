@@ -320,8 +320,7 @@ public:
 class MySQLStatement : Statement {
 private:
     MySQLConnection conn;
-    Command * cmd;
-    mysql.connection.ResultSet rs;
+    mysql.connection.ResultSet rs; // ResultSet is deprecated - should use Row[] instead
 	MySQLResultSet resultSet;
 
     bool closed;
@@ -428,14 +427,6 @@ public:
         }
     }
     void closeResultSet() {
-        if (cmd == null) {
-            return;
-        }
-        Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-        p.release();
-
-        cmd.destroy();
-        cmd = null;
 		if (resultSet !is null) {
 			resultSet.onStatementClosed();
 			resultSet = null;
@@ -444,16 +435,19 @@ public:
 }
 
 class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
-    string query;
-    int paramCount;
-    ResultSetMetaData metadata;
-    ParameterMetaData paramMetadata;
+
+    private string query;
+    private Prepared statement;
+    private int paramCount;
+    private ResultSetMetaData metadata;
+    private ParameterMetaData paramMetadata;
+
     this(MySQLConnection conn, string query) {
         super(conn);
         this.query = query;
         try {
-            auto p = prepare(conn.getConnection(), query);
-            paramCount = p.numArgs;
+            this.statement = prepare(conn.getConnection(), query);
+            this.paramCount = this.statement.numArgs;
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -464,8 +458,7 @@ class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
     }
     Variant getParam(int index) {
         checkIndex(index);
-        Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-        return p.getArg( cast(ushort)(index - 1) );
+        return this.statement.getArg( cast(ushort)(index - 1) );
     }
 public:
 
@@ -476,8 +469,7 @@ public:
         scope(exit) unlock();
         try {
             if (metadata is null) {
-                Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-                metadata = createMetadata(p.preparedFieldDescriptions);
+                metadata = createMetadata(this.statement.preparedFieldDescriptions);
             }
             return metadata;
         } catch (Throwable e) {
@@ -492,8 +484,7 @@ public:
         scope(exit) unlock();
         try {
             if (paramMetadata is null) {
-                Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-                paramMetadata = createMetadata(p.preparedParamDescriptions);
+                paramMetadata = createMetadata(this.statement.preparedParamDescriptions);
             }
             return paramMetadata;
         } catch (Throwable e) {
@@ -507,8 +498,7 @@ public:
         scope(exit) unlock();
         try {
             ulong rowsAffected = 0;
-            Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-            rowsAffected = p.exec();
+            rowsAffected = this.statement.exec();
             return cast(int)rowsAffected;
         } catch (Throwable e) {
             throw new SQLException(e);
@@ -521,8 +511,7 @@ public:
 		scope(exit) unlock();
         try {
     		ulong rowsAffected = 0;
-    		Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-    		rowsAffected = p.exec();
+    		rowsAffected = this.statement.exec();
     		insertId = conn.getConnection().lastInsertID;
     		return cast(int)rowsAffected;
         } catch (Throwable e) {
@@ -535,8 +524,7 @@ public:
         lock();
         scope(exit) unlock();
         try {
-            Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-            rs = p.querySet();
+            rs = this.statement.querySet();
             resultSet = new MySQLResultSet(this, rs, getMetaData());
             return resultSet;
         } catch (Throwable e) {
@@ -562,8 +550,7 @@ public:
 		scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-    		Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-    		p.setArg(parameterIndex-1, x);
+    		this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -574,8 +561,7 @@ public:
 		scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-    		Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-    		p.setArg(parameterIndex-1, x);
+    		this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -586,8 +572,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-            p.setArg(parameterIndex-1, x);
+            this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -598,8 +583,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-            p.setArg(parameterIndex-1, x);
+            this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -610,8 +594,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-            p.setArg(parameterIndex-1, x);
+            this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -622,8 +605,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-            p.setArg(parameterIndex-1, x);
+            this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -634,8 +616,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-            p.setArg(parameterIndex-1, x);
+            this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -646,8 +627,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-            p.setArg(parameterIndex-1, x);
+            this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -658,8 +638,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-            p.setArg(parameterIndex-1, x);
+            this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -670,8 +649,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-            p.setArg(parameterIndex-1, x);
+            this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -682,8 +660,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-            p.setArg(parameterIndex-1, x);
+            this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -697,8 +674,7 @@ public:
             if (x.ptr is null) {
                 setNull(parameterIndex);
             } else {
-                Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-                p.setArg(parameterIndex-1, x);
+                this.statement.setArg(parameterIndex-1, x);
             }
         } catch (Throwable e) {
             throw new SQLException(e);
@@ -713,8 +689,7 @@ public:
             if (x.ptr is null) {
                 setNull(parameterIndex);
             } else {
-                Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-                p.setArg(parameterIndex-1, x);
+                this.statement.setArg(parameterIndex-1, x);
             }
         } catch (Throwable e) {
             throw new SQLException(e);
@@ -729,8 +704,7 @@ public:
             if (x.ptr is null) {
                 setNull(parameterIndex);
             } else {
-                Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-                p.setArg(parameterIndex-1, x);
+                this.statement.setArg(parameterIndex-1, x);
             }
         } catch (Throwable e) {
             throw new SQLException(e);
@@ -742,8 +716,7 @@ public:
 		scope(exit) unlock();
 		checkIndex(parameterIndex);
         try {
-		    Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-		    p.setArg(parameterIndex-1, x);
+		    this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -754,8 +727,7 @@ public:
 		scope(exit) unlock();
 		checkIndex(parameterIndex);
         try {
-    		Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-    		p.setArg(parameterIndex-1, x);
+    		this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -766,8 +738,7 @@ public:
 		scope(exit) unlock();
 		checkIndex(parameterIndex);
         try {
-		    Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-		    p.setArg(parameterIndex-1, x);
+		    this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -781,8 +752,7 @@ public:
             if (x == null) {
                 setNull(parameterIndex);
             } else {
-                Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-                p.setArg(parameterIndex-1, x);
+                this.statement.setArg(parameterIndex-1, x);
             }
         } catch (Throwable e) {
             throw new SQLException(e);
@@ -794,8 +764,7 @@ public:
         scope(exit) unlock();
         checkIndex(parameterIndex);
         try {
-            Prepared p = prepare(conn.getConnection(), to!string(cmd.sql));
-            p.setNullArg(parameterIndex-1);
+            this.statement.setNullArg(parameterIndex-1);
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -809,6 +778,9 @@ public:
         } catch (Throwable e) {
             throw new SQLException(e);
         }
+    }
+    override void closeResultSet() {
+        this.statement.release();
     }
 }
 
