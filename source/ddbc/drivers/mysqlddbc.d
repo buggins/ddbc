@@ -37,11 +37,13 @@ import ddbc.core;
 
 version(USE_MYSQL) {
 
-import mysql.connection;
-import mysql.commands;// : Command;
+import std.array;
+import mysql.connection : prepare;
+import mysql.commands : query, exec;
 import mysql.prepared;
 import mysql.protocol.constants;
 import mysql.protocol.packets : FieldDescription, ParamDescription;
+import mysql.result : Row, ResultRange;
 
 version(unittest) {
     /*
@@ -320,7 +322,7 @@ public:
 class MySQLStatement : Statement {
 private:
     MySQLConnection conn;
-    mysql.connection.ResultSet rs; // ResultSet is deprecated - should use Row[] instead
+    ResultRange results;
 	MySQLResultSet resultSet;
 
     bool closed;
@@ -378,16 +380,16 @@ public:
         checkClosed();
         return conn;
     }
-    override ddbc.core.ResultSet executeQuery(string query) {
+    override ddbc.core.ResultSet executeQuery(string queryString) {
         checkClosed();
         lock();
         scope(exit) unlock();
 		try {
-	        rs = querySet(conn.getConnection(), query);
-    	    resultSet = new MySQLResultSet(this, rs, createMetadata(conn.getConnection().resultFieldDescriptions));
+	        results = query(conn.getConnection(), queryString);
+    	    resultSet = new MySQLResultSet(this, results, createMetadata(conn.getConnection().resultFieldDescriptions));
         	return resultSet;
 		} catch (Throwable e) {
-            throw new SQLException(e.msg ~ " - while execution of query " ~ query);
+            throw new SQLException(e.msg ~ " - while execution of query " ~ queryString);
         }
 	}
     override int executeUpdate(string query) {
@@ -436,17 +438,17 @@ public:
 
 class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
 
-    private string query;
+    private string queryString;
     private Prepared statement;
     private int paramCount;
     private ResultSetMetaData metadata;
     private ParameterMetaData paramMetadata;
 
-    this(MySQLConnection conn, string query) {
+    this(MySQLConnection conn, string queryString) {
         super(conn);
-        this.query = query;
+        this.queryString = queryString;
         try {
-            this.statement = prepare(conn.getConnection(), query);
+            this.statement = prepare(conn.getConnection(), queryString);
             this.paramCount = this.statement.numArgs;
         } catch (Throwable e) {
             throw new SQLException(e);
@@ -498,7 +500,7 @@ public:
         scope(exit) unlock();
         try {
             ulong rowsAffected = 0;
-            rowsAffected = this.statement.exec();
+            rowsAffected = conn.getConnection().exec(statement);
             return cast(int)rowsAffected;
         } catch (Throwable e) {
             throw new SQLException(e);
@@ -511,7 +513,7 @@ public:
 		scope(exit) unlock();
         try {
     		ulong rowsAffected = 0;
-    		rowsAffected = this.statement.exec();
+    		rowsAffected = conn.getConnection().exec(statement);
     		insertId = conn.getConnection().lastInsertID;
     		return cast(int)rowsAffected;
         } catch (Throwable e) {
@@ -524,8 +526,8 @@ public:
         lock();
         scope(exit) unlock();
         try {
-            rs = this.statement.querySet();
-            resultSet = new MySQLResultSet(this, rs, getMetaData());
+            results = query(conn.getConnection(), statement);
+            resultSet = new MySQLResultSet(this, results, getMetaData());
             return resultSet;
         } catch (Throwable e) {
             throw new SQLException(e);
@@ -779,18 +781,15 @@ public:
             throw new SQLException(e);
         }
     }
-    override void closeResultSet() {
-        this.statement.release();
-    }
 }
 
 class MySQLResultSet : ResultSetImpl {
     private MySQLStatement stmt;
-    private mysql.connection.ResultSet rs;
+    private ResultRange results;
     ResultSetMetaData metadata;
     private bool closed;
     private int currentRowIndex;
-    private int rowCount;
+    private ulong rowCount;
     private int[string] columnMap;
     private bool lastIsNull;
     private int columnCount;
@@ -799,6 +798,7 @@ class MySQLResultSet : ResultSetImpl {
 		checkClosed();
         enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
         enforceEx!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
+        Row[] rs = results.array;
         lastIsNull = rs[currentRowIndex].isNull(columnIndex - 1);
 		Variant res;
 		if (!lastIsNull)
@@ -821,17 +821,18 @@ public:
         stmt.unlock();
     }
 
-    this(MySQLStatement stmt, mysql.connection.ResultSet resultSet, ResultSetMetaData metadata) {
+    this(MySQLStatement stmt, ResultRange results, ResultSetMetaData metadata) {
         this.stmt = stmt;
-        this.rs = resultSet;
+        this.results = results;
         this.metadata = metadata;
         try {
             closed = false;
-            rowCount = cast(int)rs.length;
+            //rowCount = cast(int)results.array.length;
             currentRowIndex = -1;
-			foreach(key, val; rs.colNameIndicies)
-				columnMap[key] = cast(int)val;
-    		columnCount = cast(int)rs.colNames.length;
+			foreach(key, val; results.colNameIndicies) {
+			    columnMap[key] = cast(int)val;
+			}
+    		columnCount = cast(int)results.colNames.length;
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -1139,7 +1140,7 @@ public:
         scope(exit) unlock();
         enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
         enforceEx!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
-        return rs[currentRowIndex].isNull(columnIndex - 1);
+        return results.array[currentRowIndex].isNull(columnIndex - 1);
     }
 
     //Retrieves the Statement object that produced this ResultSet object.
@@ -1161,7 +1162,7 @@ public:
     }
 
     //Retrieves the fetch size for this ResultSet object.
-    override int getFetchSize() {
+    override ulong getFetchSize() {
         checkClosed();
         lock();
         scope(exit) unlock();

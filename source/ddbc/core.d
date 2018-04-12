@@ -286,7 +286,7 @@ interface ResultSet : DataSetReader {
 	//Retrieves the current row number
 	int getRow();
 	//Retrieves the fetch size for this ResultSet object.
-	int getFetchSize();
+	ulong getFetchSize();
 
 	// from DataSetReader
 	bool getBoolean(int columnIndex);

@@ -909,7 +909,7 @@ version(USE_SQLITE) {
         }
         
         //Retrieves the fetch size for this ResultSet object.
-        override int getFetchSize() {
+        override ulong getFetchSize() {
             checkClosed();
             lock();
             scope(exit) unlock();

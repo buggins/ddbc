@@ -5,7 +5,8 @@
     "homepage": "https://github.com/buggins/ddbc",
     "license": "Boost Software License (BSL 1.0)",
     "dependencies": {
-        "ddbc": {"version": "~master", "path": "../"}
+        "ddbc": {"version": "~master", "path": "../"},
+        "vibe-d": "~>0.8.3"
     },
     "targetType": "executable",
     "libs-posix": ["sqlite3", "pq"],
