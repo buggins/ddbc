@@ -57,6 +57,7 @@ version(USE_PGSQL) {
     const int CIDOID = 29;
     const int OIDVECTOROID = 30;
     const int JSONOID = 114;
+    const int JSONBOID = 3802;
     const int XMLOID = 142;
     const int PGNODETREEOID = 194;
     const int POINTOID = 600;
@@ -556,6 +557,12 @@ version(USE_PGSQL) {
                                     v[col] = parseDateoid(s);
                                     break;
                                 case UUIDOID:
+                                    v[col] = s;
+                                    break;
+                                case JSONOID:
+                                    v[col] = s;
+                                    break;
+                                case JSONBOID:
                                     v[col] = s;
                                     break;
                                 default:
