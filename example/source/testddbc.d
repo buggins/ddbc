@@ -187,9 +187,20 @@ int main(string[] args)
             break;
     }
 
-	// reading DB
+	writeln("testing normal SQL statements");
 	auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
 	while (rs.next())
-	writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ rs.getString(3)); // rs.getString(3) was wrapped with strNull - not sure what this did
+	    writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ rs.getString(3)); // rs.getString(3) was wrapped with strNull - not sure what this did
+
+
+    writeln("testing prepared statements");
+	PreparedStatement ps2 = conn.prepareStatement("SELECT id, name name_alias, comment, ts FROM ddbct1 WHERE id >= ?");
+    scope(exit) ps2.close();
+    ps2.setUlong(1, 1);
+    auto prs = ps2.executeQuery();
+    while (prs.next()) {
+        writeln(to!string(prs.getLong(1)) ~ "\t" ~ prs.getString(2) ~ "\t" ~ prs.getString(3));
+    }
+
 	return 0;
 }
