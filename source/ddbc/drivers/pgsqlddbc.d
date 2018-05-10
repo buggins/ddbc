@@ -1351,7 +1351,7 @@ version(USE_PGSQL) {
     	}
     	
     	//Retrieves the fetch size for this ResultSet object.
-    	override int getFetchSize() {
+    	override ulong getFetchSize() {
     		checkClosed();
     		lock();
     		scope(exit) unlock();

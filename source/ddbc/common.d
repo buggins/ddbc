@@ -358,7 +358,7 @@ public:
 		throw new SQLException("Method not implemented");
 	}
 	//Retrieves the fetch size for this ResultSet object.
-	override int getFetchSize() {
+	override ulong getFetchSize() {
 		throw new SQLException("Method not implemented");
 	}
 	override std.datetime.DateTime getDateTime(int columnIndex) {
