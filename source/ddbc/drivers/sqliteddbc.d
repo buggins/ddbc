@@ -640,7 +640,9 @@ version(USE_SQLITE) {
             this.rs = rs;
             this.metadata = metadata;
             closed = false;
-            this.columnCount = sqlite3_data_count(rs); //metadata.getColumnCount();
+            // The column count cannot use sqlite3_data_count, because sqlite3_step has not yet been used with this result set.
+            // Because there are not results ready to return, sqlite3_data_count will return 0 causing no columns to be mapped.
+            this.columnCount = metadata.getColumnCount();
             for (int i=0; i<columnCount; i++) {
                 columnMap[metadata.getColumnName(i + 1)] = i;
             }
