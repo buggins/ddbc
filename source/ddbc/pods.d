@@ -48,7 +48,6 @@ foreach(e; stmt.select!User.where("id < 6").orderBy("name desc")) {
 */
 module ddbc.pods;
 
-import std.stdio;
 import std.algorithm;
 import std.traits;
 import std.typecons;
@@ -696,8 +695,9 @@ string[] getColumnNamesForType(T)()  if (__traits(isPOD, T)) {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
             // skip non-public members
             static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
-                alias typeof(__traits(getMember, T, m)) ti;
-                res ~= m;
+                static if (isSupportedSimpleType!(T, m)) {
+                    res ~= m;
+                }
             }
         }
     }
@@ -714,7 +714,9 @@ string getAllColumnsReadCode(T)() {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
             // skip non-public members
             static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
-                res ~= getColumnReadCode!(T, m);
+                static if (isSupportedSimpleType!(T, m)) {
+                    res ~= getColumnReadCode!(T, m);
+                }
             }
         }
     }
@@ -824,9 +826,19 @@ T get(T)(Statement stmt, string filter) {
   T entity;
   static immutable getSQL = generateSelectForGetSQLWithFilter!T();
   ResultSet r;
-  writeln(getSQL ~ filter);
   r = stmt.executeQuery(getSQL ~ filter);
   r.next();
+  mixin(getAllColumnsReadCode!T());
+  return entity;
+}
+
+/**
+ * Extract a row from the result set as the specified type.
+ * Requires that next has already been checked.
+ * Can be used for example to extract rows from executing a PreparedStatement.
+ */
+T get(T)(ResultSet r) {
+  T entity;
   mixin(getAllColumnsReadCode!T());
   return entity;
 }
