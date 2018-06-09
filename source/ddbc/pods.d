@@ -48,7 +48,6 @@ foreach(e; stmt.select!User.where("id < 6").orderBy("name desc")) {
 */
 module ddbc.pods;
 
-import std.stdio;
 import std.algorithm;
 import std.traits;
 import std.typecons;
@@ -696,8 +695,9 @@ string[] getColumnNamesForType(T)()  if (__traits(isPOD, T)) {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
             // skip non-public members
             static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
-                alias typeof(__traits(getMember, T, m)) ti;
-                res ~= m;
+                static if (isSupportedSimpleType!(T, m)) {
+                    res ~= m;
+                }
             }
         }
     }
@@ -714,7 +714,9 @@ string getAllColumnsReadCode(T)() {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
             // skip non-public members
             static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
-                res ~= getColumnReadCode!(T, m);
+                static if (isSupportedSimpleType!(T, m)) {
+                    res ~= getColumnReadCode!(T, m);
+                }
             }
         }
     }
@@ -824,11 +826,114 @@ T get(T)(Statement stmt, string filter) {
   T entity;
   static immutable getSQL = generateSelectForGetSQLWithFilter!T();
   ResultSet r;
-  writeln(getSQL ~ filter);
   r = stmt.executeQuery(getSQL ~ filter);
   r.next();
   mixin(getAllColumnsReadCode!T());
   return entity;
+}
+
+string getColumnTypeDatasetReadCodeByName(T, string m)() {
+    PropertyMemberType pmt = getPropertyMemberType!(T,m)();
+    final switch(pmt) with (PropertyMemberType) {
+        case BOOL_TYPE:
+            return `r.getBoolean("` ~ m ~ `")`;
+        case BYTE_TYPE:
+            return `r.getByte("` ~ m ~ `")`;
+        case SHORT_TYPE:
+            return `r.getShort("` ~ m ~ `")`;
+        case INT_TYPE:
+            return `r.getInt("` ~ m ~ `")`;
+        case LONG_TYPE:
+            return `r.getLong("` ~ m ~ `")`;
+        case UBYTE_TYPE:
+            return `r.getUbyte("` ~ m ~ `")`;
+        case USHORT_TYPE:
+            return `r.getUshort("` ~ m ~ `")`;
+        case UINT_TYPE:
+            return `r.getUint("` ~ m ~ `")`;
+        case ULONG_TYPE:
+            return `r.getUlong("` ~ m ~ `")`;
+        case FLOAT_TYPE:
+            return `r.getFloat("` ~ m ~ `")`;
+        case DOUBLE_TYPE:
+            return `r.getDouble("` ~ m ~ `")`;
+        case STRING_TYPE:
+            return `r.getString("` ~ m ~ `")`;
+        case DATE_TYPE:
+            return `r.getDate("` ~ m ~ `")`;
+        case TIME_TYPE:
+            return `r.getTime("` ~ m ~ `")`;
+        case DATETIME_TYPE:
+            return `r.getDateTime("` ~ m ~ `")`;
+        case BYTE_ARRAY_TYPE:
+            return `r.getBytes("` ~ m ~ `")`;
+        case UBYTE_ARRAY_TYPE:
+            return `r.getUbytes("` ~ m ~ `")`;
+        case NULLABLE_BYTE_TYPE:
+            return `Nullable!byte(r.getByte("` ~ m ~ `"))`;
+        case NULLABLE_SHORT_TYPE:
+            return `Nullable!short(r.getShort("` ~ m ~ `"))`;
+        case NULLABLE_INT_TYPE:
+            return `Nullable!int(r.getInt("` ~ m ~ `"))`;
+        case NULLABLE_LONG_TYPE:
+            return `Nullable!long(r.getLong("` ~ m ~ `"))`;
+        case NULLABLE_UBYTE_TYPE:
+            return `Nullable!ubyte(r.getUbyte("` ~ m ~ `"))`;
+        case NULLABLE_USHORT_TYPE:
+            return `Nullable!ushort(r.getUshort("` ~ m ~ `"))`;
+        case NULLABLE_UINT_TYPE:
+            return `Nullable!uint(r.getUint("` ~ m ~ `"))`;
+        case NULLABLE_ULONG_TYPE:
+            return `Nullable!ulong(r.getUlong("` ~ m ~ `"))`;
+        case NULLABLE_FLOAT_TYPE:
+            return `Nullable!float(r.getFloat("` ~ m ~ `"))`;
+        case NULLABLE_DOUBLE_TYPE:
+            return `Nullable!double(r.getDouble("` ~ m ~ `"))`;
+        case NULLABLE_STRING_TYPE:
+            return `r.getString("` ~ m ~ `")`;
+        case NULLABLE_DATE_TYPE:
+            return `Nullable!Date(r.getDate("` ~ m ~ `"))`;
+        case NULLABLE_TIME_TYPE:
+            return `Nullable!Time(r.getTime("` ~ m ~ `"))`;
+        case NULLABLE_DATETIME_TYPE:
+            return `Nullable!DateTime(r.getDateTime("` ~ m ~ `"))`;
+    }
+}
+
+string getPropertyWriteCodeByName(T, string m)() {
+    immutable string nullValueCode = ColumnTypeSetNullCode[getPropertyMemberType!(T,m)()];
+    immutable string propertyWriter = nullValueCode ~ "entity." ~ m ~ " = " ~ getColumnTypeDatasetReadCodeByName!(T, m)() ~ ";\n";
+    return propertyWriter ~ "if (r.wasNull) entity." ~ m ~ " = nv;";
+}
+
+string getColumnReadCodeByName(T, string m)() {
+    return "{" ~ getPropertyWriteCodeByName!(T,m)() ~ "}\n";
+}
+
+string getAllColumnsReadCodeByName(T)() {
+    string res;
+    foreach(m; __traits(allMembers, T)) {
+        static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+            // skip non-public members
+            static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
+                static if (isSupportedSimpleType!(T, m)) {
+                    res ~= getColumnReadCodeByName!(T, m);
+                }
+            }
+        }
+    }
+    return res;
+}
+
+/**
+ * Extract a row from the result set as the specified type.
+ * Requires that next has already been checked.
+ * Can be used for example to extract rows from executing a PreparedStatement.
+ */
+T get(T)(ResultSet r) {
+    T entity;
+    mixin(getAllColumnsReadCodeByName!T());
+    return entity;
 }
 
 /// range for select query
