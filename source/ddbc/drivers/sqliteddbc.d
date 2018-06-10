@@ -67,6 +67,63 @@ version(USE_SQLITE) {
         }
     }
 
+    /// Converts from a selection of the standard SQLite time formats into a DateTime object.
+    private DateTime fromResultSet(S)(in S sqliteString) @safe pure
+        if (isSomeString!S) {
+
+        try {
+            if (sqliteString.length == 5) {
+                if (sqliteString[2] == ':') {
+                    // HH:MM
+                    int hours = cast(int) to!uint(sqliteString[0..2]);
+                    int minutes = cast(int) to!uint(sqliteString[3..5]);
+                    return DateTime(0, 1, 1, hours, minutes);
+                }
+            } else if (sqliteString.length == 8) {
+                if (sqliteString[2] == ':' && sqliteString[5] == ':') {
+                    // HH:MM:SS
+                    auto time = TimeOfDay.fromISOExtString(sqliteString);
+                    return DateTime(Date(), time);
+                }
+            } else if (sqliteString.length == 10) {
+                if (sqliteString[4] == '-' && sqliteString[7] == '-') {
+                    // YYYY-MM-DD
+                    auto date = Date.fromISOExtString(sqliteString);
+                    return DateTime(date, TimeOfDay());
+                }
+            } else if (sqliteString.length == 12) {
+                if (sqliteString[2] == ':' && sqliteString[5] == ':') {
+                    // HH:MM:SS.SSS
+                    auto time = TimeOfDay.fromISOExtString(sqliteString[0..8]);
+                    int hours = cast(int) to!uint(sqliteString[0 .. 2]);
+                    return DateTime(Date(), time);
+                }
+            } else if (sqliteString.length == 16) {
+                 // YYYY-MM-DD HH:MM
+                 // YYYY-MM-DDTHH:MM
+
+                auto date = Date.fromISOExtString(sqliteString[0..10]);
+
+                int hours = cast(int) to!uint(sqliteString[11 .. 13]);
+                int minutes = cast(int) to!uint(sqliteString[14 .. 16]);
+                auto time = TimeOfDay(hours, minutes);
+                return DateTime(date, time);
+            } else if (sqliteString.length == 19 || sqliteString.length == 23) {
+                 // YYYY-MM-DD HH:MM:SS
+                 // YYYY-MM-DD HH:MM:SS.SSS
+                 // YYYY-MM-DDTHH:MM:SS
+                 // YYYY-MM-DDTHH:MM:SS.SSS
+
+                auto date = Date.fromISOExtString(sqliteString[0..10]);
+                auto time = TimeOfDay.fromISOExtString(sqliteString[11..19]);
+                return DateTime(date, time);
+            }
+        } catch (ConvException) {
+            // Let the exception fall to the throw statement below
+        }
+        throw new DateTimeException(format("Unknown SQLite date string: %s", sqliteString));
+    }
+
     class SQLITEConnection : ddbc.core.Connection {
     private:
         string filename;
@@ -824,7 +881,7 @@ version(USE_SQLITE) {
             if (s is null)
                 return dt;
             try {
-                return DateTime.fromISOString(s);
+                return fromResultSet(s);
             } catch (Throwable e) {
                 throw new SQLException("Cannot convert string to DateTime - " ~ s);
             }
@@ -835,7 +892,7 @@ version(USE_SQLITE) {
             if (s is null)
                 return dt;
             try {
-                return Date.fromISOString(s);
+                return fromResultSet(s).date;
             } catch (Throwable e) {
                 throw new SQLException("Cannot convert string to DateTime - " ~ s);
             }
@@ -846,7 +903,7 @@ version(USE_SQLITE) {
             if (s is null)
                 return dt;
             try {
-                return TimeOfDay.fromISOString(s);
+                return fromResultSet(s).timeOfDay;
             } catch (Throwable e) {
                 throw new SQLException("Cannot convert string to DateTime - " ~ s);
             }
