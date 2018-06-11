@@ -72,51 +72,60 @@ version(USE_SQLITE) {
         if (isSomeString!S) {
 
         try {
-            if (sqliteString.length == 5) {
-                if (sqliteString[2] == ':') {
-                    // HH:MM
-                    int hours = cast(int) to!uint(sqliteString[0..2]);
-                    int minutes = cast(int) to!uint(sqliteString[3..5]);
-                    return DateTime(0, 1, 1, hours, minutes);
-                }
-            } else if (sqliteString.length == 8) {
-                if (sqliteString[2] == ':' && sqliteString[5] == ':') {
-                    // HH:MM:SS
-                    auto time = TimeOfDay.fromISOExtString(sqliteString);
-                    return DateTime(Date(), time);
-                }
-            } else if (sqliteString.length == 10) {
-                if (sqliteString[4] == '-' && sqliteString[7] == '-') {
-                    // YYYY-MM-DD
-                    auto date = Date.fromISOExtString(sqliteString);
-                    return DateTime(date, TimeOfDay());
-                }
-            } else if (sqliteString.length == 12) {
-                if (sqliteString[2] == ':' && sqliteString[5] == ':') {
-                    // HH:MM:SS.SSS
-                    auto time = TimeOfDay.fromISOExtString(sqliteString[0..8]);
-                    int hours = cast(int) to!uint(sqliteString[0 .. 2]);
-                    return DateTime(Date(), time);
-                }
-            } else if (sqliteString.length == 16) {
-                 // YYYY-MM-DD HH:MM
-                 // YYYY-MM-DDTHH:MM
+            switch (sqliteString.length) {
+                case 5:
+                    if (sqliteString[2] == ':') {
+                        // HH:MM
+                        int hours = cast(int) to!uint(sqliteString[0..2]);
+                        int minutes = cast(int) to!uint(sqliteString[3..5]);
+                        return DateTime(0, 1, 1, hours, minutes);
+                    }
+                    break;
+                case 8:
+                    if (sqliteString[2] == ':' && sqliteString[5] == ':') {
+                        // HH:MM:SS
+                        auto time = TimeOfDay.fromISOExtString(sqliteString);
+                        return DateTime(Date(), time);
+                    }
+                    break;
+                case 10:
+                    if (sqliteString[4] == '-' && sqliteString[7] == '-') {
+                        // YYYY-MM-DD
+                        auto date = Date.fromISOExtString(sqliteString);
+                        return DateTime(date, TimeOfDay());
+                    }
+                    break;
+                case 12:
+                    if (sqliteString[2] == ':' && sqliteString[5] == ':') {
+                        // HH:MM:SS.SSS
+                        auto time = TimeOfDay.fromISOExtString(sqliteString[0..8]);
+                        int hours = cast(int) to!uint(sqliteString[0 .. 2]);
+                        return DateTime(Date(), time);
+                    }
+                    break;
+                case 16:
+                     // YYYY-MM-DD HH:MM
+                     // YYYY-MM-DDTHH:MM
 
-                auto date = Date.fromISOExtString(sqliteString[0..10]);
+                    auto date = Date.fromISOExtString(sqliteString[0..10]);
 
-                int hours = cast(int) to!uint(sqliteString[11 .. 13]);
-                int minutes = cast(int) to!uint(sqliteString[14 .. 16]);
-                auto time = TimeOfDay(hours, minutes);
-                return DateTime(date, time);
-            } else if (sqliteString.length == 19 || sqliteString.length == 23) {
-                 // YYYY-MM-DD HH:MM:SS
-                 // YYYY-MM-DD HH:MM:SS.SSS
-                 // YYYY-MM-DDTHH:MM:SS
-                 // YYYY-MM-DDTHH:MM:SS.SSS
+                    int hours = cast(int) to!uint(sqliteString[11 .. 13]);
+                    int minutes = cast(int) to!uint(sqliteString[14 .. 16]);
+                    auto time = TimeOfDay(hours, minutes);
+                    return DateTime(date, time);
+                case 19:
+                case 23:
+                     // YYYY-MM-DD HH:MM:SS
+                     // YYYY-MM-DD HH:MM:SS.SSS
+                     // YYYY-MM-DDTHH:MM:SS
+                     // YYYY-MM-DDTHH:MM:SS.SSS
 
-                auto date = Date.fromISOExtString(sqliteString[0..10]);
-                auto time = TimeOfDay.fromISOExtString(sqliteString[11..19]);
-                return DateTime(date, time);
+                    auto date = Date.fromISOExtString(sqliteString[0..10]);
+                    auto time = TimeOfDay.fromISOExtString(sqliteString[11..19]);
+                    return DateTime(date, time);
+                default:
+                    // Fall through to the throw statement below
+                    break;
             }
         } catch (ConvException) {
             // Let the exception fall to the throw statement below
