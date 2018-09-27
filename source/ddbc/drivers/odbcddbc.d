@@ -377,7 +377,9 @@ version (USE_ODBC)
 
             string[] connectionProps;
 
-            this.params["server"] = url[7 .. $].split('/').join('\\');
+            auto server = url[7 .. $].split('/').join('\\');
+            if (server.length)
+                    this.params["server"] = server;
             void addToConnectionString(string key, string targetKey)
             {
                 if (key in this.params)
@@ -389,6 +391,7 @@ version (USE_ODBC)
             if ("database" in this.params)
                 dbName = this.params["database"];
 
+            addToConnectionString("dsn", "DSN");
             addToConnectionString("driver", "Driver");
             addToConnectionString("server", "Server");
             addToConnectionString("user", "Uid");
