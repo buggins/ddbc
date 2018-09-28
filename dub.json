@@ -54,7 +54,7 @@
             "name": "ODBC",
             "versions": ["USE_ODBC"],
             "libs-posix": ["odbc"],
-            "libs-windows": ["odbc"],
+            "libs-windows": ["odbc32"]
         },
         {
             "name": "API"

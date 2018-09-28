@@ -7,7 +7,7 @@ DDBC
 
 DDBC is DB Connector for D language (similar to JDBC)
 
-Currently supports MySQL, PostgreSQL and SQLite.
+Currently supports MySQL, PostgreSQL, SQLite and ODBC.
 
 Project homepage: https://github.com/buggins/ddbc
 Documentation: https://github.com/buggins/ddbc/wiki
@@ -110,3 +110,8 @@ foreach(ref e; stmt.select!(User, "id", "name")) {
     writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
 }
 ```
+
+### DSN connections for Microsoft SQL Server
+The correct format to use for a dsn connection string is `odbc://?dsn=<DSN name>`.
+Note that the server portion before the `?` is empty, so the default server for
+the DSN name will be used.
