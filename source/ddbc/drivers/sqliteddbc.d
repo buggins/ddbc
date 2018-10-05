@@ -36,6 +36,7 @@ version(USE_SQLITE) {
     //import ddbc.drivers.sqlite;
     import ddbc.drivers.utils;
     import etc.c.sqlite3;
+    import std.traits : isSomeString;
 
 
     version (Windows) {
@@ -294,7 +295,7 @@ version(USE_SQLITE) {
         
     public:
         void checkClosed() {
-            enforceEx!SQLException(!closed, "Statement is already closed");
+            enforce!SQLException(!closed, "Statement is already closed");
         }
         
         void lock() {
@@ -386,7 +387,7 @@ version(USE_SQLITE) {
                 &stmt,  /* OUT: Statement handle */
                 null     /* OUT: Pointer to unused portion of zSql */
                 );
-            enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while preparing statement " ~ query ~ " : " ~ conn.getError());
+            enforce!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while preparing statement " ~ query ~ " : " ~ conn.getError());
             paramMetadata = createParamMetadata();
             paramCount = paramMetadata.getParameterCount();
             metadata = createMetadata();
@@ -400,7 +401,7 @@ version(USE_SQLITE) {
         // before execution of query
         private void allParamsSet() {
             for(int i = 0; i < paramCount; i++) {
-                enforceEx!SQLException(paramIsSet[i], "Parameter " ~ to!string(i + 1) ~ " is not set");
+                enforce!SQLException(paramIsSet[i], "Parameter " ~ to!string(i + 1) ~ " is not set");
             }
             if (preparing) {
                 preparing = false;
@@ -473,7 +474,7 @@ version(USE_SQLITE) {
 
             closeResultSet();
             int res = sqlite3_finalize(stmt);
-            enforceEx!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while closing prepared statement " ~ query ~ " : " ~ conn.getError());
+            enforce!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while closing prepared statement " ~ query ~ " : " ~ conn.getError());
             closed = true;
             conn.onStatementClosed(this);
         }
@@ -512,7 +513,7 @@ version(USE_SQLITE) {
                 // row is available
                 rowsAffected = -1;
             } else {
-                enforceEx!SQLException(false, "Error #" ~ to!string(res) ~ " while trying to execute prepared statement: "  ~ " : " ~ conn.getError());
+                enforce!SQLException(false, "Error #" ~ to!string(res) ~ " while trying to execute prepared statement: "  ~ " : " ~ conn.getError());
             }
             return rowsAffected;
         }
@@ -527,7 +528,7 @@ version(USE_SQLITE) {
             lock();
             scope(exit) unlock();
             allParamsSet();
-            enforceEx!SQLException(metadata.getColumnCount() > 0, "Query doesn't return result set");
+            enforce!SQLException(metadata.getColumnCount() > 0, "Query doesn't return result set");
             resultSet = new SQLITEResultSet(this, stmt, getMetaData());
             return resultSet;
         }
@@ -680,7 +681,7 @@ version(USE_SQLITE) {
 
         // checks index, updates lastIsNull, returns column type
         int checkIndex(int columnIndex) {
-            enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+            enforce!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
             int res = sqlite3_column_type(rs, columnIndex - 1);
             lastIsNull = (res == SQLITE_NULL);
             return res;
@@ -790,7 +791,7 @@ version(USE_SQLITE) {
                 columnCount = sqlite3_data_count(rs);
                 return true;
             } else {
-                enforceEx!SQLException(false, "Error #" ~ to!string(res) ~ " while reading query result: " ~ copyCString(sqlite3_errmsg(stmt.conn.getConnection())));
+                enforce!SQLException(false, "Error #" ~ to!string(res) ~ " while reading query result: " ~ copyCString(sqlite3_errmsg(stmt.conn.getConnection())));
                 return false;
             }
         }

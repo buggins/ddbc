@@ -430,7 +430,7 @@ class ParameterMetaDataImpl : ParameterMetaData {
 		this.cols = cols;
 	}
 	ref ParameterMetaDataItem col(int column) {
-		enforceEx!SQLException(column >=1 && column <= cols.length, "Parameter index out of range");
+		enforce!SQLException(column >=1 && column <= cols.length, "Parameter index out of range");
 		return cols[column - 1];
 	}
 	// Retrieves the fully-qualified name of the Java class whose instances should be passed to the method PreparedStatement.setObject.
@@ -462,7 +462,7 @@ class ResultSetMetaDataImpl : ResultSetMetaData {
 		this.cols = cols;
 	}
 	ref ColumnMetadataItem col(int column) {
-		enforceEx!SQLException(column >=1 && column <= cols.length, "Column index out of range");
+		enforce!SQLException(column >=1 && column <= cols.length, "Column index out of range");
 		return cols[column - 1];
 	}
 	//Returns the number of columns in this ResultSet object.

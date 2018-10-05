@@ -329,7 +329,7 @@ private:
 
 public:
     void checkClosed() {
-        enforceEx!SQLException(!closed, "Statement is already closed");
+        enforce!SQLException(!closed, "Statement is already closed");
     }
 
     void lock() {
@@ -796,8 +796,8 @@ class MySQLResultSet : ResultSetImpl {
 
     Variant getValue(int columnIndex) {
 		checkClosed();
-        enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
-        enforceEx!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
+        enforce!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+        enforce!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
         Row[] rs = results.array;
         lastIsNull = rs[currentRowIndex].isNull(columnIndex - 1);
 		Variant res;
@@ -1138,8 +1138,8 @@ public:
         checkClosed();
         lock();
         scope(exit) unlock();
-        enforceEx!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
-        enforceEx!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
+        enforce!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+        enforce!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
         return results.array[currentRowIndex].isNull(columnIndex - 1);
     }
 

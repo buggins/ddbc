@@ -23,7 +23,7 @@ module ddbc.drivers.odbcddbc;
 
 import std.algorithm;
 import std.conv;
-import std.datetime;
+import std.datetime.date;
 import std.exception;
 import std.stdio;
 import std.string;
