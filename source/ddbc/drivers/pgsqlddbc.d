@@ -29,6 +29,9 @@ version(USE_PGSQL) {
     import std.conv;
     import std.datetime;
     import std.exception;
+    static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+        import std.experimental.logger;
+    }
     import std.stdio;
     import std.string;
     import std.variant;
@@ -588,6 +591,9 @@ version(USE_PGSQL) {
     		lock();
     		scope(exit) unlock();
 
+            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+                sharedLog.trace(query);
+            }
     		PGresult * res = PQexec(conn.getConnection(), std.string.toStringz(query));
     		enforce!SQLException(res !is null, "Failed to execute statement " ~ query);
     		auto status = PQresultStatus(res);
@@ -836,6 +842,11 @@ version(USE_PGSQL) {
     		checkClosed();
     		lock();
     		scope(exit) unlock();
+
+            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+                sharedLog.trace(this.query);
+            }
+
             PGresult * res = exec();
             scope(exit) PQclear(res);
             int rows = PQntuples(res);
@@ -982,6 +993,10 @@ version(USE_PGSQL) {
             lock();
             scope(exit) unlock();
             setParam(parameterIndex, null);
+        }
+
+        override string toString() {
+            return this.query;
         }
     }
 

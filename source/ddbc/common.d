@@ -24,6 +24,10 @@ module ddbc.common;
 import ddbc.core;
 import std.algorithm;
 import std.exception;
+static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+    import std.experimental.logger;
+    pragma(msg, "DDBC will log using 'std.experimental.logger'.");
+}
 import std.stdio;
 import std.conv;
 import std.variant;
@@ -158,7 +162,9 @@ public:
 		Connection conn = null;
         //writeln("getConnection(): freeConnections.length = " ~ to!string(freeConnections.length));
         if (freeConnections.length > 0) {
-            //writeln("getConnection(): returning free connection");
+			static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+				sharedLog.tracef("Retrieving database connection from pool of %s", freeConnections.length);
+			}
             conn = freeConnections[freeConnections.length - 1]; // $ - 1
             auto oldSize = freeConnections.length;
             myRemove(freeConnections, freeConnections.length - 1);
@@ -166,11 +172,13 @@ public:
             auto newSize = freeConnections.length;
             assert(newSize == oldSize - 1);
         } else {
-            //writeln("getConnection(): creating new connection");
+            trace("Creating new database connection");
             try {
                 conn = super.getConnection();
             } catch (Throwable e) {
-                //writeln("exception while creating connection " ~ e.msg);
+				static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+					sharedLog.errorf("could not create db connection : %s", e.msg);
+				}
                 throw e;
             }
             //writeln("getConnection(): connection created");
@@ -184,8 +192,6 @@ public:
 	}
 
 	void removeUsed(Connection connection) {
-        //writeln("removeUsed");
-        //writeln("removeUsed - activeConnections.length=" ~ to!string(activeConnections.length));
 		foreach (i, item; activeConnections) {
 			if (item == connection) {
                 auto oldSize = activeConnections.length;
@@ -194,6 +200,9 @@ public:
                 //activeConnections.length = oldSize - 1;
                 auto newSize = activeConnections.length;
                 assert(oldSize == newSize + 1);
+				static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+					sharedLog.tracef("database connections reduced from %s to %s", oldSize, newSize);
+				}
                 return;
 			}
 		}
