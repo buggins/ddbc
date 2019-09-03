@@ -6,6 +6,9 @@
     "license": "Boost Software License (BSL 1.0)",
     "targetPath": "lib",
     "targetType": "staticLibrary",
+    "buildRequirements": [
+		"allowWarnings"
+	],
     "systemDependencies": "Depending on configuration: PostgreSQL and/or SQLite v3",
     "configurations": [
         {
