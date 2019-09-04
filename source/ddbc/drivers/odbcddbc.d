@@ -25,6 +25,9 @@ import std.algorithm;
 import std.conv;
 import std.datetime.date;
 import std.exception;
+static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+    import std.experimental.logger;
+}
 import std.stdio;
 import std.string;
 import std.variant;
@@ -597,6 +600,11 @@ version (USE_ODBC)
             lock();
             scope (exit)
                 unlock();
+            
+            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+                sharedLog.trace(query);
+            }
+
             try
             {
                 checkstmt!SQLExecDirect(stmt, cast(SQLCHAR*) toStringz(query), SQL_NTS);
@@ -988,6 +996,11 @@ version (USE_ODBC)
             lock();
             scope (exit)
                 unlock();
+
+            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+                sharedLog.trace(stmt);
+            }
+
             try
             {
                 checkstmt!SQLExecute(stmt);
@@ -1190,6 +1203,9 @@ version (USE_ODBC)
             throw new SQLException("Method not implemented");
         }
 
+        override string toString() {
+            return this.query;
+        }
     }
 
     class ODBCResultSet : ResultSetImpl

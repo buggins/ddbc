@@ -27,6 +27,9 @@ version(USE_SQLITE) {
     import std.conv;
     import std.datetime;
     import std.exception;
+    static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+        import std.experimental.logger;
+    }
     import std.stdio;
     import std.string;
     import std.variant;
@@ -349,6 +352,11 @@ version(USE_SQLITE) {
         override int executeUpdate(string query, out Variant insertId) {
             closePreparedStatement();
             _currentStatement = conn.prepareStatement(query);
+
+            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+                sharedLog.trace(_currentStatement);
+            }
+
             return _currentStatement.executeUpdate(insertId);
         }
         
@@ -662,6 +670,10 @@ version(USE_SQLITE) {
         }
         override void setNull(int parameterIndex, int sqlType) {
             setNull(parameterIndex);
+        }
+
+        override string toString() {
+            return this.query;
         }
     }
 

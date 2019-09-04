@@ -28,6 +28,9 @@ import std.algorithm;
 import std.conv : to;
 import std.datetime;
 import std.exception;
+static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+    import std.experimental.logger;
+}
 import std.stdio;
 import std.string;
 import std.variant;
@@ -384,6 +387,11 @@ public:
         checkClosed();
         lock();
         scope(exit) unlock();
+
+        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+            sharedLog.tracef(queryString);
+        }
+
 		try {
 	        results = query(conn.getConnection(), queryString);
     	    resultSet = new MySQLResultSet(this, results, createMetadata(conn.getConnection().resultFieldDescriptions));
@@ -438,7 +446,7 @@ public:
 
 class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
 
-    private string queryString;
+    //private string queryString;
     private Prepared statement;
     private int paramCount;
     private ResultSetMetaData metadata;
@@ -446,7 +454,7 @@ class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
 
     this(MySQLConnection conn, string queryString) {
         super(conn);
-        this.queryString = queryString;
+        //this.queryString = queryString;
         try {
             this.statement = prepare(conn.getConnection(), queryString);
             this.paramCount = this.statement.numArgs;
@@ -525,6 +533,11 @@ public:
         checkClosed();
         lock();
         scope(exit) unlock();
+
+        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+            sharedLog.trace(statement.sql());
+        }
+
         try {
             results = query(conn.getConnection(), statement);
             resultSet = new MySQLResultSet(this, results, getMetaData());
@@ -780,6 +793,10 @@ public:
         } catch (Throwable e) {
             throw new SQLException(e);
         }
+    }
+
+    override string toString() {
+        return to!string(this.statement.sql());
     }
 }
 
