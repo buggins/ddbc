@@ -172,7 +172,8 @@ public:
             auto newSize = freeConnections.length;
             assert(newSize == oldSize - 1);
         } else {
-            trace("Creating new database connection");
+            sharedLog.tracef("Creating new database connection (%s) %s %s", driver, url, params);
+
             try {
                 conn = super.getConnection();
             } catch (Throwable e) {

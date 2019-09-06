@@ -47,6 +47,8 @@
         {
             "name": "PGSQL",
             "versions": ["USE_PGSQL"],
+            "libs-posix": ["pq"],
+            "libs-windows": ["libpq"],
             "copyFiles-windows-x86": [ "libs/win32/libpq.dll"],
             "copyFiles-windows-x86_64": [ "libs/win64/libpq.dll"],
             "dependencies": {

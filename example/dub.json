@@ -9,14 +9,45 @@
         "vibe-d": "~>0.8.3"
     },
     "targetType": "executable",
-    "libs-posix": ["sqlite3", "pq"],
-    "libs-windows": ["sqlite3", "libpq"],
+    "buildRequirements": [
+		"allowWarnings"
+	],
+    "libs-posix": ["sqlite3", "pq", "odbc"],
+    "libs-windows": ["sqlite3", "libpq", "odbc32"],
     "versions": ["VibeCustomMain"],
     "configurations": [
         {
             "name": "default",
             "subConfigurations": {
                 "ddbc": "full"
+            }
+        },
+
+        {
+            "name": "MySQL",
+            "subConfigurations": {
+                "ddbc": "MySQL"
+            }
+        },
+
+        {
+            "name": "SQLite",
+            "subConfigurations": {
+                "ddbc": "SQLite"
+            }
+        },
+
+        {
+            "name": "PGSQL",
+            "subConfigurations": {
+                "ddbc": "PGSQL"
+            }
+        },
+
+        {
+            "name": "ODBC",
+            "subConfigurations": {
+                "ddbc": "ODBC"
             }
         }
     ]

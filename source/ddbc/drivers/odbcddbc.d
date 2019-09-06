@@ -105,9 +105,11 @@ version (USE_ODBC)
 
         debug
         {
-            writeln("in file: ", file, " at line: ", line);
-            writeln(" > ", fullyQualifiedName!fn, "(", format("%(%s%|, %)", tuple(args)), ")", " : ", cast(RetVals) retval, " (line: ", line, ")");
-            writeln();
+            if(retval < 0) {
+                sharedLog.errorf("%s(%s) : %s", fullyQualifiedName!fn, format("%(%s%|, %)", tuple(args)), cast(RetVals) retval);
+            } else {
+                sharedLog.tracef("%s(%s) : %s", fullyQualifiedName!fn, format("%(%s%|, %)", tuple(args)), cast(RetVals) retval);
+            }
         }
 
 
@@ -122,8 +124,7 @@ version (USE_ODBC)
 
     alias checkenv = partial!(check, SQL_HANDLE_ENV);
 
-    private void extractError(string fn, SQLHANDLE handle, SQLSMALLINT type,
-            string file, size_t line)
+    private void extractError(string fn, SQLHANDLE handle, SQLSMALLINT type, string file, size_t line)
     {
         short i = 0;
         SQLINTEGER errorCode;
@@ -132,7 +133,7 @@ version (USE_ODBC)
         SQLSMALLINT textLen;
         SQLRETURN ret;
 
-        string s;
+        string message;
         do
         {
             ret = SQLGetDiagRec(type, handle, ++i, state.ptr, &errorCode,
@@ -140,14 +141,13 @@ version (USE_ODBC)
             if (SQL_SUCCEEDED(ret))
             {
                 import std.format;
-
-                s ~= format("%s:%d:%d:%s\n", fromStringz(state.ptr),
+                message ~= format("\n\t%s:%d:%d\t%s", fromStringz(state.ptr),
                         cast(int) i, errorCode, fromStringz(msg.ptr)).idup;
             }
         }
         while (ret == SQL_SUCCESS);
-        debug writeln("file: ", file, ", line: ", line, "\n", s);
-        throw new Exception(s, file, line);
+        //debug stderr.writefln("%s:%s:%s %s", file, line, fn, message);
+        throw new Exception(message, file, line);
     }
 
     enum Namedd
@@ -366,7 +366,7 @@ version (USE_ODBC)
 
         this(string url, string[string] params)
         {
-            //writeln("MySQLConnection() creating connection");
+            //writeln("ODBCConnection() creating connection");
             mutex = new Mutex();
             this.url = url;
             this.params = params;
@@ -411,7 +411,8 @@ version (USE_ODBC)
             addToConnectionString("password", "Pwd");
             addToConnectionString("database", "Database");
             string connectionString = connectionProps.join(';');
-            //writeln(connectionString);
+            
+            sharedLog.info(connectionString);
 
             SQLCHAR[1024] outstr;
             SQLSMALLINT outstrlen;
@@ -645,8 +646,7 @@ version (USE_ODBC)
             }
             catch (Exception e)
             {
-                throw new SQLException(e.msg ~ " - while execution of query " ~ query,
-                        e.file, e.line);
+                throw new SQLException(e.msg ~ " While executing query: '" ~ query ~ "'", e.file, e.line);
             }
         }
 
@@ -805,7 +805,7 @@ version (USE_ODBC)
                 T val;
                 int len = 0;
 
-                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), null, 0, &len);
+                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), &val, 0, &len);
 
                 if (len == SQL_NULL_DATA)
                     return Variant();
@@ -1271,7 +1271,7 @@ version (USE_ODBC)
                 items[i].typeName = (cast(SqlType) items[i].type).to!(string);
                 items[i].isNullable = col.nullAble == SQL_NULLABLE;
 
-                debug writeln("ColumnMetadataItem: ", items[i].catalogName, "; ", items[i].name, "; ", items[i].typeName);
+                debug sharedLog.tracef("Column meta data: catalogName='%s', name='%s', typeName='%s'", items[i].catalogName, items[i].name, items[i].typeName);
             }
 
             metadata = new ResultSetMetaDataImpl(items);
@@ -1592,13 +1592,16 @@ version (USE_ODBC)
     }
 
     // sample URL:
-    // mysql://localhost:3306/DatabaseName
+    // odbc://localhost:1433/DatabaseName
     class ODBCDriver : Driver
     {
-        // helper function
-        public static string generateUrl(string host, ushort port, string dbname)
+        // returns a string on the format:
+        //          odbc://localhost,1433?user=sa,password=Ser3tP@ssw0rd,driver=FreeTDS
+        public static string generateUrl(string host = "localhost", ushort port = 1433, string[string] params = null)
         {
-            return "odbc://" ~ host ~ ":" ~ to!string(port) ~ "/" ~ dbname;
+            import std.array : byPair;
+            import std.algorithm.iteration : joiner;
+            return "odbc://" ~ host ~ "," ~ to!string(port) ~ ( (params is null)? "" : "?" ~ to!string(joiner(params.byPair.map!(p => p.key ~ "=" ~ p.value), ",")));
         }
 
         public static string[string] setUserAndPassword(string username, string password)
@@ -1611,7 +1614,7 @@ version (USE_ODBC)
 
         override ddbc.core.Connection connect(string url, string[string] params)
         {
-            //writeln("MySQLDriver.connect " ~ url);
+            //writeln("ODBCDriver.connect " ~ url);
             return new ODBCConnection(url, params);
         }
     }
@@ -1759,7 +1762,7 @@ version (USE_ODBC)
 
     __gshared static this()
     {
-        // register MySQLDriver
+        // register ODBCDriver
         import ddbc.common;
 
         DriverFactory.registerDriverFactory("odbc", delegate() {

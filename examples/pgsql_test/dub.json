@@ -7,6 +7,9 @@
         "ddbc": {"version": "~master", "path": "../../"}
     },
     "targetType": "executable",
+    "buildRequirements": [
+		"allowWarnings"
+	],
     "configurations": [
         {
             "name": "default",

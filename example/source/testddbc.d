@@ -46,20 +46,22 @@ short getDefaultPort(string driver)
 			return 5432;
 		case "mysql":
 			return 3306;
+		case "odbc":
+			return 1433;
 		default:
 			return -1;
 	}
 }
 
 string syntaxMessage	= 	"\nsyntax:\n" ~
-				"\neither:\n" ~
+				"\nneither:\n" ~
 				"\tddbctest --connection=sqlite://relative/path/to/file\n" ~
 				"or:\n" ~
 				"\tddbctest --connection=sqlite::memory:\n" ~
                 "or:\n" ~
                 "\tddbctest --connection=<uri> --database=<database_name> --user=<user> --password=<password> [--port=<port>]\n\n" ~
 				"\tURI is format 'driver://hostname:port' or 'sqlite://filename'\n" ~
-				"\tAccepted drivers are [sqlite|pgsql|mysql]\n" ~
+				"\tAccepted drivers are [sqlite|pgsql|mysql|odbc]\n" ~
 				"\tdatabase name must not be specifed for sqlite and must be specified for other drivers\n";
 
 struct ConnectionParams
@@ -74,6 +76,11 @@ struct ConnectionParams
 }
 int main(string[] args)
 {
+	static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+		import std.experimental.logger;
+		globalLogLevel(LogLevel.info);
+	}
+
 	ConnectionParams par;
 	string URI;
 	Driver driver;
@@ -87,6 +94,11 @@ int main(string[] args)
 		stderr.writefln(syntaxMessage);
 		return 1;
 	}
+
+	if (URI.startsWith("ddbc:")) {
+		URI = URI[5 .. $]; // strip out ddbc: prefix
+	}
+
 	par.driver=getURIPrefix(URI);
 	par.host=getURIHost(URI);
 	if (par.driver!="sqlite")
@@ -94,7 +106,7 @@ int main(string[] args)
 
 	writefln("Database Driver: %s", par.driver);
 
-	if (["sqlite","pgsql","mysql"].count(par.driver)==0)
+	if (["sqlite","pgsql","mysql","odbc"].count(par.driver)==0)
 	{
 		stderr.writefln(syntaxMessage);
 		stderr.writefln("\n\t*** Error: unknown driver type:"~par.driver);
@@ -120,7 +132,9 @@ int main(string[] args)
 					stderr.writefln("\n");
 					return 1;
 				}
-				driver = new SQLITEDriver();
+				version( USE_SQLITE ) {
+					driver = new SQLITEDriver();
+				}
 				url = chompPrefix(URI, "sqlite:");
 				break;
 
@@ -133,11 +147,13 @@ int main(string[] args)
 					stderr.writefln("\n");
 					return 1;
 				}
-				driver = new PGSQLDriver();
-				url = PGSQLDriver.generateUrl( par.host, par.port,par.database );
-				params["user"] = par.user;
-				params["password"] = par.password;
-				params["ssl"] = to!string(par.ssl);
+				version( USE_PGSQL ) {
+					driver = new PGSQLDriver();
+					url = PGSQLDriver.generateUrl( par.host, par.port,par.database );
+					params["user"] = par.user;
+					params["password"] = par.password;
+					params["ssl"] = to!string(par.ssl);
+				}
 				break;
 
 		case "mysql":
@@ -149,12 +165,42 @@ int main(string[] args)
 					stderr.writefln("\n");
 					return 1;
 				}
-				driver = new MySQLDriver();
-				url = MySQLDriver.generateUrl(par.host, par.port, par.database);
-				params = MySQLDriver.setUserAndPassword(par.user, par.password);
+				version( USE_MYSQL ) {
+					driver = new MySQLDriver();
+					url = MySQLDriver.generateUrl(par.host, par.port, par.database);
+					params = MySQLDriver.setUserAndPassword(par.user, par.password);
+				}
+				break;
+		case "odbc":
+				version( USE_ODBC ) {
+					driver = new ODBCDriver();
+					if ((par.user.length==0) && (par.password.length==0) )
+					{
+						// presume credentials are in connection string, eg:
+						// ./ddbctest --connection=ddbc:odbc://localhost,1433?user=sa,password=bbk4k77JKH88g54,driver=FreeTDS
+						url = URI;
+					} else {
+						// build the connection string based on args, eg:
+						// ./ddbctest --connection=ddbc:odbc://localhost --user=SA --password=bbk4k77JKH88g54
+						params = ODBCDriver.setUserAndPassword(par.user, par.password);
+						params["driver"] = "FreeTDS";
+						url = ODBCDriver.generateUrl(par.host, par.port, params);
+					}
+				}
 				break;
 		default:
-				break;
+				stderr.writefln("%s is not a valid option!", par.driver);
+				return 1;
+	}
+
+	if(driver is null) {
+		stderr.writeln("No database driver found!");
+		return 1;
+	}
+
+	writefln("Database Connection String : %s", url);
+	if(params !is null) {
+		writeln("Database Params: ", params);
 	}
 
 	// create connection pool
@@ -171,29 +217,36 @@ int main(string[] args)
 		stmt.close();
 
 	// execute simple queries to create and fill table
+	write("Creating tables and data...\t");
 	final switch(par.driver)
     {
         case "sqlite":
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1(id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts DATETIME)");
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts DATETIME)");
             stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
             break;
         case "pgsql":
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1(id SERIAL PRIMARY KEY, name VARCHAR(250), comment TEXT, ts TIMESTAMP)");
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id SERIAL PRIMARY KEY, name VARCHAR(250), comment TEXT, ts TIMESTAMP)");
             stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
             break;
         case "mysql": // MySQL has an underscore in 'AUTO_INCREMENT'
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1(id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts DATETIME)");
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts DATETIME)");
             stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
             break;
+		case "odbc":
+			stmt.executeUpdate("DROP TABLE IF EXISTS dbo.ddbct1");
+			stmt.executeUpdate("CREATE TABLE ddbct1 (id INT NOT NULL IDENTITY(1,1) PRIMARY KEY, name VARCHAR(250), comment VARCHAR(max), ts DATETIME)");
+			stmt.executeUpdate("INSERT INTO ddbct1 (name, comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
+			break;
     }
+	write("Done.\n");
 
-	writeln("testing normal SQL statements");
+	writeln("Testing generic SQL select statements");
 	auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
 	while (rs.next())
 	    writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ rs.getString(3)); // rs.getString(3) was wrapped with strNull - not sure what this did
 
 
-    writeln("testing prepared statements");
+    writeln("Testing prepared SQL statements");
 	PreparedStatement ps2 = conn.prepareStatement("SELECT id, name name_alias, comment, ts FROM ddbct1 WHERE id >= ?");
     scope(exit) ps2.close();
     ps2.setUlong(1, 1);
