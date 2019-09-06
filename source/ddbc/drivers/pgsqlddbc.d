@@ -29,6 +29,15 @@ version(USE_PGSQL) {
     import std.conv;
     import std.datetime;
     import std.exception;
+
+    // For backwards compatibily
+    // 'enforceEx' will be removed with 2.089
+    static if(__VERSION__ < 2080) {
+        alias enforceHelper = enforceEx;
+    } else {
+        alias enforceHelper = enforce;
+    }
+
     static if(__traits(compiles, (){ import std.experimental.logger; } )) {
         import std.experimental.logger;
     }
@@ -435,7 +444,7 @@ version(USE_PGSQL) {
     	
     public:
     	void checkClosed() {
-    		enforce!SQLException(!closed, "Statement is already closed");
+    		enforceHelper!SQLException(!closed, "Statement is already closed");
     	}
     	
     	void lock() {
@@ -595,9 +604,9 @@ version(USE_PGSQL) {
                 sharedLog.trace(query);
             }
     		PGresult * res = PQexec(conn.getConnection(), std.string.toStringz(query));
-    		enforce!SQLException(res !is null, "Failed to execute statement " ~ query);
+    		enforceHelper!SQLException(res !is null, "Failed to execute statement " ~ query);
     		auto status = PQresultStatus(res);
-    		enforce!SQLException(status == PGRES_TUPLES_OK, getError());
+    		enforceHelper!SQLException(status == PGRES_TUPLES_OK, getError());
     		scope(exit) PQclear(res);
 
     //		cmd = new Command(conn.getConnection(), query);
@@ -637,9 +646,9 @@ version(USE_PGSQL) {
     		lock();
     		scope(exit) unlock();
     		PGresult * res = PQexec(conn.getConnection(), std.string.toStringz(query));
-    		enforce!SQLException(res !is null, "Failed to execute statement " ~ query);
+    		enforceHelper!SQLException(res !is null, "Failed to execute statement " ~ query);
     		auto status = PQresultStatus(res);
-    		enforce!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, getError());
+    		enforceHelper!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, getError());
     		scope(exit) PQclear(res);
     		
     		string rowsAffected = copyCString(PQcmdTuples(res));
@@ -731,10 +740,10 @@ version(USE_PGSQL) {
 //                                toStringz(query),
 //                                paramCount,
 //                                null);
-//            enforceEx!SQLException(rs !is null, "Error while preparing statement " ~ query);
+//            enforceHelper!SQLException(rs !is null, "Error while preparing statement " ~ query);
 //            auto status = PQresultStatus(rs);
             //writeln("prepare paramCount = " ~ to!string(paramCount));
-//            enforceEx!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, "Error while preparing statement " ~ query ~ " : " ~ getError(rs));
+//            enforceHelper!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, "Error while preparing statement " ~ query ~ " : " ~ getError(rs));
 //            metadata = createMetadata(rs);
             //scope(exit) PQclear(rs);
         }
@@ -747,7 +756,7 @@ version(USE_PGSQL) {
     	}
         void checkParams() {
             foreach(i, b; paramIsSet)
-                enforce!SQLException(b, "Parameter " ~ to!string(i) ~ " is not set");
+                enforceHelper!SQLException(b, "Parameter " ~ to!string(i) ~ " is not set");
         }
     	void setParam(int index, string value) {
     		checkIndex(index);
@@ -782,7 +791,7 @@ version(USE_PGSQL) {
                                  cast(const int *)lengths.ptr,
                                  cast(const int *)formats.ptr,
                                  0);
-            enforce!SQLException(res !is null, "Error while executing prepared statement " ~ query);
+            enforceHelper!SQLException(res !is null, "Error while executing prepared statement " ~ query);
             metadata = createMetadata(res);
             return res;
         }
@@ -827,7 +836,7 @@ version(USE_PGSQL) {
             PGresult * res = exec();
             scope(exit) PQclear(res);
             auto status = PQresultStatus(res);
-            enforce!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, getError(res));
+            enforceHelper!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, getError(res));
 
             string rowsAffected = copyCString(PQcmdTuples(res));
             //auto lastid = PQoidValue(res);
@@ -1013,8 +1022,8 @@ version(USE_PGSQL) {
     	
     	Variant getValue(int columnIndex) {
     		checkClosed();
-    		enforce!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
-    		enforce!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
+    		enforceHelper!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+    		enforceHelper!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
     		Variant res = data[currentRowIndex][columnIndex - 1];
             lastIsNull = (res == null);
     		return res;
@@ -1342,8 +1351,8 @@ version(USE_PGSQL) {
     		checkClosed();
     		lock();
     		scope(exit) unlock();
-    		enforce!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
-    		enforce!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
+    		enforceHelper!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+    		enforceHelper!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
     		return data[currentRowIndex][columnIndex - 1] == null;
     	}
     	

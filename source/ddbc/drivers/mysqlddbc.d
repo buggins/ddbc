@@ -28,6 +28,15 @@ import std.algorithm;
 import std.conv : to;
 import std.datetime;
 import std.exception;
+
+// For backwards compatibily
+// 'enforceEx' will be removed with 2.089
+static if(__VERSION__ < 2080) {
+    alias enforceHelper = enforceEx;
+} else {
+    alias enforceHelper = enforce;
+}
+
 static if(__traits(compiles, (){ import std.experimental.logger; } )) {
     import std.experimental.logger;
 }
@@ -332,7 +341,7 @@ private:
 
 public:
     void checkClosed() {
-        enforce!SQLException(!closed, "Statement is already closed");
+        enforceHelper!SQLException(!closed, "Statement is already closed");
     }
 
     void lock() {
@@ -446,7 +455,6 @@ public:
 
 class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
 
-    //private string queryString;
     private Prepared statement;
     private int paramCount;
     private ResultSetMetaData metadata;
@@ -454,7 +462,7 @@ class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
 
     this(MySQLConnection conn, string queryString) {
         super(conn);
-        //this.queryString = queryString;
+
         try {
             this.statement = prepare(conn.getConnection(), queryString);
             this.paramCount = this.statement.numArgs;
@@ -813,8 +821,8 @@ class MySQLResultSet : ResultSetImpl {
 
     Variant getValue(int columnIndex) {
 		checkClosed();
-        enforce!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
-        enforce!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
+        enforceHelper!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+        enforceHelper!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
         Row[] rs = results.array;
         lastIsNull = rs[currentRowIndex].isNull(columnIndex - 1);
 		Variant res;
@@ -1155,8 +1163,8 @@ public:
         checkClosed();
         lock();
         scope(exit) unlock();
-        enforce!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
-        enforce!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
+        enforceHelper!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+        enforceHelper!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
         return results.array[currentRowIndex].isNull(columnIndex - 1);
     }
 
