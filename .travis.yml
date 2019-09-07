@@ -58,7 +58,9 @@ jobs:
       env: NAME="MySQL Integration Test with DUB upgrade"
       d: dmd
       services: mysql
-      before_script: mysql --user=travis -e 'CREATE DATABASE ddbctest;'
+      before_script:
+        - mysql --user=travis -e 'CREATE DATABASE IF NOT EXISTS testdb;'
+        - mysql --user=travis -e 'CREATE DATABASE IF NOT EXISTS ddbctest;'
       script:
         - dub upgrade
         - dub test --config=MySQL
@@ -66,7 +68,9 @@ jobs:
     - env: NAME="MySQL Integration Tests"
       d: dmd
       services: mysql
-      before_script: mysql --user=travis -e 'CREATE DATABASE ddbctest;'
+      before_script:
+        - mysql --user=travis -e 'CREATE DATABASE IF NOT EXISTS testdb;'
+        - mysql --user=travis -e 'CREATE DATABASE IF NOT EXISTS ddbctest;'
       script:
         - dub test --config=MySQL
         - cd example && dub build --config=MySQL && ./ddbctest --connection=mysql:127.0.0.1 --database=ddbctest --user=travis
@@ -74,7 +78,9 @@ jobs:
     - stage: PostgreSQL Integration Tests
       d: dmd
       services: postgresql
-      before_script: psql -c 'create database ddbctest;' -U postgres
+      before_script:
+        - psql -c 'create database testdb;' -U postgres
+        - psql -c 'create database ddbctest;' -U postgres
       script:
         - dub test --config=PGSQL
         - cd example && dub build --config=PGSQL && ./ddbctest --connection=pgsql:127.0.0.1 --database=ddbctest --user=postgres

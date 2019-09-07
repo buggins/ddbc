@@ -228,8 +228,8 @@ version(USE_PGSQL) {
     	/// change parameters if necessary
     	const string PGSQL_UNITTEST_HOST = "localhost";
     	const int    PGSQL_UNITTEST_PORT = 5432;
-    	const string PGSQL_UNITTEST_USER = "testuser";
-    	const string PGSQL_UNITTEST_PASSWORD = "testpassword";
+    	const string PGSQL_UNITTEST_USER = "postgres"; // "testuser";
+    	const string PGSQL_UNITTEST_PASSWORD = ""; // "testpassword";
     	const string PGSQL_UNITTEST_DB = "testdb";
     	
     	static if (PGSQL_TESTS_ENABLED) {
