@@ -80,14 +80,16 @@ jobs:
       d: dmd
       services: docker
       addons:
-      apt:
-        update: true
-        sources: ubuntu-toolchain-r-test
-        packages: [ libevent-dev, unixodbc-dev, freetds-dev, tdsodbc ]
+        apt:
+          update: true
+          sources: ubuntu-toolchain-r-test
+          packages: [ libevent-dev, unixodbc, unixodbc-dev, freetds-bin, freetds-dev, tdsodbc ]
       before_install:
         - docker pull microsoft/mssql-server-linux:2017-latest
         - docker run -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=bbk4k77JKH88g54' -p 1433:1433 --name ms-sql -d microsoft/mssql-server-linux
-      before_script: docker exec -it ms-sql /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P "bbk4k77JKH88g54" -Q 'CREATE DATABASE ddbctest'
+      before_script:
+        - odbcinst -j
+        - docker exec -it ms-sql /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P "bbk4k77JKH88g54" -Q 'CREATE DATABASE ddbctest'
       script:
         - cd example && dub build --config=ODBC && ./ddbctest --connection=odbc://localhost --database=ddbctest --user=SA --password=bbk4k77JKH88g54
   allow_failures:

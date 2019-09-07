@@ -119,8 +119,16 @@ The overall format is typically `[ddbc:]<DRIVER:>//[ HOSTNAME [ ,PORT ]] [ ? <PA
 
 ### SQLite
 
+SQLite can be configured for file based persistence or in-memory storage.
+
 ```
 ddbc:sqlite:ddbc-test.sqlite
+```
+
+An in memory database can be configured by specifying **:memory:** instead of a filename:
+
+```
+ddbs:sqlite::memory:
 ```
 
 ### MySQL
