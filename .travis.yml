@@ -83,7 +83,7 @@ jobs:
         - psql -c 'create database ddbctest;' -U postgres
       script:
         - dub test --config=PGSQL
-        - cd example && dub build --config=PGSQL && ./ddbctest --connection=pgsql:127.0.0.1 --database=ddbctest --user=postgres
+        - cd example && dub build --config=PGSQL && ./ddbctest --connection=postgresql:127.0.0.1 --database=ddbctest --user=postgres
 
     - stage: MS SQL Integration Tests
       d: dmd

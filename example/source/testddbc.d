@@ -42,7 +42,7 @@ short getDefaultPort(string driver)
 	{
 		case "sqlite":
 			return -1;
-		case "pgsql":
+		case "postgresql":
 			return 5432;
 		case "mysql":
 			return 3306;
@@ -61,7 +61,7 @@ string syntaxMessage	= 	"\nsyntax:\n" ~
                 "or:\n" ~
                 "\tddbctest --connection=<uri> --database=<database_name> --user=<user> --password=<password> [--port=<port>]\n\n" ~
 				"\tURI is format 'driver://hostname:port' or 'sqlite://filename'\n" ~
-				"\tAccepted drivers are [sqlite|pgsql|mysql|odbc]\n" ~
+				"\tAccepted drivers are [sqlite|postgresql|mysql|odbc]\n" ~
 				"\tdatabase name must not be specifed for sqlite and must be specified for other drivers\n";
 
 struct ConnectionParams
@@ -106,7 +106,7 @@ int main(string[] args)
 
 	writefln("Database Driver: %s", par.driver);
 
-	if (["sqlite","pgsql","mysql","odbc"].count(par.driver)==0)
+	if (["sqlite","postgresql","mysql","odbc"].count(par.driver)==0)
 	{
 		stderr.writefln(syntaxMessage);
 		stderr.writefln("\n\t*** Error: unknown driver type:"~par.driver);
@@ -138,12 +138,12 @@ int main(string[] args)
 				url = chompPrefix(URI, "sqlite:");
 				break;
 
-		case "pgsql":
+		case "postgresql":
 				if ((par.host.length==0) || (par.database.length==0) )
 				{
 					stderr.writefln(syntaxMessage);
 					stderr.writefln("\n *** Error: must specify connection and database names for pgsql " ~
-								"eg --connection=pgsql://localhost:5432 -- database=test");
+								"eg --connection=postgresql://localhost:5432 -- database=test");
 					stderr.writefln("\n");
 					return 1;
 				}
@@ -224,7 +224,7 @@ int main(string[] args)
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts DATETIME)");
             stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
             break;
-        case "pgsql":
+        case "postgresql":
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id SERIAL PRIMARY KEY, name VARCHAR(250), comment TEXT, ts TIMESTAMP)");
             stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
             break;

@@ -1414,7 +1414,7 @@ version(USE_PGSQL) {
         }
     	// helper function
     	public static string generateUrl(string host, ushort port, string dbname) {
-    		return "postgresql://" ~ host ~ ":" ~ to!string(port) ~ "/" ~ dbname;
+    		return "ddbc:postgresql://" ~ host ~ ":" ~ to!string(port) ~ "/" ~ dbname;
     	}
     	public static string[string] setUserAndPassword(string username, string password) {
     		string[string] params;
