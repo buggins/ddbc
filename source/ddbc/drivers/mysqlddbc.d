@@ -64,9 +64,11 @@ version(unittest) {
         > mysql -uroot
 
         Create test user and test DB:
-        mysql> GRANT ALL PRIVILEGES ON *.* TO testuser@'%' IDENTIFIED BY 'testpassword';
-        mysql> GRANT ALL PRIVILEGES ON *.* TO testuser@'localhost' IDENTIFIED BY 'testpassword';
-        mysql> CREATE DATABASE testdb;
+        mysql> CREATE DATABASE IF NOT EXISTS testdb;
+        mysql> GRANT ALL PRIVILEGES ON testdb.* TO testuser@'%' IDENTIFIED BY 'testpassword';
+            or
+        mysql> GRANT ALL PRIVILEGES ON testdb.* TO testuser@'localhost' IDENTIFIED BY 'testpassword';
+        mysql> FLUSH PRIVILEGES;
      */
     /// change to false to disable tests on real MySQL server
     immutable bool MYSQL_TESTS_ENABLED = true;
@@ -1253,7 +1255,7 @@ unittest {
         assert(meta.getColumnLabel(2) == "name_alias");
         assert(meta.getColumnName(3) == "comment");
 
-        int rowCount = rs.getFetchSize();
+        ulong rowCount = rs.getFetchSize();
         assert(rowCount == 6);
         int index = 1;
         while (rs.next()) {

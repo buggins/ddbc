@@ -397,6 +397,7 @@ string makeDDBCUrl(string driverName, string host, int port, string dbName, stri
     import std.conv : to;
     char[] res;
     res.assumeSafeAppend;
+	res ~= "ddbc:";
     res ~= driverName;
     res ~= "://";
     res ~= host;

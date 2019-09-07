@@ -70,12 +70,12 @@ version(USE_SQLITE) {
         /// change to false to disable tests on real PostgreSQL server
         immutable bool SQLITE_TESTS_ENABLED = true;
         /// change parameters if necessary
-        const string SQLITE_UNITTEST_FILENAME = "ddbctest.sqlite";
+        const string SQLITE_UNITTEST_URL = "sqlite::memory:"; // "sqlite:ddbctest.sqlite";
 
         static if (SQLITE_TESTS_ENABLED) {
             /// use this data source for tests
             DataSource createUnitTestSQLITEDataSource() {
-                return createConnectionPool("sqlite:" ~ SQLITE_UNITTEST_FILENAME);
+                return createConnectionPool(SQLITE_UNITTEST_URL);
             }
         }
     }

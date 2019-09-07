@@ -213,6 +213,15 @@ version(USE_PGSQL) {
     version(unittest) {
     	/*
             To allow unit tests using PostgreSQL server,
+            run postgres client using admin privileges, e.g. for postgres server on localhost:
+            sudo -u postgres psql
+
+            Then create a user and test database:
+
+            postgres=# CREATE USER testuser WITH ENCRYPTED PASSWORD 'testpassword';
+            postgres=# CREATE DATABASE testdb OWNER testuser;
+
+            CREATE DATABASE testdb WITH OWNER testuser ENCODING 'UTF8' LC_COLLATE = 'en_US.UTF-8' LC_CTYPE = 'en_US.UTF-8' TEMPLATE template0;
          */
     	/// change to false to disable tests on real PostgreSQL server
     	immutable bool PGSQL_TESTS_ENABLED = true;
@@ -226,7 +235,9 @@ version(USE_PGSQL) {
     	static if (PGSQL_TESTS_ENABLED) {
     		/// use this data source for tests
     		DataSource createUnitTestPGSQLDataSource() {
-                string url = makeDDBCUrl("postgresql", PGSQL_UNITTEST_HOST, PGSQL_UNITTEST_PORT, PGSQL_UNITTEST_DB);
+                //string url = makeDDBCUrl("postgresql", PGSQL_UNITTEST_HOST, PGSQL_UNITTEST_PORT, PGSQL_UNITTEST_DB);
+                string url = "ddbc:postgresql://localhost:5432/testdb";
+
                 string[string] params;
                 setUserAndPassword(params, PGSQL_UNITTEST_USER, PGSQL_UNITTEST_PASSWORD);
                 return createConnectionPool(url, params);
