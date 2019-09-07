@@ -134,13 +134,13 @@ ddbs:sqlite::memory:
 ### MySQL
 
 ```
-ddbc:mysql:127.0.0.1
+ddbc:mysql://127.0.0.1:3306
 ```
 
 ### PostgreSQL
 
 ```
-ddbc:pgsql:127.0.0.1
+ddbc:postgresql://127.0.0.1:5432
 ```
 
 ### Microsoft SQL Server (via ODBC)

@@ -392,31 +392,86 @@ interface DataSource {
 	Connection getConnection();
 }
 
+/// Helper function to make url in format required for DSN connections to Microsoft SQL Server
+string makeDDBCUrl(string driverName, string[string] params) {
+	enforce(driverName == "odbc", "only ODBC can have Url created this way");
+	import std.array : byPair;
+    import std.algorithm.iteration : map, joiner;
+	import std.conv : to;
+	return "odbc://?" ~ to!string(joiner(params.byPair.map!(p => p.key ~ "=" ~ p.value), ","));
+}
+
 /// Helper function to make url in form driverName://host:port/dbname?param1=value1,param2=value2
-string makeDDBCUrl(string driverName, string host, int port, string dbName, string[string] params = null) {
+string makeDDBCUrl(string driverName, string host = null, int port = 0, 
+							string dbName = null, string[string] params = null) {
+	import std.algorithm.searching : canFind;
+	enforce(canFind(["sqlite", "postgresql", "mysql", "odbc"], driverName), "driver must be one of sqlite|postgresql|mysql|odbc");
     import std.conv : to;
     char[] res;
     res.assumeSafeAppend;
 	res ~= "ddbc:";
     res ~= driverName;
-    res ~= "://";
-    res ~= host;
-    res ~= ":";
-    res ~= to!string(port);
-    res ~= "/";
-    res ~= dbName;
-    bool firstParam = true;
-    foreach(key, value; params) {
-        if (firstParam) {
-            res ~= "?";
-            firstParam = false;
-        } else {
-            res ~= ",";
-        }
-        res ~= key;
-        res ~= "=";
-        res ~= value;
-    }
+
+	if(driverName is "sqlite") {
+		// if it's SQLite the host arg should be a filename or ":memory:"
+		res ~= ":"~host;
+	} else {
+		res ~= "://" ~ host ~ ":" ~ to!string(port);
+
+		if (dbName !is null) {
+			res ~= "/" ~ dbName;
+		}
+	}
+
+	if(params !is null) {
+		import std.array : byPair;
+    	import std.algorithm.iteration : map, joiner;
+		res ~= "?" ~ to!string(joiner(params.byPair.map!(p => p.key ~ "=" ~ p.value), ","));
+	}
+
     return res.dup;
 }
 
+private unittest {
+	assertThrown!Exception(makeDDBCUrl("bogus", ""));
+}
+
+private unittest {
+	string url = makeDDBCUrl("sqlite", ":memory:");
+	assert(url == "ddbc:sqlite::memory:", "SQLite URL is not correct: "~url);
+}
+
+private unittest {
+	string url = makeDDBCUrl("sqlite", "ddbc-test.sqlite");
+	assert(url == "ddbc:sqlite:ddbc-test.sqlite", "SQLite URL is not correct: "~url);
+}
+
+private unittest {
+	string url = makeDDBCUrl("postgresql", "127.0.0.1", 5432, "mydb");
+	assert(url == "ddbc:postgresql://127.0.0.1:5432/mydb", "Postgres URL is not correct: "~url);
+}
+
+private unittest {
+	string url = makeDDBCUrl("mysql", "127.0.0.1", 3306, "mydb");
+	assert(url == "ddbc:mysql://127.0.0.1:3306/mydb", "MySQL URL is not correct: "~url);
+}
+
+private unittest {
+	string[string] params;
+	params["user"] = "sa";
+	params["password"] = "p@ss";
+	params["driver"] = "FreeTDS";
+
+	string url = makeDDBCUrl("odbc", "localhost", 1433, null, params);
+	// todo: check with this URL structure is even correct
+	assert(url == "ddbc:odbc://localhost:1433?user=sa,password=p@ss,driver=FreeTDS", "ODBC URL is not correct: "~url);
+}
+
+private unittest {
+	//immutable string[string] params = ["dsn","myDSN"];
+	string[string] params;
+	params["dsn"] = "myDSN";
+
+	string url = makeDDBCUrl("odbc", params);
+	assert(url == "odbc://?dsn=myDSN", "ODBC URL is not correct: "~url);
+}
