@@ -204,6 +204,7 @@ int main(string[] args)
 	}
 
 	// create connection pool
+	//DataSource ds = createConnectionPool(url, params);
 	DataSource ds = new ConnectionPoolDataSourceImpl(driver, url, params);
 
 	// creating Connection

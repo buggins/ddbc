@@ -63,7 +63,7 @@ version (USE_ODBC)
             {
                 import std.file;
 
-                string url = "odbc://localhost,1433?user=sa,password=bbk4k77JKH88g54,driver=FreeTDS";//cast(string) read("test_connection.txt");
+                string url = "ddbc:odbc://localhost,1433?user=SA,password=bbk4k77JKH88g54,driver=FreeTDS";//cast(string) read("test_connection.txt");
 
                 return createConnectionPool(url);
             }
@@ -1635,6 +1635,9 @@ version (USE_ODBC)
             scope (exit)
                 stmt.close();
 
+            //assert(stmt.executeUpdate("CREATE DATABASE testdb") == -1);
+            //assert(stmt.executeUpdate("USE testdb") == -1);
+
             assert(stmt.executeUpdate(
                     "IF OBJECT_ID('ddbct1', 'U') IS NOT NULL DROP TABLE ddbct1") == -1);
             
@@ -1657,8 +1660,7 @@ version (USE_ODBC)
             ps.setLong(2, 3);
             assert(ps.executeUpdate() == 1);
 
-            auto rs = stmt.executeQuery(
-                    "SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
+            auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
 
             // testing result set meta data
             ResultSetMetaData meta = rs.getMetaData();

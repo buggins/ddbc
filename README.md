@@ -153,3 +153,7 @@ ddbc:odbc://localhost,1433?user=sa,password=bbk4k77JKH88g54,driver=FreeTDS
 The correct format to use for a dsn connection string is `odbc://?dsn=<DSN name>`.
 Note that the server portion before the `?` is empty, so the default server for
 the DSN name will be used.
+
+## Contributing
+
+pull requests are welcome. Please ensure your local branch is up to date and all tests are passing locally before making a pull request. A docker-compose file is included to help with local development. Use `docker-compose up` then run `dub test --config=PGSQL` and `dub test --config=ODBC`. The examples should also run, see the travis file for details.

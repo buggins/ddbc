@@ -100,7 +100,8 @@ jobs:
         - odbcinst -j
         - docker exec -it ms-sql /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P "bbk4k77JKH88g54" -Q 'CREATE DATABASE ddbctest'
       script:
-        - cd example && dub build --config=ODBC && ./ddbctest --connection=odbc://localhost --database=ddbctest --user=SA --password=bbk4k77JKH88g54
+        - dub test --config=ODBC
+        - cd example && dub build --config=ODBC && ./ddbctest --connection=odbc://localhost,1433 --database=ddbctest --user=SA --password=bbk4k77JKH88g54
   allow_failures:
     - stage: MS SQL Integration Tests
     - d: dmd-beta
