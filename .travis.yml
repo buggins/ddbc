@@ -92,14 +92,15 @@ jobs:
         apt:
           update: true
           sources: ubuntu-toolchain-r-test
-          packages: [ libevent-dev, unixodbc, unixodbc-dev, freetds-bin, freetds-dev, tdsodbc ]
+          packages: [ libevent-dev, freetds-bin, freetds-dev, tdsodbc ]
       before_install:
         - docker pull microsoft/mssql-server-linux:2017-latest
-        - docker run -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=bbk4k77JKH88g54' -p 1433:1433 --name ms-sql -d microsoft/mssql-server-linux
+        - docker run -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=bbk4k77JKH88g54' -p 1433:1433 --name ms-sql -d microsoft/mssql-server-linux:2017-latest
       before_script:
-        - odbcinst -j
-        - cat /etc/odbcinst.ini
-        - docker exec -it ms-sql /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P "bbk4k77JKH88g54" -Q 'CREATE DATABASE ddbctest'
+        - "odbcinst -j"
+        - "echo -e '[FreeTDS]\nDescription = FreeTDS\nDriver = /usr/lib64/libtdsodbc.so.0' >> /etc/odbcinst.ini"
+        - "cat /etc/odbcinst.ini"
+        - "docker exec -it ms-sql /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P bbk4k77JKH88g54 -Q 'CREATE DATABASE ddbctest'"
       script:
         - dub test --config=ODBC
         - cd example && dub build --config=ODBC && ./ddbctest --connection=odbc://localhost --database=ddbctest --user=SA --password=bbk4k77JKH88g54
