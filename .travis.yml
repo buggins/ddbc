@@ -103,7 +103,7 @@ jobs:
         - "docker exec -it ms-sql /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P bbk4k77JKH88g54 -Q 'CREATE DATABASE ddbctest'"
       script:
         - dub test --config=ODBC
-        - cd example && dub build --config=ODBC && ./ddbctest --connection=odbc://localhost --database=ddbctest --user=SA --password=bbk4k77JKH88g54
+        - cd example && dub build --config=ODBC && ./ddbctest --connection=odbc://localhost --database=ddbctest --user=SA --password=bbk4k77JKH88g54 --driver=FreeTDS
   allow_failures:
     - stage: MS SQL Integration Tests
     - d: dmd-beta

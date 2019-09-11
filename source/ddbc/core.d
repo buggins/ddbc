@@ -468,6 +468,17 @@ private unittest {
 }
 
 private unittest {
+	string[string] params;
+	params["user"] = "sa";
+	params["password"] = "p@ss";
+	params["driver"] = "msodbcsql17";
+
+	string url = makeDDBCUrl("odbc", "localhost", 1433, null, params);
+	// todo: check with this URL structure is even correct
+	assert(url == "ddbc:odbc://localhost:1433?user=sa,password=p@ss,driver=msodbcsql17", "ODBC URL is not correct: "~url);
+}
+
+private unittest {
 	//immutable string[string] params = ["dsn","myDSN"];
 	string[string] params;
 	params["dsn"] = "myDSN";

@@ -60,8 +60,9 @@ string syntaxMessage	= 	"\nsyntax:\n" ~
 				"\tddbctest --connection=sqlite::memory:\n" ~
                 "or:\n" ~
                 "\tddbctest --connection=<uri> --database=<database_name> --user=<user> --password=<password> [--port=<port>]\n\n" ~
-				"\tURI is format 'driver://hostname:port' or 'sqlite://filename'\n" ~
+				"\tURI is format 'mysql://hostname:port' or 'postgres://hostname'\n" ~
 				"\tAccepted drivers are [sqlite|postgresql|mysql|odbc]\n" ~
+				"\tODBC driver connection also require a --driver param with a value like FreeTDS or msodbcsql17" ~
 				"\tdatabase name must not be specifed for sqlite and must be specified for other drivers\n";
 
 struct ConnectionParams
@@ -70,6 +71,7 @@ struct ConnectionParams
 	string password;
 	bool ssl;
 	string driver;
+	string odbcdriver;
 	string host;
 	short port;
 	string database;
@@ -87,7 +89,8 @@ int main(string[] args)
 
 	try
 	{
-		getopt(args, "user",&par.user, "password",&par.password, "ssl",&par.ssl, "connection",&URI,"database",&par.database);
+		getopt(args, "user",&par.user, "password",&par.password, "ssl",&par.ssl, 
+				"connection",&URI, "database",&par.database, "driver",&par.odbcdriver);
 	}
 	catch (GetOptException)
 	{
@@ -180,10 +183,16 @@ int main(string[] args)
 						// ./ddbctest --connection=ddbc:odbc://localhost,1433?user=sa,password=bbk4k77JKH88g54,driver=FreeTDS
 						url = URI;
 					} else {
+						if (par.odbcdriver.length==0)
+						{
+							stderr.writefln(syntaxMessage);
+							stderr.writefln("\n *** Error: must specify ODBC driver in format --driver=FreeTDS\n");
+							return 1;
+						}
 						// build the connection string based on args, eg:
-						// ./ddbctest --connection=ddbc:odbc://localhost --user=SA --password=bbk4k77JKH88g54
+						// ./ddbctest --connection=ddbc:odbc://localhost --user=SA --password=bbk4k77JKH88g54 --driver=FreeTDS
 						params = ODBCDriver.setUserAndPassword(par.user, par.password);
-						params["driver"] = "FreeTDS";
+						params["driver"] = par.odbcdriver;
 						url = ODBCDriver.generateUrl(par.host, par.port, params);
 					}
 				}
