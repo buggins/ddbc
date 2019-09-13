@@ -93,7 +93,6 @@ jobs:
       addons:
         apt:
           update: true
-          #sources: ubuntu-toolchain-r-test
           packages: [ libevent-dev, freetds-bin, freetds-common, freetds-dev, tdsodbc ]
       before_install:
         - chmod 644 .travis/*.sh
@@ -104,23 +103,7 @@ jobs:
       script:
         - dub test --config=ODBC
         - cd example && dub build --config=ODBC && ./ddbctest --connection=odbc://localhost --database=ddbctest --user=SA --password=bbk4k77JKH88g54 --driver="ODBC Driver 17 for SQL Server"
-    - d: dmd
-      env: MS_SQL_2019
-      services: docker
-      addons:
-        apt:
-          update: true
-          #sources: ubuntu-toolchain-r-test
-          packages: [ libevent-dev, freetds-bin, freetds-common, freetds-dev, tdsodbc ]
-      before_install:
-        - chmod 644 .travis/*.sh
-        - bash .travis/docker-mssql.sh -n "ms-sql" -p "bbk4k77JKH88g54" -v "2019-CTP3.2-ubuntu"
-        - bash .travis/xenial-msodbc.sh -p "msodbcsql17"
-      before_script:
-        - "docker exec -it ms-sql /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P bbk4k77JKH88g54 -Q 'CREATE DATABASE ddbctest'"
-      script:
-        - dub test --config=ODBC
-        - cd example && dub build --config=ODBC && ./ddbctest --connection=odbc://localhost --database=ddbctest --user=SA --password=bbk4k77JKH88g54 --driver="ODBC Driver 17 for SQL Server"
+
   allow_failures:
     - d: dmd-beta
     - d: gdc
