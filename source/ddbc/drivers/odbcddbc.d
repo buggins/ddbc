@@ -52,7 +52,7 @@ version (USE_ODBC)
     {
 
         /// change to false to disable tests on real ODBC server
-        immutable bool ODBC_TESTS_ENABLED = true;
+        immutable bool ODBC_TESTS_ENABLED = false;
 
         static if (ODBC_TESTS_ENABLED)
         {
