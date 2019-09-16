@@ -111,11 +111,13 @@ version(USE_SQLITE) {
                 case 12:
                     if (sqliteString[2] == ':' && sqliteString[5] == ':') {
                         // HH:MM:SS.SSS
-                        auto time = TimeOfDay.fromISOExtString(sqliteString[0..8]);
-                        int hours = cast(int) to!uint(sqliteString[0 .. 2]);
+                        auto time = TimeOfDay.fromISOExtString(sqliteString[0..8]); // chop the '.SSS' off
                         return DateTime(Date(), time);
                     }
                     break;
+                case 15:
+                    // YYYYMMDDTHHMMSS
+                    return DateTime.fromISOString(sqliteString);
                 case 16:
                      // YYYY-MM-DD HH:MM
                      // YYYY-MM-DDTHH:MM
@@ -128,10 +130,10 @@ version(USE_SQLITE) {
                     return DateTime(date, time);
                 case 19:
                 case 23:
-                     // YYYY-MM-DD HH:MM:SS
-                     // YYYY-MM-DD HH:MM:SS.SSS
-                     // YYYY-MM-DDTHH:MM:SS
-                     // YYYY-MM-DDTHH:MM:SS.SSS
+                    // YYYY-MM-DD HH:MM:SS
+                    // YYYY-MM-DD HH:MM:SS.SSS
+                    // YYYY-MM-DDTHH:MM:SS
+                    // YYYY-MM-DDTHH:MM:SS.SSS
 
                     auto date = Date.fromISOExtString(sqliteString[0..10]);
                     auto time = TimeOfDay.fromISOExtString(sqliteString[11..19]);
@@ -144,6 +146,37 @@ version(USE_SQLITE) {
             // Let the exception fall to the throw statement below
         }
         throw new DateTimeException(format("Unknown SQLite date string: %s", sqliteString));
+    }
+
+    unittest {
+        DateTime hm = fromResultSet("15:18"); // HH:MM
+        DateTime hms = fromResultSet("15:18:51"); // HH:MM:SS
+
+        DateTime hmss = fromResultSet("15:18:51.500"); // HH:MM:SS.SSS
+        assert(hmss.toISOExtString() == "0001-01-01T15:18:51"); // it'll lose the precision and default to 0001-01-01
+        
+
+        DateTime ymd = fromResultSet("2019-09-15"); // YYYY-MM-DD
+        DateTime ymdhm = fromResultSet("2019-09-15 15:18"); // YYYY-MM-DD HH:MM
+        DateTime ymdthm = fromResultSet("2019-09-15T15:18"); // YYYY-MM-DDTHH:MM
+
+        DateTime nonstandard = fromResultSet("20190915T151851"); // YYYYMMDDTHHMMSS
+        
+        DateTime ymdhms = fromResultSet("2019-09-15 15:18:51"); // YYYY-MM-DD HH:MM:SS
+
+        DateTime ymdhmss = fromResultSet("2019-09-15 15:18:51.500"); // YYYY-MM-DD HH:MM:SS.SSS
+        assert(ymdhmss.toISOExtString() == "2019-09-15T15:18:51"); // it'll lose the precision
+
+        DateTime ymdthms = fromResultSet("2019-09-15T15:18:51"); // YYYY-MM-DDTHH:MM:SS
+
+        DateTime ymdthmss = fromResultSet("2019-09-15T15:18:51.500"); // YYYY-MM-DDTHH:MM:SS.SSS
+        assert(ymdthmss.toISOExtString() == "2019-09-15T15:18:51"); // it'll lose the precision
+
+        // todo. SQLite DATETIME values can also have timezone : [+-]HH:MM or Z (for UTC)
+        // as well as greater preciion than a std.datetime.date : DateTime can handle.
+        // we need to add support for std.datetime.systime : SysTime so that we can do:
+        //      SysTime.fromISOExtString("2018-01-01T10:30:00Z"); 
+        // see: https://github.com/buggins/ddbc/issues/62
     }
 
     class SQLITEConnection : ddbc.core.Connection {
