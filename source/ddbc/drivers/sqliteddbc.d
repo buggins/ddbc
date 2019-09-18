@@ -26,6 +26,7 @@ version(USE_SQLITE) {
     import std.algorithm;
     import std.conv;
     import std.datetime;
+    import std.datetime.systime : SysTime, Clock;
     import std.exception;
 
     // For backwards compatibily
@@ -81,10 +82,14 @@ version(USE_SQLITE) {
     }
 
     /// Converts from a selection of the standard SQLite time formats into a DateTime object.
-    private DateTime fromResultSet(S)(in S sqliteString) @safe pure
+    private DateTime fromResultSet(S)(in S sqliteString) @safe
         if (isSomeString!S) {
 
         try {
+            if(sqliteString.toLower.equal("now")) {
+                immutable SysTime now = Clock.currTime();
+                return DateTime(now.year, now.month, now.day, now.hour, now.minute, now.second);
+            }
             switch (sqliteString.length) {
                 case 5:
                     if (sqliteString[2] == ':') {
@@ -108,6 +113,10 @@ version(USE_SQLITE) {
                         return DateTime(date, TimeOfDay());
                     }
                     break;
+                case 11:
+                    // YYYY-MMM-DD
+                    auto date = Date.fromSimpleString(sqliteString);
+                    return DateTime(date, TimeOfDay());
                 case 12:
                     if (sqliteString[2] == ':' && sqliteString[5] == ':') {
                         // HH:MM:SS.SSS
@@ -138,6 +147,11 @@ version(USE_SQLITE) {
                     auto date = Date.fromISOExtString(sqliteString[0..10]);
                     auto time = TimeOfDay.fromISOExtString(sqliteString[11..19]);
                     return DateTime(date, time);
+                case 20:
+                    // YYYY-MMM-DD HH:MM:SS
+                    auto date = Date.fromSimpleString(sqliteString[0..11]);
+                    auto time = TimeOfDay.fromISOExtString(sqliteString[12..20]);
+                    return DateTime(date, time);
                 default:
                     // Fall through to the throw statement below
                     break;
@@ -149,6 +163,8 @@ version(USE_SQLITE) {
     }
 
     unittest {
+        DateTime now = fromResultSet("NOW");
+
         DateTime hm = fromResultSet("15:18"); // HH:MM
         DateTime hms = fromResultSet("15:18:51"); // HH:MM:SS
 
@@ -157,6 +173,7 @@ version(USE_SQLITE) {
         
 
         DateTime ymd = fromResultSet("2019-09-15"); // YYYY-MM-DD
+        fromResultSet("2019-Sep-15");
         DateTime ymdhm = fromResultSet("2019-09-15 15:18"); // YYYY-MM-DD HH:MM
         DateTime ymdthm = fromResultSet("2019-09-15T15:18"); // YYYY-MM-DDTHH:MM
 
@@ -168,6 +185,7 @@ version(USE_SQLITE) {
         assert(ymdhmss.toISOExtString() == "2019-09-15T15:18:51"); // it'll lose the precision
 
         DateTime ymdthms = fromResultSet("2019-09-15T15:18:51"); // YYYY-MM-DDTHH:MM:SS
+        fromResultSet("2019-Sep-15T15:18:51"); // YYYY-MMM-DDTHH:MM:SS
 
         DateTime ymdthmss = fromResultSet("2019-09-15T15:18:51.500"); // YYYY-MM-DDTHH:MM:SS.SSS
         assert(ymdthmss.toISOExtString() == "2019-09-15T15:18:51"); // it'll lose the precision
