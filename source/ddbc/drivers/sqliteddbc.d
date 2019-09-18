@@ -956,9 +956,18 @@ version(USE_SQLITE) {
             if (s is null)
                 return dt;
             try {
-                return fromResultSet(s).date;
+                // date is likely to be either YYYY-MM-DD or YYYY-MMM-DD.
+                // In D we can easily handle the following x3 formats:
+                final switch (s.length) {
+                    case 8:
+                        return Date.fromISOString(s); // ISO: YYYYMMDD
+                    case 10:
+                        return Date.fromISOExtString(s); // ISO extended: YYYY-MM-DD
+                    case 11:
+                        return Date.fromSimpleString(s); // YYYY-MMM-DD
+                }
             } catch (Throwable e) {
-                throw new SQLException("Cannot convert string to DateTime - " ~ s);
+                throw new SQLException("Cannot convert string to Date - " ~ s);
             }
         }
         override TimeOfDay getTime(int columnIndex) {
@@ -969,7 +978,7 @@ version(USE_SQLITE) {
             try {
                 return fromResultSet(s).timeOfDay;
             } catch (Throwable e) {
-                throw new SQLException("Cannot convert string to DateTime - " ~ s);
+                throw new SQLException("Cannot convert string to TimeOfDay - " ~ s);
             }
         }
         
