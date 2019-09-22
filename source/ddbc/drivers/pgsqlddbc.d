@@ -656,6 +656,11 @@ version(USE_PGSQL) {
     		checkClosed();
     		lock();
     		scope(exit) unlock();
+
+            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+                sharedLog.trace(query);
+            }
+
     		PGresult * res = PQexec(conn.getConnection(), std.string.toStringz(query));
     		enforceHelper!SQLException(res !is null, "Failed to execute statement " ~ query);
     		auto status = PQresultStatus(res);

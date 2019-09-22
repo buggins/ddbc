@@ -396,6 +396,9 @@ version(USE_SQLITE) {
         override ddbc.core.ResultSet executeQuery(string query) {
             closePreparedStatement();
             _currentStatement = conn.prepareStatement(query);
+            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+                sharedLog.trace(_currentStatement);
+            }
             _currentResultSet = _currentStatement.executeQuery();
             return _currentResultSet;
         }

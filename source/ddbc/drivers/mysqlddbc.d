@@ -419,6 +419,11 @@ public:
         lock();
         scope(exit) unlock();
 		ulong rowsAffected = 0;
+
+        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+            sharedLog.trace(query);
+        }
+        
 		try {
 			rowsAffected = exec(conn.getConnection(), query);
 	        return cast(int)rowsAffected;

@@ -636,6 +636,11 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
             int rowsAffected = 0;
+
+            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+                sharedLog.trace(query);
+            }
+
             try
             {
                 checkstmt!SQLExecDirect(stmt, cast(SQLCHAR*) toStringz(query), SQL_NTS);
@@ -656,6 +661,11 @@ version (USE_ODBC)
             lock();
             scope (exit)
                 unlock();
+            
+            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+                sharedLog.trace(query);
+            }
+
             try
             {
                 int rowsAffected = executeUpdate(query);
@@ -957,6 +967,11 @@ version (USE_ODBC)
             lock();
             scope (exit)
                 unlock();
+            
+            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+                sharedLog.trace(stmt);
+            }
+
             try
             {
 
@@ -978,6 +993,11 @@ version (USE_ODBC)
             lock();
             scope (exit)
                 unlock();
+            
+            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+                sharedLog.trace(stmt);
+            }
+
             try
             {
                 checkstmt!SQLExecute(stmt);
