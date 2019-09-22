@@ -18,7 +18,8 @@
  */
 module ddbc.drivers.utils;
 
-import std.datetime;
+private import std.datetime : Date, TimeOfDay;
+private import std.format : formattedRead;
 
 string copyCString(T)(const T* c, int actualLength = -1) if (is(T == char) || is (T == ubyte)) {
     const(T)* a = c;
@@ -40,7 +41,6 @@ string copyCString(T)(const T* c, int actualLength = -1) if (is(T == char) || is
 
 TimeOfDay parseTimeoid(const string timeoid)
 {
-    import std.format;
     string input = timeoid.dup;
     int hour, min, sec;
     formattedRead(input, "%s:%s:%s", &hour, &min, &sec);
@@ -49,7 +49,6 @@ TimeOfDay parseTimeoid(const string timeoid)
 
 Date parseDateoid(const string dateoid)
 {
-    import std.format: formattedRead;
     string input = dateoid.dup;
     int year, month, day;
     formattedRead(input, "%s-%s-%s", &year, &month, &day);
