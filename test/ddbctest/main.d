@@ -22,7 +22,7 @@ void main() {
     stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created) VALUES (3, "Walter", 2, "1986-03-21", "2018-03-08T10:30")`);
     stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created) VALUES (4, "Rikki", 3, "1979-05-24", "2018-06-13T11:45")`);
     stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created) VALUES (5, "Iain", 0, "1971-11-12", "2018-11-09T09:33")`);
-    stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created) VALUES (6, "Robert", 1, "1966-03-19", "NOW")`);
+    stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created) VALUES (6, "Robert", 1, "1966-03-19", CURRENT_TIMESTAMP)`);
 
     // our POD object
     struct User {

@@ -86,10 +86,6 @@ version(USE_SQLITE) {
         if (isSomeString!S) {
 
         try {
-            if(sqliteString.toLower.equal("now")) {
-                immutable SysTime now = Clock.currTime();
-                return DateTime(now.year, now.month, now.day, now.hour, now.minute, now.second);
-            }
             switch (sqliteString.length) {
                 case 5:
                     if (sqliteString[2] == ':') {
@@ -163,8 +159,6 @@ version(USE_SQLITE) {
     }
 
     unittest {
-        DateTime now = fromResultSet("NOW");
-
         DateTime hm = fromResultSet("15:18"); // HH:MM
         DateTime hms = fromResultSet("15:18:51"); // HH:MM:SS
 
