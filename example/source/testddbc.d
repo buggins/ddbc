@@ -233,13 +233,14 @@ int main(string[] args)
 	final switch(par.driver)
     {
         case "sqlite":
+			stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1");
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts DATETIME)");
             stmt.executeUpdate("INSERT INTO ddbct1 (name, comment, ts) 
 								VALUES 
 									('name1', 'comment for line 1', CURRENT_TIMESTAMP), 
 									('name2', 'comment for line 2 - can be very long', CURRENT_TIMESTAMP)");
 
-			//stmt.executeUpdate("DROP TABLE IF EXISTS employee");
+			stmt.executeUpdate("DROP TABLE IF EXISTS employee");
 			stmt.executeUpdate("CREATE TABLE IF NOT EXISTS employee (
 				id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
 				name VARCHAR(255) NOT NULL,
@@ -363,13 +364,13 @@ int main(string[] args)
 
 	writeln(" > select all rows from employee table");
     foreach(ref e; conn.createStatement().select!Employee) {
-		SysTime nextMonth = now.add!"months"(1);
+		//SysTime nextMonth = now.add!"months"(1);
 
         writeln("\t{id: ", e.id, ", name: ", e.name, ", flags: ", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated, "}");
 		assert(e.name !is null);
 		assert(e.dob.year > 1950);
-		assert(e.created < cast(DateTime) nextMonth);
-		assert(e.updated < nextMonth);
+		assert(e.created <= cast(DateTime) now);
+		assert(e.updated <= now);
     }
 
     writeln(" > select all rows from employee table WHERE id < 4 ORDER BY name DESC...");

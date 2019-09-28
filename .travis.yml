@@ -88,12 +88,12 @@ jobs:
 
     - stage: MS SQL Integration Tests
       d: dmd
-      env: MS_SQL_2017
+      env: MS_SQL_2017_msodbcsql17
       services: docker
-      addons:
-        apt:
-          update: true
-          packages: [ libevent-dev, freetds-bin, freetds-common, freetds-dev, tdsodbc ]
+      # addons:
+      #   apt:
+      #     update: true
+      #     packages: [ libevent-dev, freetds-bin, freetds-common, freetds-dev, tdsodbc ]
       before_install:
         - chmod 644 .travis/*.sh
         - bash .travis/docker-mssql.sh -n "ms-sql" -p "bbk4k77JKH88g54" -v "2017-latest-ubuntu"
@@ -103,7 +103,25 @@ jobs:
       script:
         - dub test --config=ODBC
         - cd example && dub build --config=ODBC && ./ddbctest --connection=odbc://localhost --database=ddbctest --user=SA --password=bbk4k77JKH88g54 --driver="ODBC Driver 17 for SQL Server"
+      
+    # Use MS-SQL via FreeTDS
+    - d: dmd
+      env: MS_SQL_2017_FreeTDS
+      services: docker
+      addons:
+        apt:
+          update: true
+          packages: [ libevent-dev, freetds-bin, freetds-common, freetds-dev, tdsodbc ]
+      before_install:
+        - chmod 644 .travis/*.sh
+        - bash .travis/docker-mssql.sh -n "ms-sql" -p "bbk4k77JKH88g54" -v "2017-latest-ubuntu"
+      before_script:
+        - "docker exec -it ms-sql /opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P bbk4k77JKH88g54 -Q 'CREATE DATABASE ddbctest'"
+      script:
+        - cd example && dub build
+        - ./ddbctest --connection=odbc://localhost --database=ddbctest --user=SA --password=bbk4k77JKH88g54 --driver=FreeTDS
 
   allow_failures:
     - d: dmd-beta
     - d: gdc
+    - env: MS_SQL_2017_FreeTDS

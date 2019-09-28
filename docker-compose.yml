@@ -1,16 +1,16 @@
 version: '3.7'
 services:
-  # mysql:
-  #   # Don't use latest (MySQL Server 8.0) as we cannot currently authenticate to it
-  #   image: mysql:5.7
-  #   restart: always
-  #   ports: ['3306:3306']
-  #   environment:
-  #     # - MYSQL_ROOT_PASSWORD=bbk4k77JKH88g54
-  #     - MYSQL_ALLOW_EMPTY_PASSWORD=yes
-  #     - MYSQL_DATABASE=testdb
-  #     # - MYSQL_USER=travis
-  #     # - MYSQL_PASSWORD=
+  mysql:
+    # Don't use latest (MySQL Server 8.0) as we cannot currently authenticate to it
+    image: mysql:5.7
+    restart: always
+    ports: ['3306:3306']
+    environment:
+      # - MYSQL_ROOT_PASSWORD=bbk4k77JKH88g54
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes
+      - MYSQL_DATABASE=testdb
+      - MYSQL_USER=travis
+      - MYSQL_PASSWORD=bbk4k77JKH88g54
   postgres:
     image: postgres:latest
     restart: always
