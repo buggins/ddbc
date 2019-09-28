@@ -27,7 +27,9 @@ version(USE_PGSQL) {
 
     import std.algorithm;
     import std.conv;
-    import std.datetime;
+    import std.datetime : Date, DateTime, TimeOfDay;
+    import std.datetime.date;
+    import std.datetime.systime;
     import std.exception;
 
     // For backwards compatibily
@@ -571,7 +573,14 @@ version(USE_PGSQL) {
                                     v[col] = byteaToUbytes(s);
                                     break;
                                 case TIMESTAMPOID:
+                                    //writeln("TIMESTAMPOID: " ~ s);
                                     v[col] = DateTime.fromISOExtString( s.translate( [ ' ': 'T' ] ).split( '.' ).front() );
+                                    // todo: use new function in ddbc.utils: parseDateTime(s);
+                                    break;
+                                case TIMESTAMPTZOID:
+                                    //writeln("TIMESTAMPTZOID: " ~ s);
+                                    v[col] = SysTime.fromISOExtString( s.translate( [ ' ': 'T' ] ) );
+                                    // todo: use new function in ddbc.utils: parseSysTime(s);
                                     break;
                                 case TIMEOID:
                                     v[col] = parseTimeoid(s);
@@ -978,6 +987,10 @@ version(USE_PGSQL) {
             scope(exit) unlock();
             setParam(parameterIndex, x);
         }
+        override void setSysTime(int parameterIndex, SysTime x) {
+            setString(parameterIndex, x.toISOString());
+        }
+
     	override void setDateTime(int parameterIndex, DateTime x) {
             setString(parameterIndex, x.toISOString());
         }
@@ -1309,7 +1322,21 @@ version(USE_PGSQL) {
 //    		}
     		return v.toString();
     	}
-    	override std.datetime.DateTime getDateTime(int columnIndex) {
+
+        override SysTime getSysTime(int columnIndex) {
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+            Variant v = getValue(columnIndex);
+            if (lastIsNull)
+                return SysTime();
+            if (v.convertsTo!(SysTime)) {
+                return v.get!SysTime();
+            }
+            throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to SysTime. '" ~ v.toString() ~ "'");
+        }
+
+    	override DateTime getDateTime(int columnIndex) {
     		checkClosed();
     		lock();
     		scope(exit) unlock();
@@ -1319,9 +1346,9 @@ version(USE_PGSQL) {
     		if (v.convertsTo!(DateTime)) {
     			return v.get!DateTime();
     		}
-    		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to DateTime");
+    		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to DateTime. '" ~ v.toString() ~ "'");
     	}
-    	override std.datetime.Date getDate(int columnIndex) {
+    	override Date getDate(int columnIndex) {
     		checkClosed();
     		lock();
     		scope(exit) unlock();
@@ -1331,9 +1358,9 @@ version(USE_PGSQL) {
     		if (v.convertsTo!(Date)) {
     			return v.get!Date();
     		}
-    		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to Date");
+    		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to Date. '" ~ v.toString() ~ "'");
     	}
-    	override std.datetime.TimeOfDay getTime(int columnIndex) {
+    	override TimeOfDay getTime(int columnIndex) {
     		checkClosed();
     		lock();
     		scope(exit) unlock();
@@ -1343,7 +1370,7 @@ version(USE_PGSQL) {
     		if (v.convertsTo!(TimeOfDay)) {
     			return v.get!TimeOfDay();
     		}
-    		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to TimeOfDay");
+    		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to TimeOfDay. '" ~ v.toString() ~ "'");
     	}
     	
     	override Variant getVariant(int columnIndex) {

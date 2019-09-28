@@ -25,8 +25,10 @@ version(USE_SQLITE) {
 
     import std.algorithm;
     import std.conv;
-    import std.datetime;
+    import std.datetime : Date, DateTime, TimeOfDay;
+    import std.datetime.date;
     import std.datetime.systime : SysTime, Clock;
+    import std.datetime.timezone : UTC;
     import std.exception;
 
     // For backwards compatibily
@@ -79,6 +81,42 @@ version(USE_SQLITE) {
                 return createConnectionPool(SQLITE_UNITTEST_URL);
             }
         }
+    }
+
+    /// Converts from a selection of the standard SQLite time formats into a SysTime object.
+    // Should have similar features to 'DateTime fromResultSet(string)' but handling TZ as well
+    //
+    // SQLite can store dates and times as TEXT, REAL, or INTEGER values:
+    //
+    //  TEXT as ISO8601 strings ("YYYY-MM-DD HH:MM:SS.SSS").
+    //  REAL as Julian day numbers, the number of days since noon in Greenwich on November 24, 4714 B.C. according to the proleptic Gregorian calendar.
+    //  INTEGER as Unix Time, the number of seconds since 1970-01-01 00:00:00 UTC.
+    //
+    // Presume time is being kept as TEXT and try to parse it:
+    //  YYYY-MM-DD HH:MM:SS
+    //  YYYY-MM-DD HH:MM:SS.SSS
+    //  YYYY-MM-DDTHH:MM:SS
+    //  YYYY-MM-DDTHH:MM:SS.SSS
+    //  YYYY-MM-DD HH:MM:SS
+    //  YYYYMMDDHHMMSS
+    private SysTime parseSysTime(S)(in S sqliteString) @safe
+        if (isSomeString!S) {
+        //
+        try {
+            import std.regex : match;
+            if(match(sqliteString, r"\d{4}-\D{3}-\d{2}.*")) {
+                return SysTime.fromSimpleString(sqliteString);
+            } else if(match(sqliteString, r".*[\+|\-]\d{1,2}:\d{1,2}|.*Z")) {
+                return sqliteString.canFind('-') ?
+                    SysTime.fromISOExtString(sqliteString) :
+                    SysTime.fromISOString(sqliteString);
+            } else {
+                return SysTime(fromResultSet(sqliteString), UTC());
+            }
+        } catch (ConvException) {
+            // Let the exception fall to the throw statement below
+        }
+        throw new DateTimeException(format("Unknown SQLite DATETIME string: %s", sqliteString));
     }
 
     /// Converts from a selection of the standard SQLite time formats into a DateTime object.
@@ -139,6 +177,11 @@ version(USE_SQLITE) {
                     // YYYY-MM-DD HH:MM:SS.SSS
                     // YYYY-MM-DDTHH:MM:SS
                     // YYYY-MM-DDTHH:MM:SS.SSS
+                    static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+                        if(sqliteString.length > 19) {
+                            sharedLog.warning(sqliteString ~ " will be converted to DateTime and lose the milliseconds. Consider using SysTime");
+                        }
+                    }
 
                     auto date = Date.fromISOExtString(sqliteString[0..10]);
                     auto time = TimeOfDay.fromISOExtString(sqliteString[11..19]);
@@ -189,6 +232,21 @@ version(USE_SQLITE) {
         // we need to add support for std.datetime.systime : SysTime so that we can do:
         //      SysTime.fromISOExtString("2018-01-01T10:30:00Z"); 
         // see: https://github.com/buggins/ddbc/issues/62
+
+        SysTime nonstandardUtc = parseSysTime("20190915T151851Z"); // YYYYMMDDTHHMMSSZ
+
+        parseSysTime("2018-01-01T10:30:00Z");
+        parseSysTime("2010-Dec-30 00:00:00Z"); // values may come back from db in this format
+
+        // values may come back from db without tz
+        parseSysTime("2019-09-22 20:54:57");
+        //parseSysTime("2019-09-22T20:54");
+
+        SysTime ymdthmssUtc = parseSysTime("2019-09-15T15:18:51.500Z"); // YYYY-MM-DDTHH:MM:SS.SSSZ
+        assert(ymdthmssUtc.toISOExtString() == "2019-09-15T15:18:51.5Z", ymdthmssUtc.toISOExtString());
+
+        SysTime ymdthmssUtcPlus2 = parseSysTime("2019-09-15T15:18:51.500+02:00"); // YYYY-MM-DDTHH:MM:SS.SSS+HH:MM
+        assert(ymdthmssUtcPlus2.toISOExtString() == "2019-09-15T15:18:51.5+02:00", ymdthmssUtcPlus2.toISOExtString());
     }
 
     class SQLITEConnection : ddbc.core.Connection {
@@ -686,6 +744,13 @@ version(USE_SQLITE) {
             sqlite3_bind_text(stmt, parameterIndex, cast(const char *)x.ptr, cast(int)x.length, SQLITE_TRANSIENT);
             paramIsSet[parameterIndex - 1] = true;
         }
+
+        override void setSysTime(int parameterIndex, SysTime x) {
+            // ISO string is "20180101T103000-05:00"
+            // ISO Ext string is "2018-01-01T10:30:00-05:00"
+            setString(parameterIndex, x.toISOExtString());
+        }
+
         override void setDateTime(int parameterIndex, DateTime x) {
             setString(parameterIndex, x.toISOString());
         }
@@ -954,6 +1019,19 @@ version(USE_SQLITE) {
                 res[i] = bytes[i];
             return cast(string)res;
         }
+
+        override SysTime getSysTime(int columnIndex) {
+            immutable string s = getString(columnIndex);
+            SysTime st;
+            if (s is null)
+                return st;
+            try {
+                return parseSysTime(s);
+            } catch (Throwable e) {
+                throw new SQLException("Cannot convert string to SysTime - " ~ s);
+            }
+        }
+
         override DateTime getDateTime(int columnIndex) {
             string s = getString(columnIndex);
             DateTime dt;

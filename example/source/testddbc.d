@@ -1,6 +1,8 @@
 import ddbc.all;
 import std.stdio;
 import std.conv;
+import std.datetime : Date, DateTime;
+import std.datetime.systime : SysTime, Clock;
 import std.algorithm;
 import std.getopt;
 import std.string;
@@ -80,7 +82,7 @@ int main(string[] args)
 {
 	static if(__traits(compiles, (){ import std.experimental.logger; } )) {
 		import std.experimental.logger;
-		globalLogLevel(LogLevel.info);
+		globalLogLevel(LogLevel.all);
 	}
 
 	ConnectionParams par;
@@ -232,31 +234,111 @@ int main(string[] args)
     {
         case "sqlite":
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts DATETIME)");
-            stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
+            stmt.executeUpdate("INSERT INTO ddbct1 (name, comment, ts) 
+								VALUES 
+									('name1', 'comment for line 1', CURRENT_TIMESTAMP), 
+									('name2', 'comment for line 2 - can be very long', CURRENT_TIMESTAMP)");
+
+			//stmt.executeUpdate("DROP TABLE IF EXISTS employee");
+			stmt.executeUpdate("CREATE TABLE IF NOT EXISTS employee (
+				id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+				name VARCHAR(255) NOT NULL,
+				flags int null,
+				dob DATE,
+				created DATETIME,
+				updated DATETIME
+				)");
+
+			stmt.executeUpdate(`INSERT INTO employee (name, flags, dob, created, updated) 
+								VALUES 
+									("John", 5, "1976-04-18", "2017-11-23T20:45", "2010-12-30T00:00:00Z"),
+									("Andrei", 2, "1977-09-11", "2018-02-28T13:45", "2010-12-30T12:10:12Z"),
+									("Walter", 2, "1986-03-21", "2018-03-08T10:30", "2010-12-30T12:10:04.100Z"),
+									("Rikki", 3, "1979-05-24", "2018-06-13T11:45", "2010-12-30T12:10:58Z"),
+									("Iain", 0, "1971-11-12", "2018-11-09T09:33", "20101230T121001Z"),
+									("Robert", 1, "1966-03-19", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
             break;
         case "postgresql":
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id SERIAL PRIMARY KEY, name VARCHAR(250), comment TEXT, ts TIMESTAMP)");
-            stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
+			stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1");
+            stmt.executeUpdate("CREATE TABLE ddbct1 (id SERIAL PRIMARY KEY, name VARCHAR(250), comment TEXT, ts TIMESTAMP)");
+            stmt.executeUpdate("INSERT INTO ddbct1 (name, comment, ts) VALUES ('name1', 'comment for line 1', CURRENT_TIMESTAMP), ('name2','comment for line 2 - can be very long', CURRENT_TIMESTAMP)");
+            
+			stmt.executeUpdate(`DROP TABLE IF EXISTS "employee"`);
+			stmt.executeUpdate(`CREATE TABLE "employee" (
+				id SERIAL PRIMARY KEY,
+				name VARCHAR(255) NOT NULL,
+				flags int null,
+				dob DATE,
+				created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+				updated TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+				)`);
+
+			stmt.executeUpdate(`INSERT INTO "employee" ("name", "flags", "dob", "created", "updated") 
+								VALUES 
+									('John', 5, '1976-04-18', TIMESTAMP '2017-11-23 20:45', TIMESTAMPTZ '2010-12-30 00:00:00'),
+									('Andrei', 2, '1977-09-11', TIMESTAMP '2018-02-28 13:45', TIMESTAMPTZ '2010-12-30 12:10:12'),
+									('Walter', 2, '1986-03-21', TIMESTAMP '2018-03-08 10:30', TIMESTAMPTZ '2010-12-30 12:10:04.100'),
+									('Rikki', 3, '1979-05-24', TIMESTAMP '2018-06-13 11:45', TIMESTAMPTZ '2010-12-30 12:10:58'),
+									('Iain', 0, '1971-11-12', TIMESTAMP '2018-11-09 09:33', TIMESTAMPTZ '2010-12-30 12:10:01'),
+									('Robert', 1, '1966-03-19', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
             break;
         case "mysql": // MySQL has an underscore in 'AUTO_INCREMENT'
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts DATETIME)");
-            stmt.executeUpdate("INSERT INTO ddbct1 (name,comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts TIMESTAMP)");
+            stmt.executeUpdate("INSERT INTO ddbct1 (name, comment, ts) VALUES ('name1', 'comment for line 1', CURRENT_TIMESTAMP), ('name2','comment for line 2 - can be very long', CURRENT_TIMESTAMP)");
+            
+			//stmt.executeUpdate("DROP TABLE IF EXISTS employee");
+			stmt.executeUpdate("CREATE TABLE IF NOT EXISTS employee (
+				id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT,
+				name VARCHAR(255) NOT NULL,
+				flags int null,
+				dob DATE,
+				created TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+				updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+				)");
+
+			stmt.executeUpdate(`INSERT INTO employee (name, flags, dob, created, updated)
+								VALUES
+									('John', 5, '1976-04-18', '2017-11-23T20:45', '2010-12-30T00:00:00'),
+									('Andrei', 2, '1977-09-11', '2018-02-28T13:45', '2010-12-30T12:10:12'),
+									('Walter', 2, '1986-03-21', '2018-03-08T10:30', '2010-12-30T12:10:04.100'),
+									('Rikki', 3, '1979-05-24', '2018-06-13T11:45', '2010-12-30T12:10:58'),
+									('Iain', 0, '1971-11-12', '2018-11-09T09:33', '2010-12-30T12:10:01'),
+									('Robert', 1, '1966-03-19', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
             break;
 		case "odbc":
-			stmt.executeUpdate("DROP TABLE IF EXISTS dbo.ddbct1");
+			stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1");
 			stmt.executeUpdate("CREATE TABLE ddbct1 (id INT NOT NULL IDENTITY(1,1) PRIMARY KEY, name VARCHAR(250), comment VARCHAR(max), ts DATETIME)");
-			stmt.executeUpdate("INSERT INTO ddbct1 (name, comment) VALUES ('name1', 'comment for line 1'), ('name2','comment for line 2 - can be very long')");
-			break;
+			stmt.executeUpdate("INSERT INTO ddbct1 (name, comment, ts) VALUES ('name1', 'comment for line 1', CURRENT_TIMESTAMP), ('name2','comment for line 2 - can be very long', CURRENT_TIMESTAMP)");
+			
+			stmt.executeUpdate("DROP TABLE IF EXISTS [employee]");
+			stmt.executeUpdate("CREATE TABLE [employee] (
+				[id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY,
+				[name] VARCHAR(255) NOT NULL,
+				[flags] int null,
+				[dob] DATE,
+				[created] DATETIME default CURRENT_TIMESTAMP,
+				[updated] DATETIMEOFFSET default CURRENT_TIMESTAMP
+				)");
+
+			stmt.executeUpdate(`INSERT INTO [employee] ([name], [flags], [dob], [created], [updated])
+								VALUES
+									('John', 5, '1976-04-18', '2017-11-23 20:45', '2010-12-30 00:00:00'),
+									('Andrei', 2, '1977-09-11', '2018-02-28 13:45', '2010-12-30 12:10:12'),
+									('Walter', 2, '1986-03-21', '2018-03-08 10:30', '2010-12-30 12:10:04.100'),
+									('Rikki', 3, '1979-05-24', '2018-06-13 11:45', '2010-12-30 12:10:58'),
+									('Iain', 0, '1971-11-12', '2018-11-09 09:33', '2010-12-30 12:10:01'),
+									('Robert', 1, '1966-03-19', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
+            break;
     }
 	write("Done.\n");
 
-	writeln("Testing generic SQL select statements");
+	writeln(" > Testing generic SQL select statements");
 	auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
 	while (rs.next())
 	    writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ rs.getString(3)); // rs.getString(3) was wrapped with strNull - not sure what this did
 
 
-    writeln("Testing prepared SQL statements");
+    writeln(" > Testing prepared SQL statements");
 	PreparedStatement ps2 = conn.prepareStatement("SELECT id, name name_alias, comment, ts FROM ddbct1 WHERE id >= ?");
     scope(exit) ps2.close();
     ps2.setUlong(1, 1);
@@ -264,6 +346,54 @@ int main(string[] args)
     while (prs.next()) {
         writeln(to!string(prs.getLong(1)) ~ "\t" ~ prs.getString(2) ~ "\t" ~ prs.getString(3));
     }
+
+	writeln("Testing basic POD support");
+	
+	// our POD object
+    struct Employee {
+        long id;
+        string name;
+        int flags;
+        Date dob;
+        DateTime created;
+        SysTime updated;
+    }
+
+	immutable SysTime now = Clock.currTime();
+
+	writeln(" > select all rows from employee table");
+    foreach(ref e; conn.createStatement().select!Employee) {
+		SysTime nextMonth = now.add!"months"(1);
+
+        writeln("\t{id: ", e.id, ", name: ", e.name, ", flags: ", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated, "}");
+		assert(e.name !is null);
+		assert(e.dob.year > 1950);
+		assert(e.created < cast(DateTime) nextMonth);
+		assert(e.updated < nextMonth);
+    }
+
+    writeln(" > select all rows from employee table WHERE id < 4 ORDER BY name DESC...");
+    foreach(ref e; conn.createStatement().select!Employee.where("id < 4").orderBy("name desc")) {
+        writeln("\t{id: ", e.id, ", name: ", e.name, ", flags: ", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated, "}");
+		assert(e.id < 4);
+		assert(e.name != "Iain" && e.name != "Robert");
+		assert(e.flags > 1);
+    }
+
+	// todo: Fix the UPDATE/INSERT functionality for PODs
+	// Employee e; 
+	// e.name = "Dave Smith";
+	// e.flags = 35;
+	// e.dob = Date(1979, 8, 5);
+	// e.created = cast(DateTime) now;
+	// e.updated = now;
+
+	// if(conn.createStatement().insert!Employee(e)) {
+	// 	writeln("Successfully inserted new emplyee: \t{id: ", e.id, ", name: ", e.name, ", flags: ", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated, "}");
+	// } else {
+	// 	write("Failed to INSERT employee");
+	// 	assert(false);
+	// }
 
 	return 0;
 }

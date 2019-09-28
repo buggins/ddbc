@@ -371,6 +371,10 @@ public:
 	override ulong getFetchSize() {
 		throw new SQLException("Method not implemented");
 	}
+
+	override std.datetime.systime.SysTime getSysTime(int columnIndex) {
+		throw new SQLException("Method not implemented");
+	}
 	override std.datetime.DateTime getDateTime(int columnIndex) {
 		throw new SQLException("Method not implemented");
 	}
@@ -381,6 +385,9 @@ public:
 		throw new SQLException("Method not implemented");
 	}
 
+	override std.datetime.systime.SysTime getSysTime(string columnName) {
+		return getSysTime(findColumn(columnName));
+	}
 	override std.datetime.DateTime getDateTime(string columnName) {
 		return getDateTime(findColumn(columnName));
 	}

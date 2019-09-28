@@ -26,7 +26,9 @@ module ddbc.drivers.mysqlddbc;
 
 import std.algorithm;
 import std.conv : to;
-import std.datetime;
+import std.datetime : Date, DateTime, TimeOfDay;
+import std.datetime.date;
+import std.datetime.systime;
 import std.exception;
 
 // For backwards compatibily
@@ -743,6 +745,19 @@ public:
             throw new SQLException(e);
         }
     }
+
+    override void setSysTime(int parameterIndex, SysTime x) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+        checkIndex(parameterIndex);
+        try {
+            this.statement.setArg(parameterIndex-1, x);
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
+    }
+
 	override void setDateTime(int parameterIndex, DateTime x) {
 		checkClosed();
 		lock();
@@ -1115,7 +1130,21 @@ public:
 		}
         return v.toString();
     }
-	override std.datetime.DateTime getDateTime(int columnIndex) {
+
+    override SysTime getSysTime(int columnIndex) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+        Variant v = getValue(columnIndex);
+        if (lastIsNull)
+            return SysTime();
+        if (v.convertsTo!(SysTime)) {
+            return v.get!SysTime();
+        }
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to SysTime");
+    }
+
+	override DateTime getDateTime(int columnIndex) {
 		checkClosed();
 		lock();
 		scope(exit) unlock();
@@ -1127,7 +1156,7 @@ public:
 		}
 		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to DateTime");
 	}
-	override std.datetime.Date getDate(int columnIndex) {
+	override Date getDate(int columnIndex) {
 		checkClosed();
 		lock();
 		scope(exit) unlock();
@@ -1139,7 +1168,7 @@ public:
 		}
 		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to Date");
 	}
-	override std.datetime.TimeOfDay getTime(int columnIndex) {
+	override TimeOfDay getTime(int columnIndex) {
 		checkClosed();
 		lock();
 		scope(exit) unlock();

@@ -23,7 +23,9 @@ module ddbc.drivers.odbcddbc;
 
 import std.algorithm;
 import std.conv;
+import std.datetime : Date, DateTime, TimeOfDay;
 import std.datetime.date;
+import std.datetime.systime;
 import std.exception;
 
 // For backwards compatibily
@@ -278,8 +280,14 @@ version (USE_ODBC)
             return SqlType.FLOAT;
         case SQL_DOUBLE:
             return SqlType.DOUBLE;
+        
+        case SQL_DECIMAL:
+        case SQL_NUMERIC:
+            return SqlType.DECIMAL;
+        
         case SQL_TYPE_TIMESTAMP:
             return SqlType.DATETIME;
+
         case SQL_BIGINT:
             return SqlType.BIGINT;
 
@@ -288,6 +296,11 @@ version (USE_ODBC)
         case SQL_TYPE_TIME:
             return SqlType.TIME;
 
+        case SQL_CHAR:
+            return SqlType.CHAR;
+
+        case SQL_WLONGVARCHAR:
+        case SQL_WVARCHAR:
         case SQL_VARCHAR:
             return SqlType.VARCHAR;
         case SQL_BIT:
@@ -617,6 +630,15 @@ version (USE_ODBC)
 
             try
             {
+                // the 3rd arg is length of the query string or SQL_NTS if the string is null terminated
+                // will return 1 of:
+                // 
+                // SQL_SUCCESS
+                // SQL_SUCCESS_WITH_INFO
+                // SQL_ERROR
+                // SQL_INVALID_HANDLE
+                // SQL_NEED_DATA
+                // SQL_NO_DATA_FOUND
                 checkstmt!SQLExecDirect(stmt, cast(SQLCHAR*) toStringz(query), SQL_NTS);
                 bind();
                 resultSet = new ODBCResultSet(this);
@@ -839,6 +861,25 @@ version (USE_ODBC)
                     return Variant(val);
             }
 
+            Variant readValue(T)() if (is(T == SysTime))
+            {
+                auto val = readValue!(SQL_TIMESTAMP_STRUCT);
+
+                if (val.type == typeid(SQL_TIMESTAMP_STRUCT))
+                {
+                    auto s = val.get!(SQL_TIMESTAMP_STRUCT);
+                    import core.time : nsecs;
+                    import std.datetime.timezone : UTC;
+                    //writefln("%s-%s-%s %s:%s:%s.%s", s.year, s.month, s.day, s.hour, s.minute, s.second, s.fraction);
+                    return Variant(SysTime(
+                        DateTime(s.year, s.month, s.day, s.hour, s.minute, s.second),
+                        nsecs(s.fraction),
+                        UTC()
+                        ));
+                }
+                return Variant();
+            }
+
             Variant readValue(T)() if (is(T == DateTime))
             {
                 auto val = readValue!(SQL_TIMESTAMP_STRUCT);
@@ -849,7 +890,6 @@ version (USE_ODBC)
                     return Variant(DateTime(s.year, s.month, s.day, s.hour, s.minute, s.second));
                 }
                 return Variant();
-
             }
 
             Variant readValue(T)() if (is(T == Date))
@@ -904,6 +944,7 @@ version (USE_ODBC)
                 case SQL_TYPE_DATE: return readValue!(Date);
                 case SQL_TYPE_TIME: return readValue!(TimeOfDay);
                 case SQL_TYPE_TIMESTAMP: return readValue!(DateTime);
+                case -155: return readValue!(SysTime); // DATETIMEOFFSET
                 //case SQL_GUID: return Variant(readValue!(SQLGUID));
 
                 default:
@@ -1163,6 +1204,12 @@ version (USE_ODBC)
         override void setString(int parameterIndex, string x)
         {
             bindParam(parameterIndex, x.dup);
+        }
+
+        // todo: handle timezone
+        override void setSysTime(int parameterIndex, SysTime x) {
+            bindParam(parameterIndex, SQL_TIMESTAMP_STRUCT(x.year, x.month,
+            x.day, x.hour, x.minute, x.second, to!ushort(x.fracSecs.total!"msecs"))); // msecs, usecs, or hnsecs
         }
 
         override void setDateTime(int parameterIndex, DateTime x)
@@ -1534,7 +1581,16 @@ version (USE_ODBC)
             return stmt.getColumn(columnIndex).value.get!(string);
         }
 
-        override std.datetime.DateTime getDateTime(int columnIndex)
+        override SysTime getSysTime(int columnIndex) {
+            checkClosed();
+            lock();
+            scope (exit)
+                unlock();
+            
+            return stmt.getColumn(columnIndex).value.get!(SysTime);
+        }
+
+        override DateTime getDateTime(int columnIndex)
         {
             checkClosed();
             lock();
@@ -1544,7 +1600,7 @@ version (USE_ODBC)
             return stmt.getColumn(columnIndex).value.get!(DateTime);
         }
 
-        override std.datetime.Date getDate(int columnIndex)
+        override Date getDate(int columnIndex)
         {
             checkClosed();
             lock();
@@ -1554,7 +1610,7 @@ version (USE_ODBC)
             return stmt.getColumn(columnIndex).value.get!(Date);
         }
 
-        override std.datetime.TimeOfDay getTime(int columnIndex)
+        override TimeOfDay getTime(int columnIndex)
         {
             checkClosed();
             lock();

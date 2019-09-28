@@ -70,6 +70,7 @@ alias Nullable!long Long;
 alias Nullable!ulong Ulong;
 alias Nullable!float Float;
 alias Nullable!double Double;
+alias Nullable!SysTime NullableSysTime;
 alias Nullable!DateTime NullableDateTime;
 alias Nullable!Date NullableDate;
 alias Nullable!TimeOfDay NullableTimeOfDay;
@@ -123,9 +124,11 @@ enum PropertyMemberType : int {
     NULLABLE_DOUBLE_TYPE,// Nullable!double
     STRING_TYPE,   // string
     NULLABLE_STRING_TYPE,   // nullable string - String struct
+    SYSTIME_TYPE,
     DATETIME_TYPE, // std.datetime.DateTime
     DATE_TYPE, // std.datetime.Date
     TIME_TYPE, // std.datetime.TimeOfDay
+    NULLABLE_SYSTIME_TYPE,
     NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
     NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
     NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
@@ -211,11 +214,15 @@ template isSupportedSimpleType(T, string m) {
             enum bool isSupportedSimpleType = true;
         } else static if (is(ReturnType!(ti) == String)) {
             enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == SysTime)) {
+            enum bool isSupportedSimpleType = true;
         } else static if (is(ReturnType!(ti) == DateTime)) {
             enum bool isSupportedSimpleType = true;
         } else static if (is(ReturnType!(ti) == Date)) {
             enum bool isSupportedSimpleType = true;
         } else static if (is(ReturnType!(ti) == TimeOfDay)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!SysTime)) {
             enum bool isSupportedSimpleType = true;
         } else static if (is(ReturnType!(ti) == Nullable!DateTime)) {
             enum bool isSupportedSimpleType = true;
@@ -276,11 +283,15 @@ template isSupportedSimpleType(T, string m) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == String)) {
         enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == SysTime)) {
+        enum bool isSupportedSimpleType = true;
     } else static if (is(ti == DateTime)) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == Date)) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == TimeOfDay)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!SysTime)) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == Nullable!DateTime)) {
         enum bool isSupportedSimpleType = true;
@@ -346,12 +357,16 @@ PropertyMemberType getPropertyType(ti)() {
         return PropertyMemberType.STRING_TYPE;
     } else static if (is(ti == String)) {
         return PropertyMemberType.NULLABLE_STRING_TYPE;
+    } else static if (is(ti == SysTime)) {
+        return PropertyMemberType.SYSTIME_TYPE;
     } else static if (is(ti == DateTime)) {
         return PropertyMemberType.DATETIME_TYPE;
     } else static if (is(ti == Date)) {
         return PropertyMemberType.DATE_TYPE;
     } else static if (is(ti == TimeOfDay)) {
         return PropertyMemberType.TIME_TYPE;
+    } else static if (is(ti == Nullable!SysTime)) {
+        return PropertyMemberType.NULLABLE_SYSTIME_TYPE;
     } else static if (is(ti == Nullable!DateTime)) {
         return PropertyMemberType.NULLABLE_DATETIME_TYPE;
     } else static if (is(ti == Nullable!Date)) {
@@ -415,12 +430,16 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
         return PropertyMemberType.STRING_TYPE;
     } else static if (is(ti == String)) {
         return PropertyMemberType.NULLABLE_STRING_TYPE;
+    } else static if (is(ti == SysTime)) {
+        return PropertyMemberType.SYSTIME_TYPE;
     } else static if (is(ti == DateTime)) {
         return PropertyMemberType.DATETIME_TYPE;
     } else static if (is(ti == Date)) {
         return PropertyMemberType.DATE_TYPE;
     } else static if (is(ti == TimeOfDay)) {
         return PropertyMemberType.TIME_TYPE;
+    } else static if (is(ti == Nullable!SysTime)) {
+        return PropertyMemberType.NULLABLE_SYSTIME_TYPE;
     } else static if (is(ti == Nullable!DateTime)) {
         return PropertyMemberType.NULLABLE_DATETIME_TYPE;
     } else static if (is(ti == Nullable!Date)) {
@@ -469,9 +488,11 @@ static immutable bool[] ColumnTypeCanHoldNulls =
     true, //NULLABLE_DOUBLE_TYPE,// Nullable!double
     false, //STRING_TYPE   // string  -- treat as @NotNull by default
     true, //NULLABLE_STRING_TYPE   // String
+    false, //SYSTIME_TYPE
     false, //DATETIME_TYPE, // std.datetime.DateTime
     false, //DATE_TYPE, // std.datetime.Date
     false, //TIME_TYPE, // std.datetime.TimeOfDay
+    true, //NULLABLE_SYSTIME_TYPE
     true, //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
     true, //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
     true, //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
@@ -508,9 +529,11 @@ static immutable string[] ColumnTypeKeyIsSetCode =
     "(!%s.isNull)", //NULLABLE_DOUBLE_TYPE,// Nullable!double
     "(%s !is null)", //STRING_TYPE   // string
     "(%s !is null)", //NULLABLE_STRING_TYPE   // String
+    "(%s != SysTime())", //SYSTIME_TYPE, // std.datetime.systime : SysTime
     "(%s != DateTime())", //DATETIME_TYPE, // std.datetime.DateTime
     "(%s != Date())", //DATE_TYPE, // std.datetime.Date
     "(%s != TimeOfDay())", //TIME_TYPE, // std.datetime.TimeOfDay
+    "(!%s.isNull)", //NULLABLE_SYSTIME_TYPE, // Nullable!std.datetime.systime.SysTime
     "(!%s.isNull)", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
     "(!%s.isNull)", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
     "(!%s.isNull)", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
@@ -547,9 +570,11 @@ static immutable string[] ColumnTypeIsNullCode =
     "(%s.isNull)", //NULLABLE_DOUBLE_TYPE,// Nullable!double
     "(%s is null)", //STRING_TYPE   // string
     "(%s is null)", //NULLABLE_STRING_TYPE   // String
+    "(false)", //SYSTIME_TYPE
     "(false)", //DATETIME_TYPE, // std.datetime.DateTime
     "(false)", //DATE_TYPE, // std.datetime.Date
     "(false)", //TIME_TYPE, // std.datetime.TimeOfDay
+    "(%s.isNull)", //NULLABLE_SYSTIME_TYPE
     "(%s.isNull)", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
     "(%s.isNull)", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
     "(%s.isNull)", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
@@ -586,9 +611,11 @@ static immutable string[] ColumnTypeSetNullCode =
     "Nullable!double nv;", //NULLABLE_DOUBLE_TYPE,// Nullable!double
     "string nv;", //STRING_TYPE   // string
     "string nv;", //NULLABLE_STRING_TYPE   // String
+    "SysTime nv;", //SYSTIME_TYPE
     "DateTime nv;", //DATETIME_TYPE, // std.datetime.DateTime
     "Date nv;", //DATE_TYPE, // std.datetime.Date
     "TimeOfDay nv;", //TIME_TYPE, // std.datetime.TimeOfDay
+    "Nullable!SysTime nv;", //NULLABLE_SYSTIME_TYPE
     "Nullable!DateTime nv;", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
     "Nullable!Date nv;", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
     "Nullable!TimeOfDay nv;", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
@@ -621,9 +648,11 @@ static immutable string[] ColumnTypePropertyToVariant =
     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
     "Variant(%s)", //STRING_TYPE   // string
     "Variant(%s)", //NULLABLE_STRING_TYPE   // String
+    "Variant(%s)", //SYSTIME_TYPE
     "Variant(%s)", //DATETIME_TYPE, // std.datetime.DateTime
     "Variant(%s)", //DATE_TYPE, // std.datetime.Date
     "Variant(%s)", //TIME_TYPE, // std.datetime.TimeOfDay
+    "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_SYSTIME_TYPE
     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
@@ -656,9 +685,11 @@ static immutable string[] ColumnTypeDatasetReaderCode =
     "Nullable!double(r.getDouble(index))", //NULLABLE_DOUBLE_TYPE,// Nullable!double
     "r.getString(index)", //STRING_TYPE   // string
     "r.getString(index)", //NULLABLE_STRING_TYPE   // String
+    "r.getSysTime(index)", //SYSTIME_TYPE
     "r.getDateTime(index)", //DATETIME_TYPE, // std.datetime.DateTime
     "r.getDate(index)", //DATE_TYPE, // std.datetime.Date
     "r.getTime(index)", //TIME_TYPE, // std.datetime.TimeOfDay
+    "Nullable!SysTime(r.getSysTime(index))", //NULLABLE_SYSTIME_TYPE
     "Nullable!DateTime(r.getDateTime(index))", //NULLABLE_DATETIME_TYPE, // Nullable!std.datetime.DateTime
     "Nullable!Date(r.getDate(index))", //NULLABLE_DATE_TYPE, // Nullable!std.datetime.Date
     "Nullable!TimeOfDay(r.getTime(index))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
@@ -691,7 +722,7 @@ string getPropertyWriteCode(T)() {
 /// returns array of field names
 string[] getColumnNamesForType(T)()  if (__traits(isPOD, T)) {
     string[] res;
-    foreach(m; __traits(allMembers, T)) {
+    foreach(m; FieldNameTuple!T) {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
             // skip non-public members
             static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
@@ -710,7 +741,7 @@ string getColumnReadCode(T, string m)() {
 
 string getAllColumnsReadCode(T)() {
     string res = "int index = 1;\n";
-    foreach(m; __traits(allMembers, T)) {
+    foreach(m; FieldNameTuple!T) {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
             // skip non-public members
             static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
@@ -774,6 +805,15 @@ unittest {
 /// returns "SELECT <field list> FROM <table name>"
 string generateSelectSQL(T)() {
     return "SELECT " ~ join(getColumnNamesForType!(T)(), ",") ~ " FROM " ~ getTableNameForType!(T)();
+}
+
+unittest {
+    struct User1 {
+        long id;
+        string name;
+        int flags;
+    }
+    static assert(generateSelectSQL!User1() == "SELECT id,name,flags FROM user1");
 }
 
 string joinFieldList(fieldList...)() {
@@ -863,6 +903,8 @@ string getColumnTypeDatasetReadCodeByName(T, string m)() {
             return `r.getDate("` ~ m ~ `")`;
         case TIME_TYPE:
             return `r.getTime("` ~ m ~ `")`;
+        case SYSTIME_TYPE:
+            return `r.getSysTime("` ~ m ~ `")`;
         case DATETIME_TYPE:
             return `r.getDateTime("` ~ m ~ `")`;
         case BYTE_ARRAY_TYPE:
@@ -895,6 +937,8 @@ string getColumnTypeDatasetReadCodeByName(T, string m)() {
             return `Nullable!Date(r.getDate("` ~ m ~ `"))`;
         case NULLABLE_TIME_TYPE:
             return `Nullable!Time(r.getTime("` ~ m ~ `"))`;
+        case NULLABLE_SYSTIME_TYPE:
+            return `Nullable!SysTime(r.getSysTime("` ~ m ~ `"))`;
         case NULLABLE_DATETIME_TYPE:
             return `Nullable!DateTime(r.getDateTime("` ~ m ~ `"))`;
     }
@@ -912,7 +956,7 @@ string getColumnReadCodeByName(T, string m)() {
 
 string getAllColumnsReadCodeByName(T)() {
     string res;
-    foreach(m; __traits(allMembers, T)) {
+    foreach(m; FieldNameTuple!T) {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
             // skip non-public members
             static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
@@ -978,7 +1022,7 @@ struct select(T, fieldList...) if (__traits(isPOD, T)) {
 string generateInsertSQL(T)() {
     string res = "INSERT INTO " ~ getTableNameForType!(T)();
     string []values;
-    foreach(m; __traits(allMembers, T)) {
+    foreach(m; FieldNameTuple!T) {
       if (m != "id") {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
           // skip non-public members
@@ -999,18 +1043,18 @@ string addFieldValue(T)(string m) {
   tmp ~= `	if(o.`~m~`.isNull) {`;
   tmp ~= `		values ~= "NULL";`;
   tmp ~= `	} else {`;
-  tmp ~= `		values ~= "\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+  tmp ~= `		values ~= "'" ~ to!string(o.` ~ m ~ `) ~ "'";`;
   tmp ~= `}} else {`;
-  tmp ~= `		values ~= "\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+  tmp ~= `		values ~= "'" ~ to!string(o.` ~ m ~ `) ~ "'";`;
   tmp ~= `}}`;
   return tmp;
-  // return `values ~= "\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+  // return `values ~= "'" ~ to!string(o.` ~ m ~ `) ~ "'";`;
 }
 
 bool insert(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
     auto insertSQL = generateInsertSQL!(T)();
     string []values;
-    foreach(m; __traits(allMembers, T)) {
+    foreach(m; FieldNameTuple!T) {
       if (m != "id") {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
           // skip non-public members
@@ -1032,7 +1076,7 @@ bool insert(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
 string generateUpdateSQL(T)() {
   string res = "UPDATE " ~ getTableNameForType!(T)();
   string []values;
-  foreach(m; __traits(allMembers, T)) {
+  foreach(m; FieldNameTuple!T) {
     if (m != "id") {
       static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
         // skip non-public members
@@ -1053,13 +1097,31 @@ string addUpdateValue(T)(string m) {
 bool update(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
     auto updateSQL = generateUpdateSQL!(T)();
     string []values;
-    foreach(m; __traits(allMembers, T)) {
+    foreach(m; FieldNameTuple!T) {
       if (m != "id") {
         static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
           // skip non-public members
           static if (__traits(getProtection, __traits(getMember, T, m)) == "public") {
-            // pragma(msg, addUpdateValue!(T)(m));
-            mixin(addUpdateValue!(T)(m));
+
+            // static if(typeof(__traits(getMember, T, m)) == function) {
+            //     pragma(msg, "Ignoring function: "~m~"()");
+            // }
+
+            // static if(is(__traits(getMember, T, m) == function)) {
+            //     pragma(msg, "Ignoring function: "~m~"()");
+            // } else {
+            //     pragma(msg, addUpdateValue!(T)(m));
+            //     //mixin(addUpdateValue!(T)(m));
+            // }
+
+            static if (__traits(getOverloads, T, m).length > 0) {
+                // even if the struct/class doesn't have and override (such as opAssign) the compiler
+                // can potentially add one. See: https://dlang.org/library/std/traits/has_elaborate_assign.html
+                pragma(msg, "Ignoring 'override "~m~"()'");
+            } else {
+                pragma(msg, addUpdateValue!(T)(m));
+                mixin(addUpdateValue!(T)(m));
+            }
           }
         }
       }
@@ -1135,11 +1197,15 @@ template isSupportedSimpleTypeRef(M) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == String)) {
         enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == SysTime)) {
+        enum bool isSupportedSimpleType = true;
     } else static if (is(ti == DateTime)) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == Date)) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == TimeOfDay)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!SysTime)) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == Nullable!DateTime)) {
         enum bool isSupportedSimpleType = true;
