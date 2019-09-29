@@ -18,8 +18,14 @@
  */
 module ddbc.drivers.utils;
 
-private import std.datetime : Date, TimeOfDay;
+private import std.conv : ConvException;
+private import std.datetime : Date, DateTime, TimeOfDay;
+private import std.datetime.date;
+private import std.datetime.systime : SysTime;
+private import std.datetime.timezone : UTC;
 private import std.format : formattedRead;
+//private import std.traits : isSomeString;
+private import std.algorithm : canFind;
 
 string copyCString(T)(const T* c, int actualLength = -1) if (is(T == char) || is (T == ubyte)) {
     const(T)* a = c;
@@ -37,6 +43,52 @@ string copyCString(T)(const T* c, int actualLength = -1) if (is(T == char) || is
         return cast(string)(a[0..actualLength].idup);
     }
     
+}
+
+SysTime parseSysTime(const string timestampString) @safe {
+    try {
+        import std.regex : match;
+        if(match(timestampString, r"\d{4}-\D{3}-\d{2}.*")) {
+            return SysTime.fromSimpleString(timestampString);
+        } else if(match(timestampString, r".*[\+|\-]\d{1,2}:\d{1,2}|.*Z")) {
+            return timestampString.canFind('-') ?
+                SysTime.fromISOExtString(timestampString) :
+                SysTime.fromISOString(timestampString);
+        } else {
+            return SysTime(parseDateTime(timestampString), UTC());
+        }
+    } catch (ConvException e) {
+        // static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+        //     import std.experimental.logger : sharedLog; 
+        //     sharedLog.error("Could not parse " ~ timestampString ~ " to SysTime", e);
+        // }
+        throw new DateTimeException("Can not convert");
+    }
+}
+
+unittest {
+    // Accept valid (as per D language) systime formats
+    parseSysTime("2019-May-04 13:34:10.500Z");
+    parseSysTime("2019-Jan-02 13:34:10-03:00");
+    parseSysTime("2019-05-04T13:34:10.500Z");
+    parseSysTime("2019-06-14T13:34:10.500+01:00");
+    parseSysTime("2019-02-07T13:34:10Z");
+    parseSysTime("2019-08-12T13:34:10+01:00");
+    parseSysTime("2019-09-03T13:34:10");
+
+    // Accept valid (as per D language) date & datetime timestamps
+    // parseSysTime("2019-05-04 13:34:10");
+    // parseSysTime("2019-05-07 13:32");
+    // parseSysTime("2019-05-08");
+
+    // Accept non-standard (as per D language) timestamp formats
+    //parseSysTime("2019/05/07 13:32");
+    // parseSysTime("2010-12-30 12:10:04.1+00"); // postgresql
+}
+
+DateTime parseDateTime(const string timestampString) @safe {
+    return DateTime.fromISOExtString(timestampString); // todo: make this better
+    //return DateTime.fromISOExtString( s.translate( [ ' ': 'T' ] ).split( '.' ).front() );
 }
 
 TimeOfDay parseTimeoid(const string timeoid)

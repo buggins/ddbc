@@ -240,6 +240,7 @@ interface DataSetReader {
 	double getDouble(int columnIndex);
 	float getFloat(int columnIndex);
 	string getString(int columnIndex);
+	SysTime getSysTime(int columnIndex);
 	DateTime getDateTime(int columnIndex);
 	Date getDate(int columnIndex);
 	TimeOfDay getTime(int columnIndex);
@@ -263,6 +264,7 @@ interface DataSetWriter {
 	void setUbyte(int parameterIndex, ubyte x);
 	void setUbytes(int parameterIndex, ubyte[] x);
 	void setString(int parameterIndex, string x);
+	void setSysTime(int parameterIndex, SysTime x);
 	void setDateTime(int parameterIndex, DateTime x);
 	void setDate(int parameterIndex, Date x);
 	void setTime(int parameterIndex, TimeOfDay x);
@@ -304,6 +306,7 @@ interface ResultSet : DataSetReader {
 	float getFloat(int columnIndex);
 	string getString(int columnIndex);
     Variant getVariant(int columnIndex);
+	SysTime getSysTime(int columnIndex);
 	DateTime getDateTime(int columnIndex);
 	Date getDate(int columnIndex);
 	TimeOfDay getTime(int columnIndex);
@@ -327,6 +330,7 @@ interface ResultSet : DataSetReader {
 	double getDouble(string columnName);
 	float getFloat(string columnName);
     string getString(string columnName);
+	SysTime getSysTime(string columnName);
 	DateTime getDateTime(string columnName);
 	Date getDate(string columnName);
 	TimeOfDay getTime(string columnName);
@@ -375,6 +379,7 @@ interface PreparedStatement : Statement, DataSetWriter {
 	void setUbyte(int parameterIndex, ubyte x);
 	void setUbytes(int parameterIndex, ubyte[] x);
 	void setString(int parameterIndex, string x);
+	void setSysTime(int parameterIndex, SysTime x);
 	void setDateTime(int parameterIndex, DateTime x);
 	void setDate(int parameterIndex, Date x);
 	void setTime(int parameterIndex, TimeOfDay x);
