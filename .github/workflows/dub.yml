@@ -43,13 +43,13 @@ jobs:
         with:
           compiler: ${{ matrix.compiler }}
 
-      - name: Install ${{ matrix.os }} dependencies
+      - name: Install dependencies on Ubuntu
         if: startsWith(matrix.os, 'ubuntu')
-        run: sudo apt-get update && sudo apt-get install libsqlite3-dev -y
+        run: sudo apt-get update && sudo apt-get install libev-dev libpq-dev libevent-dev libsqlite3-dev -y
 
-      - name: Install ${{ matrix.os }} dependencies
+      - name: Install dependencies on Mac OSX
         if: startsWith(matrix.os, 'mac')
-        run: brew install sqlite
+        run: brew bundle
 
       - name: dub test with SQLite config
         run: dub test --config=SQLite
