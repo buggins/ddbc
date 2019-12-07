@@ -3,7 +3,7 @@
     "description": "DB Connector for D language, similar to JDBC (mysql, sqlite, postgresql, odbc)",
     "authors": ["Vadim Lopatin"],
     "homepage": "https://github.com/buggins/ddbc",
-    "license": "Boost Software License (BSL 1.0)",
+    "license": "BSL-1.0",
     "targetPath": "lib",
     "targetType": "staticLibrary",
     "buildRequirements": [
