@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macOS-latest ]
+        os: [ ubuntu-latest ] # don't bother with macOS-latest
         compiler:
           - dmd-latest
           - ldc-latest
@@ -47,9 +47,9 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu')
         run: sudo apt-get update && sudo apt-get install libev-dev libpq-dev libevent-dev libsqlite3-dev -y
 
-      - name: Install dependencies on Mac OSX
-        if: startsWith(matrix.os, 'mac')
-        run: brew bundle
+      # - name: Install dependencies on Mac OSX
+      #   if: startsWith(matrix.os, 'mac')
+      #   run: brew bundle
 
       - name: dub test with SQLite config
         run: dub test --config=SQLite
