@@ -44,7 +44,6 @@ jobs:
   include:
     - stage: test
       d: dmd-beta
-    - d: gdc
     - stage: Mac builds
       d: dmd
       os: osx
@@ -126,5 +125,4 @@ jobs:
 
   allow_failures:
     - d: dmd-beta
-    - d: gdc
     - env: MS_SQL_2017_FreeTDS
