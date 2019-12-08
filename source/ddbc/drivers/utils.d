@@ -62,7 +62,7 @@ SysTime parseSysTime(const string timestampString) @safe {
         //     import std.experimental.logger : sharedLog; 
         //     sharedLog.error("Could not parse " ~ timestampString ~ " to SysTime", e);
         // }
-        throw new DateTimeException("Can not convert");
+        throw new DateTimeException("Can not convert '" ~ timestampString ~ "' to SysTime");
     }
 }
 
@@ -76,19 +76,51 @@ unittest {
     parseSysTime("2019-08-12T13:34:10+01:00");
     parseSysTime("2019-09-03T13:34:10");
 
-    // Accept valid (as per D language) date & datetime timestamps
-    // parseSysTime("2019-05-04 13:34:10");
-    // parseSysTime("2019-05-07 13:32");
+    // Accept valid (as per D language) date & datetime timestamps (will default timezone as UTC)
+    parseSysTime("2010-Dec-30 00:00:00");
+    parseSysTime("2019-05-04 13:34:10");
     // parseSysTime("2019-05-08");
 
     // Accept non-standard (as per D language) timestamp formats
-    //parseSysTime("2019/05/07 13:32");
-    // parseSysTime("2010-12-30 12:10:04.1+00"); // postgresql
+    //parseSysTime("2019-05-07 13:32"); // todo: handle missing seconds
+    //parseSysTime("2019/05/07 13:32"); // todo: handle slash instead of hyphen
+    //parseSysTime("2010-12-30 12:10:04.1+00"); // postgresql
 }
 
 DateTime parseDateTime(const string timestampString) @safe {
-    return DateTime.fromISOExtString(timestampString); // todo: make this better
-    //return DateTime.fromISOExtString( s.translate( [ ' ': 'T' ] ).split( '.' ).front() );
+    try {
+        import std.regex : match;
+        if(match(timestampString, r"\d{8}T\d{6}")) {
+            // ISO String: 'YYYYMMDDTHHMMSS'
+            return DateTime.fromISOString(timestampString);
+        } else if(match(timestampString, r"\d{4}-\D{3}-\d{2}.*")) {
+            // Simple String 'YYYY-Mon-DD HH:MM:SS'
+            return DateTime.fromSimpleString(timestampString);
+        } else if(match(timestampString, r"\d{4}-\d{2}-\d{2}.*")) {
+            // ISO ext string 'YYYY-MM-DDTHH:MM:SS'
+            import std.string : translate;
+            return DateTime.fromISOExtString(timestampString.translate( [ ' ': 'T' ] ));
+        }
+        throw new DateTimeException("Can not convert " ~ timestampString);
+    } catch (ConvException e) {
+        // static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+        //     import std.experimental.logger : sharedLog;
+        //     sharedLog.error("Could not parse " ~ timestampString ~ " to SysTime", e);
+        // }
+        throw new DateTimeException("Can not convert '" ~ timestampString ~ "' to DateTime");
+    }
+}
+unittest {
+    // Accept valid (as per D language) datetime formats
+    parseDateTime("20101230T000000");
+    parseDateTime("2019-May-04 13:34:10");
+    parseDateTime("2019-Jan-02 13:34:10");
+    parseDateTime("2019-05-04T13:34:10");
+
+    // Accept non-standard (as per D language) timestamp formats
+    parseDateTime("2019-06-14 13:34:10"); // accept a non-standard variation (space instead of T)
+    //parseDateTime("2019-05-07 13:32"); // todo: handle missing seconds
+    //parseDateTime("2019/05/07 13:32"); // todo: handle slash instead of hyphen
 }
 
 TimeOfDay parseTimeoid(const string timeoid)

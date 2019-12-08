@@ -474,7 +474,7 @@ class ParameterMetaDataImpl : ParameterMetaData {
 
 /// Metadata for result set - to be used in driver implementations
 class ResultSetMetaDataImpl : ResultSetMetaData {
-	ColumnMetadataItem [] cols;
+	private ColumnMetadataItem [] cols;
 	this(ColumnMetadataItem [] cols) {
 		this.cols = cols;
 	}
