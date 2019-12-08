@@ -5,21 +5,22 @@ language: d
 d:
   - ldc
   - dmd
-  - dmd-2.089.0
-  - dmd-2.088.1
-  - dmd-2.087.1
-  - dmd-2.086.1
-  - dmd-2.085.1
-  - dmd-2.084.1
-  - dmd-2.083.1
-  - dmd-2.082.1
-  - ldc-1.18.0 # eq to dmd v2.088.1
-  - ldc-1.17.0 # eq to dmd v2.087
-  - ldc-1.16.0 # eq to dmd v2.086.1
-  - ldc-1.15.0 # eq to dmd v2.085.1
-  - ldc-1.14.0 # eq to dmd v2.084.1
-  - ldc-1.13.0 # eq to dmd v2.083.1
-  - ldc-1.12.0 # eq to dmd v2.082.1
+  # - dmd-2.089.0
+  # - dmd-2.088.1
+  # - dmd-2.087.1
+  # - dmd-2.086.1
+  # - dmd-2.085.1
+  # - dmd-2.084.1
+  # - dmd-2.083.1
+  # - dmd-2.082.1
+  # - ldc-1.18.0 # eq to dmd v2.088.1
+  # - ldc-1.17.0 # eq to dmd v2.087
+  # - ldc-1.16.0 # eq to dmd v2.086.1
+  # - ldc-1.15.0 # eq to dmd v2.085.1
+  # - ldc-1.14.0 # eq to dmd v2.084.1
+  # - ldc-1.13.0 # eq to dmd v2.083.1
+  # - ldc-1.12.0 # eq to dmd v2.082.1
+  # THESE COMPILER VERSIONS ARE COMMENTED OUT AS GITHUB ACTIONS NOW USED TO COVER THOSE BUILDS
 
 script:
   - dub build --config=full --compiler=${DC}
