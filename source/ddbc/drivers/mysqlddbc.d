@@ -405,7 +405,7 @@ public:
         scope(exit) unlock();
 
         static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-            sharedLog.tracef(queryString);
+            sharedLog.trace(queryString);
         }
 
 		try {
@@ -835,24 +835,23 @@ public:
 
 class MySQLResultSet : ResultSetImpl {
     private MySQLStatement stmt;
-    private ResultRange results;
-    ResultSetMetaData metadata;
+    private Row[] rows;
+    private ResultSetMetaData metadata;
     private bool closed;
-    private int currentRowIndex;
-    private ulong rowCount;
+    private int currentRowIndex = 0;
+    private ulong rowCount = 0;
     private int[string] columnMap;
     private bool lastIsNull;
-    private int columnCount;
+    private int columnCount = 0;
 
-    Variant getValue(int columnIndex) {
+    private Variant getValue(int columnIndex) {
 		checkClosed();
         enforceHelper!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
         enforceHelper!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
-        Row[] rs = results.array;
-        lastIsNull = rs[currentRowIndex].isNull(columnIndex - 1);
+        lastIsNull = this.rows[currentRowIndex].isNull(columnIndex - 1);
 		Variant res;
 		if (!lastIsNull)
-		    res = rs[currentRowIndex][columnIndex - 1];
+		    res = this.rows[currentRowIndex][columnIndex - 1];
         return res;
     }
 
@@ -873,16 +872,16 @@ public:
 
     this(MySQLStatement stmt, ResultRange results, ResultSetMetaData metadata) {
         this.stmt = stmt;
-        this.results = results;
+        this.rows = results.array;
         this.metadata = metadata;
         try {
-            closed = false;
-            //rowCount = cast(int)results.array.length;
-            currentRowIndex = -1;
+            this.closed = false;
+            this.rowCount = cast(ulong)this.rows.length;
+            this.currentRowIndex = -1;
 			foreach(key, val; results.colNameIndicies) {
-			    columnMap[key] = cast(int)val;
+                this.columnMap[key] = cast(int)val;
 			}
-    		columnCount = cast(int)results.colNames.length;
+            this.columnCount = cast(int)results.colNames.length;
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -1208,7 +1207,7 @@ public:
         scope(exit) unlock();
         enforceHelper!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
         enforceHelper!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
-        return results.array[currentRowIndex].isNull(columnIndex - 1);
+        return this.rows[currentRowIndex].isNull(columnIndex - 1);
     }
 
     //Retrieves the Statement object that produced this ResultSet object.

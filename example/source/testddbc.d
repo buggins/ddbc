@@ -229,7 +229,8 @@ int main(string[] args)
 		stmt.close();
 
 	// execute simple queries to create and fill table
-	write("Creating tables and data...\t");
+	writeln("Creating tables and data...");
+
 	final switch(par.driver)
     {
         case "sqlite":
@@ -284,27 +285,28 @@ int main(string[] args)
 									('Robert', 1, '1966-03-19', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
             break;
         case "mysql": // MySQL has an underscore in 'AUTO_INCREMENT'
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts TIMESTAMP)");
-            stmt.executeUpdate("INSERT INTO ddbct1 (name, comment, ts) VALUES ('name1', 'comment for line 1', CURRENT_TIMESTAMP), ('name2','comment for line 2 - can be very long', CURRENT_TIMESTAMP)");
+			stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1");
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (`id` INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT, `name` VARCHAR(250), `comment` MEDIUMTEXT, `ts` TIMESTAMP)");
+            stmt.executeUpdate("INSERT INTO ddbct1 (`name`, `comment`, `ts`) VALUES ('name1', 'comment for line 1', CURRENT_TIMESTAMP), ('name2','comment for line 2 - can be very long', CURRENT_TIMESTAMP)");
             
-			//stmt.executeUpdate("DROP TABLE IF EXISTS employee");
+			stmt.executeUpdate("DROP TABLE IF EXISTS employee");
 			stmt.executeUpdate("CREATE TABLE IF NOT EXISTS employee (
-				id INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT,
-				name VARCHAR(255) NOT NULL,
-				flags int null,
-				dob DATE,
-				created TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-				updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+				`id` INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT,
+				`name` VARCHAR(255) NOT NULL,
+				`flags` int null,
+				`dob` DATE,
+				`created` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+				`updated` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 				)");
 
-			stmt.executeUpdate(`INSERT INTO employee (name, flags, dob, created, updated)
+			stmt.executeUpdate("INSERT INTO employee (`name`, `flags`, `dob`, `created`, `updated`)
 								VALUES
 									('John', 5, '1976-04-18', '2017-11-23T20:45', '2010-12-30T00:00:00'),
 									('Andrei', 2, '1977-09-11', '2018-02-28T13:45', '2010-12-30T12:10:12'),
 									('Walter', 2, '1986-03-21', '2018-03-08T10:30', '2010-12-30T12:10:04.100'),
 									('Rikki', 3, '1979-05-24', '2018-06-13T11:45', '2010-12-30T12:10:58'),
 									('Iain', 0, '1971-11-12', '2018-11-09T09:33', '2010-12-30T12:10:01'),
-									('Robert', 1, '1966-03-19', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
+									('Robert', 1, '1966-03-19', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
             break;
 		case "odbc":
 			stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1");
@@ -334,12 +336,38 @@ int main(string[] args)
 	write("Done.\n");
 
 	writeln(" > Testing generic SQL select statements");
-	auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
-	while (rs.next())
-	    writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ rs.getString(3)); // rs.getString(3) was wrapped with strNull - not sure what this did
+
+    ResultSet rs = stmt.executeQuery("SELECT * FROM ddbct1");
+    
+    int i = 0;
+
+    while (rs.next()) {
+        writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2));
+        i++;
+    }
+	writefln("\tThere were %,d rows returned from the ddbct1 table...", i);
+
+    ulong count = rs.getFetchSize();
+	assert(i == to!int(count), "fetchSize should give the correct row count");
+    assert(2 == count, "There should be 2 results but instead there was " ~ to!string(count));
 
 
-    writeln(" > Testing prepared SQL statements");
+    rs = stmt.executeQuery("SELECT id,comment FROM ddbct1 WHERE id = 2");
+    i = 0;
+    while (rs.next()) {
+        writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2));
+        i++;
+    }
+	assert(i == to!int(rs.getFetchSize()), "fetchSize should give the correct row count");
+    assert(1 == i, "There should be 1 result but instead there was " ~ to!string(i));
+
+
+	rs = stmt.executeQuery("SELECT id, comment, ts FROM ddbct1 ORDER BY id DESC");
+    assert(2 == rs.getFetchSize(), "There should be 2 results but instead there was " ~ to!string(count));
+    //writefln("\tThere were %,d rows that are ordered BY id DESC", rs.getFetchSize());
+
+
+    writeln("\n > Testing prepared SQL statements");
 	PreparedStatement ps2 = conn.prepareStatement("SELECT id, name name_alias, comment, ts FROM ddbct1 WHERE id >= ?");
     scope(exit) ps2.close();
     ps2.setUlong(1, 1);
@@ -396,5 +424,6 @@ int main(string[] args)
 	// 	assert(false);
 	// }
 
+	writeln("Completed tests");
 	return 0;
 }
