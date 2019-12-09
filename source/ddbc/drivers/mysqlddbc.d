@@ -1143,7 +1143,7 @@ public:
             import ddbc.drivers.utils : parseSysTime;
             return parseSysTime(s);
         } catch (Throwable e) {
-            throw new SQLException("Cannot convert '" ~ s ~ "' to SysTime - ");
+            throw new SQLException("Cannot convert '" ~ s ~ "' to SysTime");
         }
     }
 

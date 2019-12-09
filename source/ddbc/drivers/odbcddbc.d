@@ -1586,16 +1586,13 @@ version (USE_ODBC)
             lock();
             scope (exit) unlock();
             
-            immutable string s = getString(columnIndex);
-            SysTime st;
-            if (s is null)
-                return st;
-            try {
-                import ddbc.drivers.utils : parseSysTime;
-                return parseSysTime(s);
-            } catch (Throwable e) {
-                throw new SQLException("Cannot convert '" ~ s ~ "' to SysTime - ");
+            Variant v = stmt.getColumn(columnIndex).value;
+            if (lastIsNull)
+                return SysTime();
+            if (v.convertsTo!(SysTime)) {
+                return v.get!(SysTime);
             }
+            throw new SQLException("Cannot convert '" ~ v.toString() ~ "' to SysTime");
         }
 
         override DateTime getDateTime(int columnIndex)
@@ -1605,7 +1602,13 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(DateTime);
+            Variant v = stmt.getColumn(columnIndex).value;
+            if (lastIsNull)
+                return DateTime();
+            if (v.convertsTo!(DateTime)) {
+                return v.get!(DateTime);
+            }
+            throw new SQLException("Cannot convert '" ~ v.toString() ~ "' to DateTime");
         }
 
         override Date getDate(int columnIndex)

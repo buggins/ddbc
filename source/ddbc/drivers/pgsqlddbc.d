@@ -1333,7 +1333,7 @@ version(USE_PGSQL) {
             if (v.convertsTo!(SysTime)) {
                 return v.get!SysTime();
             }
-            throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to SysTime. '" ~ v.toString() ~ "'");
+            throw new SQLException("Cannot convert '" ~ v.toString() ~ "' to SysTime");
         }
 
     	override DateTime getDateTime(int columnIndex) {

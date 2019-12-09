@@ -1028,7 +1028,7 @@ version(USE_SQLITE) {
             try {
                 return parseSysTime(s);
             } catch (Throwable e) {
-                throw new SQLException("Cannot convert string to SysTime - " ~ s);
+                throw new SQLException("Cannot convert '" ~ s ~ "' to SysTime");
             }
         }
 
@@ -1040,7 +1040,7 @@ version(USE_SQLITE) {
             try {
                 return fromResultSet(s);
             } catch (Throwable e) {
-                throw new SQLException("Cannot convert string to DateTime - " ~ s);
+                throw new SQLException("Cannot convert '" ~ s ~ "' to DateTime");
             }
         }
         override Date getDate(int columnIndex) {
