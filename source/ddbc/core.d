@@ -288,6 +288,7 @@ interface ResultSet : DataSetReader {
 	//Retrieves the current row number
 	int getRow();
 	//Retrieves the fetch size for this ResultSet object.
+	deprecated("Marked for removal as cCannot be used by all supported drivers. See Github issue #85")
 	ulong getFetchSize();
 
 	// from DataSetReader

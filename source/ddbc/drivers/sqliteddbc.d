@@ -1134,12 +1134,12 @@ version(USE_SQLITE) {
         }
         
         //Retrieves the fetch size for this ResultSet object.
-        override ulong getFetchSize() {
-            checkClosed();
-            lock();
-            scope(exit) unlock();
-            return -1;
-        }
+        // override ulong getFetchSize() {
+        //     checkClosed();
+        //     lock();
+        //     scope(exit) unlock();
+        //     return -1;
+        // }
     }
 
 

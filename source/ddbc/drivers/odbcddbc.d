@@ -1667,10 +1667,9 @@ version (USE_ODBC)
         {
             checkClosed();
             lock();
-            scope (exit)
-                unlock();
+            scope (exit) unlock();
 
-            return currentRowIndex;
+            return this.currentRowIndex;
         }
 
     }

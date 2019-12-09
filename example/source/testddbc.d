@@ -309,9 +309,18 @@ int main(string[] args)
 									('Robert', 1, '1966-03-19', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)");
             break;
 		case "odbc":
-			stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1");
-			stmt.executeUpdate("CREATE TABLE ddbct1 (id INT NOT NULL IDENTITY(1,1) PRIMARY KEY, name VARCHAR(250), comment VARCHAR(max), ts DATETIME)");
-			stmt.executeUpdate("INSERT INTO ddbct1 (name, comment, ts) VALUES ('name1', 'comment for line 1', CURRENT_TIMESTAMP), ('name2','comment for line 2 - can be very long', CURRENT_TIMESTAMP)");
+			stmt.executeUpdate("DROP TABLE IF EXISTS [ddbct1]");
+			stmt.executeUpdate("CREATE TABLE ddbct1 (
+				[id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY,
+				[name] VARCHAR(250),
+				[comment] VARCHAR(max),
+				[ts] DATETIME
+				)");
+
+			stmt.executeUpdate("INSERT INTO [ddbct1] ([name], [comment], [ts]) 
+								VALUES 
+									('name1', 'comment for line 1', CURRENT_TIMESTAMP), 
+									('name2','comment for line 2 - can be very long', CURRENT_TIMESTAMP)");
 			
 			stmt.executeUpdate("DROP TABLE IF EXISTS [employee]");
 			stmt.executeUpdate("CREATE TABLE [employee] (
@@ -342,29 +351,34 @@ int main(string[] args)
     int i = 0;
 
     while (rs.next()) {
-        writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2));
+        writeln("\tid: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2));
         i++;
     }
 	writefln("\tThere were %,d rows returned from the ddbct1 table...", i);
 
-    ulong count = rs.getFetchSize();
-	assert(i == to!int(count), "fetchSize should give the correct row count");
-    assert(2 == count, "There should be 2 results but instead there was " ~ to!string(count));
+	if("mysql" == par.driver || "postgresql" == par.driver ) {
+		ulong count = rs.getFetchSize(); // only works on Mysql & Postgres
+		assert(i == count, "fetchSize should give the correct row count");
+	}
+    assert(2 == i, "There should be 2 results but instead there was " ~ to!string(i));
 
 
     rs = stmt.executeQuery("SELECT id,comment FROM ddbct1 WHERE id = 2");
     i = 0;
     while (rs.next()) {
-        writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2));
+        writeln("\tid: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2));
         i++;
     }
-	assert(i == to!int(rs.getFetchSize()), "fetchSize should give the correct row count");
     assert(1 == i, "There should be 1 result but instead there was " ~ to!string(i));
 
 
+	i = 0;
 	rs = stmt.executeQuery("SELECT id, comment, ts FROM ddbct1 ORDER BY id DESC");
-    assert(2 == rs.getFetchSize(), "There should be 2 results but instead there was " ~ to!string(count));
-    //writefln("\tThere were %,d rows that are ordered BY id DESC", rs.getFetchSize());
+	while (rs.next()) {
+		writeln("\tid: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ to!string(rs.getDateTime(3)));
+		i++;
+	}
+	assert(2 == i, "There should be 2 results but instead there was " ~ to!string(i));
 
 
     writeln("\n > Testing prepared SQL statements");
@@ -373,10 +387,10 @@ int main(string[] args)
     ps2.setUlong(1, 1);
     auto prs = ps2.executeQuery();
     while (prs.next()) {
-        writeln(to!string(prs.getLong(1)) ~ "\t" ~ prs.getString(2) ~ "\t" ~ prs.getString(3));
+        writeln("\tid: " ~ to!string(prs.getLong(1)) ~ "\t" ~ prs.getString(2) ~ "\t" ~ prs.getString(3) ~ "\t" ~ to!string(prs.getDateTime(4)));
     }
 
-	writeln("Testing basic POD support");
+	writeln("\n > Testing basic POD support");
 	
 	// our POD object
     struct Employee {
