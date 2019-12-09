@@ -110,7 +110,7 @@ version (USE_ODBC)
             if(retval < 0) {
                 sharedLog.errorf("%s(%s) : %s", fullyQualifiedName!fn, format("%(%s%|, %)", tuple(args)), cast(RetVals) retval);
             } else {
-                sharedLog.tracef("%s(%s) : %s", fullyQualifiedName!fn, format("%(%s%|, %)", tuple(args)), cast(RetVals) retval);
+                //sharedLog.tracef("%s(%s) : %s", fullyQualifiedName!fn, format("%(%s%|, %)", tuple(args)), cast(RetVals) retval);
             }
         }
 
