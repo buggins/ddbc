@@ -1135,13 +1135,17 @@ public:
         checkClosed();
         lock();
         scope(exit) unlock();
-        Variant v = getValue(columnIndex);
-        if (lastIsNull)
-            return SysTime();
-        if (v.convertsTo!(SysTime)) {
-            return v.get!SysTime();
+        
+        immutable string s = getString(columnIndex);
+        SysTime st;
+        if (s is null)
+            return st;
+        try {
+            import ddbc.drivers.utils : parseSysTime;
+            return parseSysTime(s);
+        } catch (Throwable e) {
+            throw new SQLException("Cannot convert '" ~ s ~ "' to SysTime - ");
         }
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to SysTime");
     }
 
 	override DateTime getDateTime(int columnIndex) {

@@ -1584,10 +1584,18 @@ version (USE_ODBC)
         override SysTime getSysTime(int columnIndex) {
             checkClosed();
             lock();
-            scope (exit)
-                unlock();
+            scope (exit) unlock();
             
-            return stmt.getColumn(columnIndex).value.get!(SysTime);
+            immutable string s = getString(columnIndex);
+            SysTime st;
+            if (s is null)
+                return st;
+            try {
+                import ddbc.drivers.utils : parseSysTime;
+                return parseSysTime(s);
+            } catch (Throwable e) {
+                throw new SQLException("Cannot convert '" ~ s ~ "' to SysTime - ");
+            }
         }
 
         override DateTime getDateTime(int columnIndex)
