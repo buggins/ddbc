@@ -378,7 +378,7 @@ PropertyMemberType getPropertyType(ti)() {
     } else static if (is(ti == ubyte[])) {
         return PropertyMemberType.UBYTE_ARRAY_TYPE;
     } else static if (true) {
-        assert (false, "has unsupported type " ~ ti.stringof);
+        static assert (false, "has unsupported type " ~ ti.stringof);
     }
 }
 
@@ -451,7 +451,7 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
     } else static if (is(ti == ubyte[])) {
         return PropertyMemberType.UBYTE_ARRAY_TYPE;
     } else static if (true) {
-        assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
+        static assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
     }
 }
 
