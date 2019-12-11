@@ -967,7 +967,7 @@ public:
             return v.get!(int) != 0;
         if (v.convertsTo!(long))
             return v.get!(long) != 0;
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to boolean");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to boolean");
     }
     override ubyte getUbyte(int columnIndex) {
         checkClosed();
@@ -980,7 +980,7 @@ public:
             return v.get!(ubyte);
         if (v.convertsTo!(long))
             return to!ubyte(v.get!(long));
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ubyte");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to ubyte");
     }
     override byte getByte(int columnIndex) {
         checkClosed();
@@ -993,7 +993,7 @@ public:
             return v.get!(byte);
         if (v.convertsTo!(long))
             return to!byte(v.get!(long));
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to byte");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to byte");
     }
     override short getShort(int columnIndex) {
         checkClosed();
@@ -1006,7 +1006,7 @@ public:
             return v.get!(short);
         if (v.convertsTo!(long))
             return to!short(v.get!(long));
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to short");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to short");
     }
     override ushort getUshort(int columnIndex) {
         checkClosed();
@@ -1019,7 +1019,7 @@ public:
             return v.get!(ushort);
         if (v.convertsTo!(long))
             return to!ushort(v.get!(long));
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ushort");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to ushort");
     }
     override int getInt(int columnIndex) {
         checkClosed();
@@ -1032,7 +1032,7 @@ public:
             return v.get!(int);
         if (v.convertsTo!(long))
             return to!int(v.get!(long));
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to int");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to int");
     }
     override uint getUint(int columnIndex) {
         checkClosed();
@@ -1045,7 +1045,7 @@ public:
             return v.get!(uint);
         if (v.convertsTo!(ulong))
             return to!int(v.get!(ulong));
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to uint");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to uint");
     }
     override long getLong(int columnIndex) {
         checkClosed();
@@ -1056,7 +1056,7 @@ public:
             return 0;
         if (v.convertsTo!(long))
             return v.get!(long);
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to long");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to long");
     }
     override ulong getUlong(int columnIndex) {
         checkClosed();
@@ -1067,7 +1067,7 @@ public:
             return 0;
         if (v.convertsTo!(ulong))
             return v.get!(ulong);
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ulong");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to ulong");
     }
     override double getDouble(int columnIndex) {
         checkClosed();
@@ -1078,7 +1078,7 @@ public:
             return 0;
         if (v.convertsTo!(double))
             return v.get!(double);
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to double");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to double");
     }
     override float getFloat(int columnIndex) {
         checkClosed();
@@ -1089,7 +1089,7 @@ public:
             return 0;
         if (v.convertsTo!(float))
             return v.get!(float);
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to float");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to float");
     }
     override byte[] getBytes(int columnIndex) {
         checkClosed();
@@ -1101,7 +1101,7 @@ public:
         if (v.convertsTo!(byte[])) {
             return v.get!(byte[]);
         }
-        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to byte[]");
+        throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to byte[]");
     }
 	override ubyte[] getUbytes(int columnIndex) {
 		checkClosed();
@@ -1113,7 +1113,7 @@ public:
 		if (v.convertsTo!(ubyte[])) {
 			return v.get!(ubyte[]);
 		}
-		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ubyte[]");
+		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to ubyte[]");
 	}
 	override string getString(int columnIndex) {
         checkClosed();
@@ -1130,6 +1130,7 @@ public:
         return v.toString();
     }
 
+    // todo: make this function work the same as the DateTime one
     override SysTime getSysTime(int columnIndex) {
         checkClosed();
         lock();
@@ -1143,7 +1144,7 @@ public:
             import ddbc.drivers.utils : parseSysTime;
             return parseSysTime(s);
         } catch (Throwable e) {
-            throw new SQLException("Cannot convert '" ~ s ~ "' to SysTime");
+            throw new SQLException("Cannot convert " ~ to!string(columnIndex) ~ ": '" ~ s ~ "' to SysTime");
         }
     }
 
@@ -1157,7 +1158,7 @@ public:
 		if (v.convertsTo!(DateTime)) {
 			return v.get!DateTime();
 		}
-		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to DateTime");
+		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ ": '" ~ v.toString() ~ "' to DateTime");
 	}
 	override Date getDate(int columnIndex) {
 		checkClosed();
@@ -1291,9 +1292,13 @@ unittest {
         assert(meta.isNullable(1) == false);
         assert(meta.isNullable(2) == true);
         assert(meta.isNullable(3) == true);
+        assert(meta.isNullable(4) == true);
         assert(meta.getColumnName(2) == "name");
         assert(meta.getColumnLabel(2) == "name_alias");
         assert(meta.getColumnName(3) == "comment");
+        assert(meta.getColumnLabel(3) == "comment");
+        assert(meta.getColumnName(4) == "ts");
+        assert(meta.getColumnLabel(4) == "ts");
 
         //auto rowCount = rs.getFetchSize();
         //assert(rowCount == 6, "Expected 6 rows but there were " ~ to!string(rowCount));
@@ -1301,7 +1306,7 @@ unittest {
         int index = 1;
         while (rs.next()) {
             assert(!rs.isNull(1));
-            ubyte[] bytes = rs.getUbytes(3);
+            //ubyte[] bytes = rs.getUbytes(3);
             int rowIndex = rs.getRow();
             assert(rowIndex == index);
             long id = rs.getLong(1);
@@ -1328,6 +1333,7 @@ unittest {
             //writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ strNull(rs.getString(3)) ~ "\t[" ~ to!string(bytes.length) ~ "]");
             index++;
         }
+        assert(index - 1 == 6, "Expected 6 rows but there were " ~ to!string(index));
         
         PreparedStatement ps2 = conn.prepareStatement("SELECT id, name, comment FROM ddbct1 WHERE id >= ?");
 		scope(exit) ps2.close();
