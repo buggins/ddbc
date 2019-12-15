@@ -158,13 +158,15 @@ the DSN name will be used.
 
 pull requests are welcome. Please ensure your local branch is up to date and all tests are passing locally before making a pull request. A docker-compose file is included to help with local development. Use `docker-compose up -d` then run `dub test --config=MySQL`, `dub test --config=PGSQL` and `dub test --config=ODBC`. See the `.travis.yml` file and individual driver code for details on creating the relevant databases for local testing.
 
-The examples should also run, make sure to change to the _example_ directory and run `dub build` then make sure that the compiled executable will run with each supported database:
+The examples should also run, make sure to change to the _example_ directory and run `dub build` then make sure that the compiled executable will run with each supported database (you'll need to install relevant libs and create databases and users with relevant permissions):
 
 ```
 ./ddbctest --connection=mysql:127.0.0.1 --database=testdb --user=travis --password=bbk4k77JKH88g54
 ./ddbctest --connection=postgresql:127.0.0.1 --database=testdb --user=postgres
-./ddbctest --connection=odbc://localhost --user=SA --password=bbk4k77JKH88g54 --driver=FreeTDS
+./ddbctest --connection=odbc://localhost --database=ddbctest --user=SA --password=bbk4k77JKH88g54 --driver="ODBC Driver 17 for SQL Server"
+./ddbctest --connection=odbc://localhost --database=ddbctest --user=SA --password=bbk4k77JKH88g54 --driver=FreeTDS
 ```
+
 In the case of the ODBC connection _FreeTDS_ is just an example, if you have _msodbcsql17_ driver installed use that instead.
 
 Also, you may want to only run a single database image at a time. In that case you can do `docker-compose up <NAME>`

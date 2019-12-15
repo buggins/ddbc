@@ -773,6 +773,10 @@ version (USE_ODBC)
             {
                 this.cols.each!(c => c.read());
             }
+            else
+            {
+                SQLFreeStmt(stmt, SQL_CLOSE);
+            }
 
             return hasData;
         }
