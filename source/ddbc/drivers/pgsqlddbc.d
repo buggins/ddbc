@@ -1329,7 +1329,7 @@ version(USE_PGSQL) {
             scope(exit) unlock();
             Variant v = getValue(columnIndex);
             if (lastIsNull)
-                return SysTime();
+                return Clock.currTime();
             if (v.convertsTo!(SysTime)) {
                 return v.get!SysTime();
             }
@@ -1342,7 +1342,7 @@ version(USE_PGSQL) {
     		scope(exit) unlock();
     		Variant v = getValue(columnIndex);
     		if (lastIsNull)
-    			return DateTime();
+    			return cast(DateTime) Clock.currTime();
     		if (v.convertsTo!(DateTime)) {
     			return v.get!DateTime();
     		}

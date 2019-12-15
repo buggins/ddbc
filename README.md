@@ -161,6 +161,7 @@ pull requests are welcome. Please ensure your local branch is up to date and all
 The examples should also run, make sure to change to the _example_ directory and run `dub build` then make sure that the compiled executable will run with each supported database (you'll need to install relevant libs and create databases and users with relevant permissions):
 
 ```
+./ddbctest --connection=sqlite::memory:
 ./ddbctest --connection=mysql:127.0.0.1 --database=testdb --user=travis --password=bbk4k77JKH88g54
 ./ddbctest --connection=postgresql:127.0.0.1 --database=testdb --user=postgres
 ./ddbctest --connection=odbc://localhost --database=ddbctest --user=SA --password=bbk4k77JKH88g54 --driver="ODBC Driver 17 for SQL Server"

@@ -1022,9 +1022,8 @@ version(USE_SQLITE) {
 
         override SysTime getSysTime(int columnIndex) {
             immutable string s = getString(columnIndex);
-            SysTime st;
             if (s is null)
-                return st;
+                return Clock.currTime();
             try {
                 return parseSysTime(s);
             } catch (Throwable e) {
@@ -1034,9 +1033,8 @@ version(USE_SQLITE) {
 
         override DateTime getDateTime(int columnIndex) {
             string s = getString(columnIndex);
-            DateTime dt;
             if (s is null)
-                return dt;
+                return cast(DateTime) Clock.currTime();
             try {
                 return fromResultSet(s);
             } catch (Throwable e) {

@@ -286,7 +286,13 @@ int main(string[] args)
             break;
         case "mysql": // MySQL has an underscore in 'AUTO_INCREMENT'
 			stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1");
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (`id` INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT, `name` VARCHAR(250), `comment` MEDIUMTEXT, `ts` TIMESTAMP)");
+            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (
+				`id` INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT, 
+				`name` VARCHAR(250), 
+				`comment` MEDIUMTEXT, 
+				`ts` TIMESTAMP NULL DEFAULT NULL
+				)");
+
             stmt.executeUpdate("INSERT INTO ddbct1 (`name`, `comment`, `ts`) VALUES ('name1', 'comment for line 1', CURRENT_TIMESTAMP), ('name2','comment for line 2 - can be very long', CURRENT_TIMESTAMP)");
             
 			stmt.executeUpdate("DROP TABLE IF EXISTS employee");
@@ -380,6 +386,29 @@ int main(string[] args)
 	}
 	assert(2 == i, "There should be 2 results but instead there was " ~ to!string(i));
 
+	// make sure that a timestamp can handle being NULL
+	stmt.executeUpdate("UPDATE ddbct1 SET ts=NULL");
+	i = 0;
+	rs = stmt.executeQuery("SELECT id, name, comment, ts FROM ddbct1 WHERE ts IS NULL");
+	while (rs.next()) {
+		SysTime now = Clock.currTime();
+		DateTime dtNow = cast(DateTime) now;
+		// if the column on the table is NULL ddbc will create a DateTime using Clock.currTime()
+		// https://github.com/buggins/ddbc/issues/86
+		assert(rs.getDateTime(4).year == dtNow.year);
+		assert(rs.getDateTime(4).month == dtNow.month);
+		assert(rs.getDateTime(4).day == dtNow.day);
+		assert(rs.getDateTime(4).hour == dtNow.hour);
+		writeln("\tid: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ to!string(rs.getDateTime(4)));
+		
+		// ddbc should also allow you to retrive the timestamp as a SysTime (defaulting UTC if no zone info given)
+		assert(rs.getSysTime(4).year == now.year);
+		assert(rs.getSysTime(4).month == now.month);
+		assert(rs.getSysTime(4).day == now.day);
+		//assert(rs.getSysTime(4).hour == now.hour);
+		i++;
+	}
+	assert(2 == i, "There should be 2 results but instead there was " ~ to!string(i));
 
     writeln("\n > Testing prepared SQL statements");
 	PreparedStatement ps2 = conn.prepareStatement("SELECT id, name name_alias, comment, ts FROM ddbct1 WHERE id >= ?");

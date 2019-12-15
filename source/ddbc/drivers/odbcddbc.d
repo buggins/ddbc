@@ -1585,14 +1585,13 @@ version (USE_ODBC)
             return stmt.getColumn(columnIndex).value.get!(string);
         }
 
-        override SysTime getSysTime(int columnIndex) {
-            checkClosed();
-            lock();
-            scope (exit) unlock();
-            
+        override SysTime getSysTime(int columnIndex)
+        {
             Variant v = stmt.getColumn(columnIndex).value;
-            if (lastIsNull)
-                return SysTime();
+            if (v.peek!(SysTime) is null) {
+                return Clock.currTime();
+            }
+
             if (v.convertsTo!(SysTime)) {
                 return v.get!(SysTime);
             }
@@ -1601,14 +1600,11 @@ version (USE_ODBC)
 
         override DateTime getDateTime(int columnIndex)
         {
-            checkClosed();
-            lock();
-            scope (exit)
-                unlock();
-
             Variant v = stmt.getColumn(columnIndex).value;
-            if (lastIsNull)
-                return DateTime();
+            if (v.peek!(DateTime) is null) {
+                return cast(DateTime) Clock.currTime();
+            }
+
             if (v.convertsTo!(DateTime)) {
                 return v.get!(DateTime);
             }
