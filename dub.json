@@ -24,7 +24,20 @@
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll"],
             "copyFiles-windows-x86_64": [ "libs/win64/libpq.dll", "libs/win64/sqlite3.dll"],
             "sourceFiles-windows-x86_64" : [ "libs/win64/sqlite3.lib" ],
-            "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib"]
+            "sourceFiles-windows-x86-ldc" : [ "libs/win32-mscoff/sqlite3.lib"],
+            "sourceFiles-windows-x86-dmd" : [ "libs/win32/sqlite3.lib"]
+        },
+        {
+            "name": "full-mscoff",
+            "platforms": ["windows-x86"],
+            "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL", "USE_ODBC"],
+            "dependencies": {
+                "mysql-native": "~>3.0.0",
+                "derelict-pq": "~>2.2.0"
+            },
+            "libs-windows": ["odbc"],
+            "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll"],
+            "sourceFiles-windows-x86" : [ "libs/win32-mscoff/sqlite3.lib"]
         },
         {
             "name": "MySQL",
@@ -37,12 +50,19 @@
             "name": "SQLite",
             "versions": ["USE_SQLITE"],
             "libs-posix": ["sqlite3"],
-            "libs-windows": ["sqlite3"],
             "lflags-osx": ["-L/usr/local/opt/sqlite3/lib/"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
             "copyFiles-windows-x86_64": [ "libs/win64/sqlite3.dll" ],
             "sourceFiles-windows-x86_64" : [ "libs/win64/sqlite3.lib" ],
-            "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib" ]
+            "sourceFiles-windows-x86-ldc" : [ "libs/win32-mscoff/sqlite3.lib" ],
+            "sourceFiles-windows-x86-dmd" : [ "libs/win32/sqlite3.lib" ]
+        },
+        {
+            "name": "SQLite-mscoff",
+            "platforms": ["windows-x86"],
+            "versions": ["USE_SQLITE"],
+            "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
+            "sourceFiles-windows-x86" : [ "libs/win32-mscoff/sqlite3.lib" ]
         },
         {
             "name": "PGSQL",
@@ -73,10 +93,12 @@
             "targetType": "executable",
             "versions": ["USE_SQLITE"],
             "libs-posix": ["sqlite3"],
-            "libs-windows": ["sqlite3"],
             "lflags-osx": ["-L/usr/local/opt/sqlite3/lib/"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
-            "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib" ]
+            "copyFiles-windows-x86_64": [ "libs/win64/sqlite3.dll" ],
+            "sourceFiles-windows-x86_64" : [ "libs/win64/sqlite3.lib" ],
+            "sourceFiles-windows-x86-ldc" : [ "libs/win32-mscoff/sqlite3.lib" ],
+            "sourceFiles-windows-x86-dmd" : [ "libs/win32/sqlite3.lib" ]
         }
     ]
 }
