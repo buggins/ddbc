@@ -176,6 +176,7 @@ If you need to get / release connection multiple times, it makes sense to use Co
 module ddbc;
 
 public import ddbc.core;
+public import ddbc.attr;
 public import ddbc.common;
 public import ddbc.pods;
 

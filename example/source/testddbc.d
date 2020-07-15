@@ -430,6 +430,22 @@ int main(string[] args)
         DateTime created;
         SysTime updated;
     }
+    
+    // with UDA
+    @tableName("employee")
+    struct Employee2 {
+        struct Proxy {
+            static long to(string src) { return std.conv.to!long(src); }
+            static string from(long src) { return std.conv.to!string(src); }
+        }
+        @convBy!Proxy       string id;
+        @ignore             string hogehoge;
+        @columnName("name") string nameOfEnployee;
+        int flags;
+        Date dob;
+        DateTime created;
+        SysTime updated;
+    }
 
 	immutable SysTime now = Clock.currTime();
 
@@ -445,10 +461,10 @@ int main(string[] args)
     }
 
     writeln(" > select all rows from employee table WHERE id < 4 ORDER BY name DESC...");
-    foreach(ref e; conn.createStatement().select!Employee.where("id < 4").orderBy("name desc")) {
-        writeln("\t{id: ", e.id, ", name: ", e.name, ", flags: ", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated, "}");
-		assert(e.id < 4);
-		assert(e.name != "Iain" && e.name != "Robert");
+    foreach(ref e; conn.createStatement().select!Employee2.where("id < 4").orderBy("name desc")) {
+        writeln("\t{id: ", e.id, ", name: ", e.nameOfEnployee, ", flags: ", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated, "}");
+		assert(e.id.to!int < 4);
+		assert(e.nameOfEnployee != "Iain" && e.nameOfEnployee != "Robert");
 		assert(e.flags > 1);
     }
 
