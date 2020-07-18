@@ -1571,3 +1571,160 @@ struct select(Args...)  {//if (isSupportedSimpleTypeRefList!Args())
     }
 
 }
+
+
+version (unittest) {
+    import ddbc.common: ResultSetImpl;
+    class StubResultSet: ResultSetImpl {
+        Variant[][] values;
+        string[]    columnNames;
+        size_t      currentRow = -1;
+        Statement   parent;
+        this(Statement s) {
+            parent = s;
+        }
+        override void close() {}
+        override bool first() { currentRow = 0; return currentRow >= 0 && currentRow < values.length; }
+        override bool isFirst() { return currentRow == 0; }
+        override bool isLast() { return values.length > 0 && currentRow >= values.length - 1; }
+        override bool next() {
+            if (currentRow + 1 >= values.length)
+                return false;
+            currentRow++;
+            return true;
+        }
+
+        override Statement getStatement() { return parent; }
+        //Retrieves the current row number
+        override int getRow() { return cast(int)currentRow; }
+
+        // from DataSetReader
+        override bool      getBoolean(int columnIndex)   { return values[currentRow][columnIndex - 1].get!bool(); }
+        override ubyte     getUbyte(int columnIndex)     { return values[currentRow][columnIndex - 1].get!ubyte(); }
+        override ubyte[]   getUbytes(int columnIndex)    { return values[currentRow][columnIndex - 1].get!(ubyte[])(); }
+        override byte[]    getBytes(int columnIndex)     { return values[currentRow][columnIndex - 1].get!(byte[])(); }
+        override byte      getByte(int columnIndex)      { return values[currentRow][columnIndex - 1].get!byte(); }
+        override short     getShort(int columnIndex)     { return values[currentRow][columnIndex - 1].get!short(); }
+        override ushort    getUshort(int columnIndex)    { return values[currentRow][columnIndex - 1].get!ushort(); }
+        override int       getInt(int columnIndex)       { return values[currentRow][columnIndex - 1].get!int(); }
+        override uint      getUint(int columnIndex)      { return values[currentRow][columnIndex - 1].get!uint(); }
+        override long      getLong(int columnIndex)      { return values[currentRow][columnIndex - 1].get!long(); }
+        override ulong     getUlong(int columnIndex)     { return values[currentRow][columnIndex - 1].get!ulong(); }
+        override double    getDouble(int columnIndex)    { return values[currentRow][columnIndex - 1].get!double(); }
+        override float     getFloat(int columnIndex)     { return values[currentRow][columnIndex - 1].get!float(); }
+        override string    getString(int columnIndex)    { return values[currentRow][columnIndex - 1].get!string(); }
+        override Variant   getVariant(int columnIndex)   { return values[currentRow][columnIndex - 1]; }
+        override SysTime   getSysTime(int columnIndex)   { return values[currentRow][columnIndex - 1].get!SysTime(); }
+        override DateTime  getDateTime(int columnIndex)  { return values[currentRow][columnIndex - 1].get!DateTime(); }
+        override Date      getDate(int columnIndex)      { return values[currentRow][columnIndex - 1].get!Date(); }
+        override TimeOfDay getTime(int columnIndex)      { return values[currentRow][columnIndex - 1].get!TimeOfDay(); }
+
+        override bool isNull(int columnIndex) { return !values[currentRow][columnIndex - 1].hasValue(); }
+        override bool wasNull() { return false; }
+
+        // additional methods
+        override int findColumn(string columnName)  {
+            import std.algorithm: countUntil;
+            return cast(int)columnNames.countUntil(columnName) + 1;
+        }
+        
+        void reset() {
+            currentRow = -1;
+        }
+        void clear() {
+            values = null;
+            columnNames = null;
+            currentRow = -1;
+        }
+        void make(T = Variant)(size_t rows, size_t cols, T defaultValue = T.init) {
+            values = null;
+            values.length = rows;
+            currentRow = -1;
+            foreach (ref row; values) {
+                row.length = cols;
+                row[] = defaultValue;
+            }
+        }
+        void make(T = Variant)(size_t rows, string[] names, T defaultValue = T.init) {
+            columnNames = names;
+            make(rows, names.length, defaultValue);
+        }
+        ref Variant opIndex(size_t row, size_t col) {
+            return values[row][col];
+        }
+        ref Variant[] opIndex(size_t row) {
+            return values[row];
+        }
+    }
+    class StubStatement: Statement {
+        string lastQuery;
+        long[] nextInsertIds;
+        int[]  nextReturnValues;
+        
+        StubResultSet resultSet;
+        
+        this() { resultSet = new StubResultSet(this); }
+        
+        override ResultSet executeQuery(string query) {
+            lastQuery = query;
+            return resultSet;
+        }
+        
+        override int executeUpdate(string query) {
+            lastQuery = query;
+            if (nextReturnValues.length == 0)
+                return 0;
+            auto ret = nextReturnValues[0];
+            nextReturnValues = nextReturnValues[1..$];
+            return ret;
+        }
+        
+        override int executeUpdate(string query, out Variant insertId) {
+            lastQuery = query;
+            if (nextInsertIds.length != 0) {
+                insertId = nextInsertIds[0];
+                nextInsertIds = nextInsertIds[1..$];
+            }
+            
+            if (nextReturnValues.length != 0) {
+                auto ret = nextReturnValues[0];
+                nextReturnValues = nextReturnValues[1..$];
+                return ret;
+            }
+            return 0;
+        }
+        override void close() { }
+        void clear() {
+            resultSet.clear();
+            lastQuery = null;
+            nextInsertIds = null;
+            nextReturnValues = null;
+        }
+    }
+    
+    string shrinkWhite(string x) {
+        import std.regex, std.string;
+        return x.replaceAll(ctRegex!`[\s\r\n]+`, " ").strip();
+    }
+}
+
+unittest {
+    import std;
+    auto stmt = new StubStatement;
+    scope (exit) stmt.close();
+    struct Data {
+        int a;
+        int b;
+    }
+    
+    foreach (e; stmt.select!Data.where("a == 1")) {
+        assert(0);
+    }
+    assert(stmt.lastQuery.shrinkWhite == "SELECT a,b FROM data WHERE a == 1");
+    Data dat;
+    stmt.clear();
+    foreach (i; stmt.select!()("SELECT a,b    \n\t\tFROM data", dat.a, dat.b).where("a == 2").orderBy("b ASC")) {
+        assert(0);
+    }
+    assert(stmt.lastQuery.shrinkWhite == "SELECT a,b FROM data WHERE a == 2 ORDER BY b ASC");
+}
