@@ -31,10 +31,10 @@ enum ignore;
 ///
 struct convBy(alias T){}
 
-package:
+package(ddbc):
 
 ///
-template hasTableName(alias value) {
+template hasTableName(value...) {
     static if (__traits(compiles, hasUDA!(value, tableName))) {
         enum bool hasTableName = hasUDA!(value, tableName);
     } else {
@@ -168,7 +168,13 @@ template getConvToStyle(alias value, Ret) if (hasConvBy!value) {
 }
 
 ///
-enum canConvTo(alias value, T) = hasConvBy!value && getConvToStyle!(value, T) != ConvStyle.none;
+template canConvTo(alias value, T) {
+    static if (hasConvBy!value) {
+        enum bool canConvTo = getConvToStyle!(value, T) != ConvStyle.none;
+    } else {
+        enum bool canConvTo = false;
+    }
+}
 
 
 ///
@@ -220,7 +226,13 @@ template getConvFromStyle(alias value, Src) if (hasConvBy!value) {
     }
 }
 ///
-enum canConvFrom(alias value, T) = hasConvBy!value && getConvFromStyle!(value, T) != ConvStyle.none;
+template canConvFrom(alias value, T) {
+    static if (hasConvBy!value) {
+        enum bool canConvFrom = getConvFromStyle!(value, T) != ConvStyle.none;
+    } else {
+        enum bool canConvFrom = false;
+    }
+}
 
 ///
 template convFrom(alias value, Src)

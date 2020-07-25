@@ -446,7 +446,7 @@ PropertyMemberType getPropertyType(alias value)() {
 
 PropertyMemberType getPropertyMemberType(T, string m)() {
     alias typeof(__traits(getMember, T, m)) ti;
-    alias member = __traits(getMember, T, m);
+    mixin(`alias member = T.` ~ m ~ ";"); // alias member = __traits(getMember, T, m);
     static if (hasConvBy!member) {
         static if (isConvertible!(member, long)) {
             return PropertyMemberType.LONG_CONVERTIBLE_TYPE;
@@ -851,7 +851,7 @@ static immutable string[] ColumnTypeDatasetReaderCode =
 ];
 
 string getConvertibleTypeCode(T, string m)() if (hasConvBy!(__traits(getMember, T, m))) {
-    alias member = __traits(getMember, T, m);
+    mixin(`alias member = T.` ~ m ~ ";"); // alias member = __traits(getMember, T, m);
     static if (isConvertible!(member, long)) {
         return "long";
     } else static if (isConvertible!(member, ulong)) {
@@ -1221,7 +1221,7 @@ string getColumnTypeDatasetReadCodeByName(T, string m)() {
 
 string getPropertyWriteCodeByName(T, string m)() {
     immutable string nullValueCode = ColumnTypeSetNullCode[getPropertyMemberType!(T,m)()];
-    alias value = __traits(getMember, T, m);
+    mixin(`alias value = T.` ~ m ~ ";"); // alias value = __traits(getMember, T, m);
     static if (hasConvBy!value && canConvFrom!(value, getConvertibleType!value)) {
         immutable string propertyWriter = nullValueCode
                 ~ "convertFrom!(entity." ~ m ~ ", " ~ getConvertibleTypeCode!value ~ ")"
@@ -1709,7 +1709,6 @@ version (unittest) {
 }
 
 unittest {
-    import std;
     auto stmt = new StubStatement;
     scope (exit) stmt.close();
     struct Data {
