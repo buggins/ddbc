@@ -4,11 +4,7 @@ on:
   schedule:
     - cron: '30 7 1 * *'
   push:
-    branches:
-      - master
   pull_request:
-    branches:
-      - master
 
 jobs:
   test:
@@ -16,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest ] # don't bother with macOS-latest
+        os: [ ubuntu-latest, windows-latest ] # don't bother with macos-latest
         compiler:
           - dmd-latest
           - ldc-latest
