@@ -12,14 +12,19 @@
     "buildRequirements": [
 		"allowWarnings"
 	],
-    "libs-posix": ["sqlite3", "pq", "odbc"],
-    "libs-windows": ["sqlite3", "libpq", "odbc32"],
     "versions": ["VibeCustomMain"],
     "configurations": [
         {
             "name": "default",
             "subConfigurations": {
                 "ddbc": "full"
+            }
+        },
+        
+        {
+            "name": "default-omf",
+            "subConfigurations": {
+                "ddbc": "full-omf"
             }
         },
 
@@ -34,6 +39,13 @@
             "name": "SQLite",
             "subConfigurations": {
                 "ddbc": "SQLite"
+            }
+        },
+
+        {
+            "name": "SQLite-omf",
+            "subConfigurations": {
+                "ddbc": "SQLite-omf"
             }
         },
 

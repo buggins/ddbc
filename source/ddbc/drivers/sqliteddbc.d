@@ -55,7 +55,8 @@ version(USE_SQLITE) {
 
 
     version (Windows) {
-        pragma (lib, "sqlite3");
+        // manually link in dub.json
+        //pragma (lib, "sqlite3");
     } else version (linux) {
         pragma (lib, "sqlite3");
     } else version (OSX) {
