@@ -284,27 +284,27 @@ jobs:
         with:
           compiler: dmd-latest
 
+      - name: Build The Example Project
+        working-directory: ./example
+        run: dub build
+
       - name: Run The Examples (SQLite)
         working-directory: ./example
         run: |
-          dub build --config=SQLite
           ./ddbctest --connection=sqlite::memory:
 
       - name: Run The Examples (MySQL)
         working-directory: ./example
         run: |
-          dub build --config=MySQL
-          ./ddbctest --connection=mysql:127.0.0.1:${{ job.services.mysql.ports[3306] }} --database=testdb --user=testuser --password=passw0rd
+          ./ddbctest --connection=mysql://127.0.0.1:3306 --database=testdb --user=testuser --password=passw0rd
 
       - name: Run The Examples (Postgres)
         working-directory: ./example
         run: |
-          dub build --config=PGSQL
-          ./ddbctest --connection=postgresql:127.0.0.1:${{ job.services.mysql.ports[5432] }} --database=testdb --user=testuser --password=passw0rd
+          ./ddbctest --connection=postgresql://127.0.0.1:5432 --database=testdb --user=testuser --password=passw0rd
 
       - name: Run The Examples (SQL Server)
         working-directory: ./example
         run: |
           sudo apt-get install freetds-bin freetds-common freetds-dev tdsodbc -y
-          dub build --config=ODBC
-          ./ddbctest --connection=odbc://127.0.0.1:${{ job.services.mssql.ports[1433] }} --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver=FreeTDS
+          ./ddbctest --connection=odbc://127.0.0.1:1433 --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver=FreeTDS
