@@ -28,7 +28,7 @@ string getURIHost(string uri)
     }
 }
 
-short getURIPort(string uri, bool useDefault)
+ushort getURIPort(string uri, bool useDefault)
 {
 	auto i=uri.indexOf(":");
 	auto j=uri.lastIndexOf(":");
@@ -40,7 +40,7 @@ short getURIPort(string uri, bool useDefault)
 			throw new Exception("No port specified when parsing URI and useDefault was not specified");
 	}
 
-	return to!short(uri[j+1..$]);
+	return to!ushort(uri[j+1..$]);
 }
 
 short getDefaultPort(string driver)
@@ -80,7 +80,7 @@ struct ConnectionParams
 	string driver;
 	string odbcdriver;
 	string host;
-	short port;
+	ushort port;
 	string database;
 }
 int main(string[] args)

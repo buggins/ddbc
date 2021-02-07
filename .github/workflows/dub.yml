@@ -295,16 +295,22 @@ jobs:
 
       - name: Run The Examples (MySQL)
         working-directory: ./example
+        env:
+          PORT: ${{ job.services.mysql.ports[3306] }}
         run: |
-          ./ddbctest --connection=mysql://127.0.0.1:3306 --database=testdb --user=testuser --password=passw0rd
+          ./ddbctest --connection=mysql://127.0.0.1:$PORT --database=testdb --user=testuser --password=passw0rd
 
       - name: Run The Examples (Postgres)
         working-directory: ./example
+        env:
+          PORT: ${{ job.services.postgres.ports[5432] }}
         run: |
-          ./ddbctest --connection=postgresql://127.0.0.1:5432 --database=testdb --user=testuser --password=passw0rd
+          ./ddbctest --connection=postgresql://127.0.0.1:$PORT --database=testdb --user=testuser --password=passw0rd
 
       - name: Run The Examples (SQL Server)
         working-directory: ./example
+        env:
+          PORT: ${{ job.services.mssql.ports[1433] }}
         run: |
           sudo apt-get install freetds-bin freetds-common freetds-dev tdsodbc -y
-          ./ddbctest --connection=odbc://127.0.0.1:1433 --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver=FreeTDS
+          ./ddbctest --connection=odbc://127.0.0.1:$PORT --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver=FreeTDS
