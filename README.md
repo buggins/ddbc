@@ -130,7 +130,7 @@ ddbc:sqlite:ddbc-test.sqlite
 An in memory database can be configured by specifying **:memory:** instead of a filename:
 
 ```
-ddbs:sqlite::memory:
+ddbc:sqlite::memory:
 ```
 
 ### MySQL

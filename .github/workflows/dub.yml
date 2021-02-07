@@ -1,5 +1,11 @@
 name: CI
 
+# Overall ddbc should work on the last 10 minor compiler releases (same as Vibe.d).
+# For simplicity and speed of the CI, some compiler versions are skipped. The latest
+# versions of dmd and ldc must be tested on all platforms (Windows, Linux, and Mac)
+# with older compilers only being tested on Windows/Linux.
+# The integration testing is done on Linux against Mysql and Postgres
+
 on:
   schedule:
     - cron: '30 7 1 * *'
@@ -9,16 +15,16 @@ on:
 jobs:
   test:
     name: ${{ matrix.compiler }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest ] # don't bother with macos-latest
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
         compiler:
           - dmd-latest
           - ldc-latest
           - dmd-2.094.2
           - ldc-1.24.0 # eq to dmd v2.094.1
-    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
 
@@ -31,54 +37,56 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu')
         run: sudo apt-get update && sudo apt-get install libev-dev libpq-dev libevent-dev libsqlite3-dev -y
 
-      # - name: Install dependencies on Mac OSX
-      #   if: startsWith(matrix.os, 'mac')
-      #   run: brew bundle
+      - name: Install dependencies on Mac OSX
+        if: startsWith(matrix.os, 'macos')
+        run: brew bundle
 
       - name: Upgrade dub dependencies
+        if: startsWith(matrix.os, 'windows')
         uses: WebFreak001/dub-upgrade@v0.1
 
-      # x86 (without ubuntu)
-      - name: dub test with SQLite config
-        if: ${{ !startsWith(matrix.os, 'ubuntu') }}
+      # x86 (Windows Only)
+      - name: dub test with SQLite config (x86)
+        if: ${{ startsWith(matrix.os, 'windows') }}
         run: dub test --config=SQLite --arch=x86
         
-      - name: dub run with test config
-        if: ${{ !startsWith(matrix.os, 'ubuntu') }}
+      - name: dub run with test config (x86)
+        if: ${{ startsWith(matrix.os, 'windows') }}
         run: dub run --config=test --arch=x86
         
-      - name: run the ddbctest project
-        if: ${{ !startsWith(matrix.os, 'ubuntu') }}
+      - name: run the ddbctest project (x86)
+        if: ${{ startsWith(matrix.os, 'windows') }}
         working-directory: example
         run: dub build --config=SQLite --arch=x86 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
 
-      # x86_64
-      - name: dub test with SQLite config
+      # x86_64 (all platforms)
+      - name: dub test with SQLite config (x86_64)
         run: dub test --config=SQLite --arch=x86_64
         
-      - name: dub run with test config
+      - name: dub run with test config (x86_64)
         run: dub run --config=test --arch=x86_64
         
-      - name: run the ddbctest project
+      - name: run the ddbctest project (x86_64)
         working-directory: example
         run: dub build --config=SQLite --arch=x86_64 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
 
-      # x86_mscoff (only windows-dmd)
-      - name: dub test with SQLite config
+      # x86_mscoff (Windows with dmd Only)
+      - name: dub test with SQLite config (x86_mscoff)
         if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}
         run: dub test --config=SQLite --arch=x86_mscoff
         
-      - name: dub run with test config
+      - name: dub run with test config (x86_mscoff)
         if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}
         run: dub run --config=test --arch=x86_mscoff
         
-      - name: run the ddbctest project
+      - name: run the ddbctest project (x86_mscoff)
         if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}
         working-directory: example
         run: dub build --config=SQLite --arch=x86_mscoff && ./ddbctest --connection=sqlite:ddbc-test.sqlite
 
       # cache
       - uses: WebFreak001/dub-upgrade@v0.1
+        if: startsWith(matrix.os, 'windows')
         with: { store: true }
 
   # before dub 1.23.0(x86_omf unsupported)
@@ -90,29 +98,23 @@ jobs:
         os: [ ubuntu-latest, windows-latest ] # don't bother with macos-latest
         compiler:
           - dmd-2.093.1
-          - dmd-2.092.1
-          - dmd-2.091.1
-          - dmd-2.090.1
-          - dmd-2.089.1
-          - dmd-2.088.1
-          - dmd-2.087.1
-          - dmd-2.086.1
+#          - dmd-2.092.1
+#          - dmd-2.091.1
+#          - dmd-2.090.1
+#          - dmd-2.089.1
+#          - dmd-2.088.1
+#          - dmd-2.087.1
+#          - dmd-2.086.1
           - dmd-2.085.1
-          - dmd-2.084.1
-          - dmd-2.083.1
-          - dmd-2.082.1
           - ldc-1.23.0 # eq to dmd v2.093.1
-          - ldc-1.22.0 # eq to dmd v2.092.1
-          - ldc-1.21.0 # eq to dmd v2.091.1
-          - ldc-1.20.1 # eq to dmd v2.090.1
-          - ldc-1.19.0 # eq to dmd v2.089.1
-          - ldc-1.18.0 # eq to dmd v2.088.1
-          - ldc-1.17.0 # eq to dmd v2.087
-          - ldc-1.16.0 # eq to dmd v2.086.1
+#          - ldc-1.22.0 # eq to dmd v2.092.1
+#          - ldc-1.21.0 # eq to dmd v2.091.1
+#          - ldc-1.20.1 # eq to dmd v2.090.1
+#          - ldc-1.19.0 # eq to dmd v2.089.1
+#          - ldc-1.18.0 # eq to dmd v2.088.1
+#          - ldc-1.17.0 # eq to dmd v2.087
+#          - ldc-1.16.0 # eq to dmd v2.086.1
           - ldc-1.15.0 # eq to dmd v2.085.1
-          - ldc-1.14.0 # eq to dmd v2.084.1
-          - ldc-1.13.0 # eq to dmd v2.083.1
-          - ldc-1.12.0 # eq to dmd v2.082.1
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -143,7 +145,7 @@ jobs:
         working-directory: example
         run: dub build --config=SQLite --arch=x86 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
 
-      # x86_64
+      # x86_64 (all platforms)
       - name: dub test with SQLite config
         run: dub test --config=SQLite --arch=x86_64
         
@@ -160,25 +162,21 @@ jobs:
 
   # before dub 1.23.0(x86_omf unsupported)
   test-win32-dmd-older:
-    name: ${{ matrix.compiler }} on ${{ matrix.os }}
+    name: ${{ matrix.compiler }} on Win 32
+    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ windows-latest ] # don't bother with macos-latest
         compiler:
           - dmd-2.093.1
-          - dmd-2.092.1
-          - dmd-2.091.1
-          - dmd-2.090.1
-          - dmd-2.089.1
-          - dmd-2.088.1
-          - dmd-2.087.1
-          - dmd-2.086.1
+#          - dmd-2.092.1
+#          - dmd-2.091.1
+#          - dmd-2.090.1
+#          - dmd-2.089.1
+#          - dmd-2.088.1
+#          - dmd-2.087.1
+#          - dmd-2.086.1
           - dmd-2.085.1
-          - dmd-2.084.1
-          - dmd-2.083.1
-          - dmd-2.082.1
-    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
 
@@ -191,36 +189,36 @@ jobs:
         uses: WebFreak001/dub-upgrade@v0.1
 
       # x86 (windows-dmd)
-      - name: dub test with SQLite config on x86
+      - name: dub test with SQLite config (x86)
         run: dub test --config=SQLite-omf --arch=x86
 
-      - name: dub run with test config on x86
+      - name: dub run with test config (x86)
         run: dub run --config=test-omf --arch=x86
 
-      - name: run the ddbctest project on x86
+      - name: run the ddbctest project (x86)
         if: ${{ !(matrix.compiler == 'dmd-2.089.1' || matrix.compiler == 'dmd-2.090.1') }}
         working-directory: example
         run: dub build --config=SQLite-omf --arch=x86 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
 
-      - name: run the ddbctest project on x86
+      - name: run the ddbctest project (x86)
         if: ${{ (matrix.compiler == 'dmd-2.089.1' || matrix.compiler == 'dmd-2.090.1') }}
         working-directory: example
         run: dub build --config=SQLite-omf --arch=x86 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
         env: { "DFLAGS": "-lowmem" }
 
-      # x86_mscoff (windows-dmd)
-      - name: dub test with SQLite config on x86_mscoff
+      # Windows x86_mscoff (dmd only)
+      - name: dub test with SQLite config (x86_mscoff)
         run: dub test --config=SQLite --arch=x86_mscoff
 
-      - name: dub run with test config on x86_mscoff
+      - name: dub run with test config (x86_mscoff)
         run: dub run --config=test --arch=x86_mscoff
 
-      - name: run the ddbctest project on x86_mscoff
+      - name: run the ddbctest project (x86_mscoff)
         if: ${{ !(matrix.compiler == 'dmd-2.089.1' || matrix.compiler == 'dmd-2.090.1') }}
         working-directory: example
         run: dub build --config=SQLite --arch=x86_mscoff && ./ddbctest --connection=sqlite:ddbc-test.sqlite
 
-      - name: run the ddbctest project on x86_mscoff
+      - name: run the ddbctest project (x86_mscoff)
         if: ${{ (matrix.compiler == 'dmd-2.089.1' || matrix.compiler == 'dmd-2.090.1') }}
         working-directory: example
         run: dub build --config=SQLite --arch=x86_mscoff && ./ddbctest --connection=sqlite:ddbc-test.sqlite
@@ -229,3 +227,84 @@ jobs:
       # cache
       - uses: WebFreak001/dub-upgrade@v0.1
         with: { store: true }
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:5.7
+        ports: [3306]
+        env:
+          MYSQL_ROOT_PASSWORD: f48dfhw3Hd!Asah7i2aZ
+          MYSQL_DATABASE: testdb
+          MYSQL_USER: testuser
+          MYSQL_PASSWORD: passw0rd
+        # Set health checks to wait until mysql service has started
+        options: >-
+          --health-cmd "mysqladmin ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 4
+
+      postgres:
+        image: postgres
+        ports: [5432]
+        env:
+          POSTGRES_DB: testdb
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: passw0rd
+        # Set health checks to wait until postgres service has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 3
+
+      mssql:
+        #image: microsoft/mssql-server-linux:2017-latest
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        ports: [1433]
+        env:
+          MSSQL_PID: Developer
+          SA_PASSWORD: MSbbk4k77JKH88g54
+          ACCEPT_EULA: Y
+#        options: >-
+#          --health-cmd "sqlcmd -S localhost -U sa -P MSbbk4k77JKH88g54 -Q 'SELECT 1' || exit 1"
+#          --health-interval 10s
+#          --health-timeout 3s
+#          --health-retries 3
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install latest DMD
+        uses: dlang-community/setup-dlang@v1
+        with:
+          compiler: dmd-latest
+
+      - name: Run The Examples (SQLite)
+        working-directory: ./example
+        run: |
+          dub build --config=SQLite
+          ./ddbctest --connection=sqlite::memory:
+
+      - name: Run The Examples (MySQL)
+        working-directory: ./example
+        run: |
+          dub build --config=MySQL
+          ./ddbctest --connection=mysql:127.0.0.1:${{ job.services.mysql.ports[3306] }} --database=testdb --user=testuser --password=passw0rd
+
+      - name: Run The Examples (Postgres)
+        working-directory: ./example
+        run: |
+          dub build --config=PGSQL
+          ./ddbctest --connection=postgresql:127.0.0.1:${{ job.services.mysql.ports[5432] }} --database=testdb --user=testuser --password=passw0rd
+
+      - name: Run The Examples (SQL Server)
+        working-directory: ./example
+        run: |
+          sudo apt-get install freetds-bin freetds-common freetds-dev tdsodbc -y
+          dub build --config=ODBC
+          ./ddbctest --connection=odbc://127.0.0.1:${{ job.services.mssql.ports[1433] }} --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver=FreeTDS

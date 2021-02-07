@@ -18,16 +18,21 @@ string getURIPrefix(string uri)
 string getURIHost(string uri)
 {
 	auto i=uri.indexOf(":");
-	if ((i==-1)||(i==uri.length))
+	auto j=uri.lastIndexOf(":");
+	if ((i==-1)||(i==uri.length)) {
 		return uri;
-	return uri[i+1..$].replace("//", "");
+	} else if(j > i) {
+	    return uri[i+1..j].replace("//", "");
+    } else {
+        return uri[i+1..$].replace("//", "");
+    }
 }
 
 short getURIPort(string uri, bool useDefault)
 {
 	auto i=uri.indexOf(":");
 	auto j=uri.lastIndexOf(":");
-	if ((j==i)||(j==uri.length)||(j==-1))
+	if ((j==i)||(j==uri.length)||(j==-1)||!uri[j+1..$].isNumeric)
 	{
 		if (useDefault)
 			return getDefaultPort(getURIPrefix(uri));
