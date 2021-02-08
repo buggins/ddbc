@@ -230,7 +230,7 @@ jobs:
 
   integration-tests:
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     services:
       mysql:
@@ -312,6 +312,7 @@ jobs:
         env:
           PORT: ${{ job.services.mssql.ports[1433] }}
         run: |
-          sudo apt-get install unixodbc unixodbc-dev freetds-bin freetds-common freetds-dev tdsodbc -y
-          odbcinst -j
-          ./ddbctest --connection=odbc://127.0.0.1:$PORT --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver=FreeTDS
+          curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
+          curl https://packages.microsoft.com/config/ubuntu/20.04/prod.list > /etc/apt/sources.list.d/mssql-release.list
+          sudo ACCEPT_EULA=Y apt-get install msodbcsql17 -y
+          ./ddbctest --connection=odbc://127.0.0.1:$PORT --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 17 for SQL Server"
