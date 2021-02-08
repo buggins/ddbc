@@ -312,5 +312,6 @@ jobs:
         env:
           PORT: ${{ job.services.mssql.ports[1433] }}
         run: |
-          sudo apt-get install freetds-bin freetds-common freetds-dev tdsodbc -y
+          sudo apt-get install unixodbc unixodbc-dev freetds-bin freetds-common freetds-dev tdsodbc -y
+          odbcinst -j
           ./ddbctest --connection=odbc://127.0.0.1:$PORT --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver=FreeTDS
