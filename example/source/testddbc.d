@@ -18,16 +18,21 @@ string getURIPrefix(string uri)
 string getURIHost(string uri)
 {
 	auto i=uri.indexOf(":");
-	if ((i==-1)||(i==uri.length))
+	auto j=uri.lastIndexOf(":");
+	if ((i==-1)||(i==uri.length)) {
 		return uri;
-	return uri[i+1..$].replace("//", "");
+	} else if(j > i) {
+	    return uri[i+1..j].replace("//", "");
+    } else {
+        return uri[i+1..$].replace("//", "");
+    }
 }
 
-short getURIPort(string uri, bool useDefault)
+ushort getURIPort(string uri, bool useDefault)
 {
 	auto i=uri.indexOf(":");
 	auto j=uri.lastIndexOf(":");
-	if ((j==i)||(j==uri.length)||(j==-1))
+	if ((j==i)||(j==uri.length)||(j==-1)||!uri[j+1..$].isNumeric)
 	{
 		if (useDefault)
 			return getDefaultPort(getURIPrefix(uri));
@@ -35,7 +40,7 @@ short getURIPort(string uri, bool useDefault)
 			throw new Exception("No port specified when parsing URI and useDefault was not specified");
 	}
 
-	return to!short(uri[j+1..$]);
+	return to!ushort(uri[j+1..$]);
 }
 
 short getDefaultPort(string driver)
@@ -75,7 +80,7 @@ struct ConnectionParams
 	string driver;
 	string odbcdriver;
 	string host;
-	short port;
+	ushort port;
 	string database;
 }
 int main(string[] args)

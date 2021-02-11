@@ -1241,7 +1241,7 @@ public:
 // mysql://localhost:3306/DatabaseName
 class MySQLDriver : Driver {
     // helper function
-    public static string generateUrl(string host, ushort port, string dbname) {
+    public static string generateUrl(string host = "localhost", ushort port = 3306, string dbname = null) {
         return "ddbc:mysql://" ~ host ~ ":" ~ to!string(port) ~ "/" ~ dbname;
     }
 	public static string[string] setUserAndPassword(string username, string password) {
