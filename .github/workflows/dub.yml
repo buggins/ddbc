@@ -312,7 +312,7 @@ jobs:
         env:
           PORT: ${{ job.services.mssql.ports[1433] }}
         run: |
-          sudo curl -s -L -O https://packages.microsoft.com/keys/microsoft.asc | apt-key add --no-tty -
+          curl -s -L -O https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add --no-tty -
           sudo curl https://packages.microsoft.com/config/ubuntu/20.04/prod.list > /etc/apt/sources.list.d/mssql-release.list
           sudo ACCEPT_EULA=Y apt-get install msodbcsql17 -y
           ./ddbctest --connection=odbc://127.0.0.1:$PORT --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 17 for SQL Server"
