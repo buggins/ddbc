@@ -411,7 +411,7 @@ string makeDDBCUrl(string driverName, string[string] params) {
 string makeDDBCUrl(string driverName, string host = null, int port = 0, 
 							string dbName = null, string[string] params = null) {
 	import std.algorithm.searching : canFind;
-	enforce(canFind(["sqlite", "postgresql", "mysql", "odbc"], driverName), "driver must be one of sqlite|postgresql|mysql|odbc");
+	enforce(canFind(["sqlite", "postgresql", "mysql", "sqlserver", "oracle", "odbc"], driverName), "driver must be one of sqlite|postgresql|mysql|sqlserver|oracle|odbc");
     import std.conv : to;
     char[] res;
     res.assumeSafeAppend;
@@ -460,6 +460,21 @@ private unittest {
 private unittest {
 	string url = makeDDBCUrl("mysql", "127.0.0.1", 3306, "mydb");
 	assert(url == "ddbc:mysql://127.0.0.1:3306/mydb", "MySQL URL is not correct: "~url);
+}
+
+private unittest {
+	string url = makeDDBCUrl("sqlserver", "127.0.0.1", 1433, "mydb");
+	assert(url == "ddbc:sqlserver://127.0.0.1:1433/mydb", "SQL Server URL is not correct: "~url);
+}
+
+private unittest {
+	string url = makeDDBCUrl("oracle", "127.0.0.1", 1521, "mydb");
+	assert(url == "ddbc:oracle://127.0.0.1:1521/mydb", "Oracle URL is not correct: "~url);
+}
+
+private unittest {
+	string url = makeDDBCUrl("odbc", "127.0.0.1", 3306, "mydb");
+	assert(url == "ddbc:odbc://127.0.0.1:3306/mydb", "ODBC URL is not correct: "~url);
 }
 
 private unittest {

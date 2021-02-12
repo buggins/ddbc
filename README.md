@@ -3,7 +3,7 @@ DDBC
 
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/buggins/ddbc?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
-![CI](https://github.com/buggins/ddbc/workflows/CI/badge.svg)
+[![CI](https://github.com/buggins/ddbc/workflows/CI/badge.svg)](https://github.com/buggins/ddbc/actions?query=workflow%3ACI)
 
 [![Build Status](https://travis-ci.org/buggins/ddbc.svg?branch=master)](https://travis-ci.org/buggins/ddbc)
 
@@ -148,7 +148,21 @@ ddbc:postgresql://127.0.0.1:5432
 ### Microsoft SQL Server (via ODBC)
 
 ```
+ddbc:sqlserver://localhost,1433?user=sa,password=bbk4k77JKH88g54,driver=FreeTDS
+
+or
+
 ddbc:odbc://localhost,1433?user=sa,password=bbk4k77JKH88g54,driver=FreeTDS
+```
+
+### Oracle (via ODBC) **experimental**
+
+```
+ddbc:oracle://localhost:1521?user=sa,password=bbk4k77JKH88g54,driver=FreeTDS
+
+or
+
+ddbc:odbc://localhost:1521?user=sa,password=bbk4k77JKH88g54,driver=FreeTDS
 ```
 
 ### DSN connections for Microsoft SQL Server

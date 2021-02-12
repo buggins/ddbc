@@ -552,9 +552,9 @@ string extractDriverNameFromURL(string url) {
     url = stripDdbcPrefix(url);
     import std.string;
     int colonPos = cast(int)url.indexOf(":");
-    if (colonPos < 0)
-        return url;
-    return url[0 .. colonPos];
+    
+	string dbName = colonPos < 0 ? url : url[0 .. colonPos];
+	return dbName == "sqlserver" || dbName == "oracle" ? "odbc" : dbName;
 }
 
 /// extract parameters from URL string to string[string] map, update url to strip params
