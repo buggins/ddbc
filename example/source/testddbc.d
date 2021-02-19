@@ -246,7 +246,14 @@ int main(string[] args)
     {
         case "sqlite":
 			stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1");
-            stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name VARCHAR(250), comment MEDIUMTEXT, ts DATETIME)");
+            stmt.executeUpdate(`CREATE TABLE IF NOT EXISTS ddbct1 (
+				"id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+				"name" VARCHAR(250),
+				"comment" MEDIUMTEXT,
+				"unicode" VARCHAR(512),
+				"ts" DATETIME
+				)`);
+
             stmt.executeUpdate("INSERT INTO ddbct1 (name, comment, ts) 
 								VALUES 
 									('name1', 'comment for line 1', CURRENT_TIMESTAMP), 
@@ -273,7 +280,14 @@ int main(string[] args)
             break;
         case "postgresql":
 			stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1");
-            stmt.executeUpdate("CREATE TABLE ddbct1 (id SERIAL PRIMARY KEY, name VARCHAR(250), comment TEXT, ts TIMESTAMP)");
+            stmt.executeUpdate(`CREATE TABLE "ddbct1" (
+				"id" SERIAL PRIMARY KEY,
+				"name" VARCHAR(250),
+				"comment" TEXT,
+				"unicode" VARCHAR(512),
+				"ts" TIMESTAMP
+				)`);
+
             stmt.executeUpdate("INSERT INTO ddbct1 (name, comment, ts) VALUES ('name1', 'comment for line 1', CURRENT_TIMESTAMP), ('name2','comment for line 2 - can be very long', CURRENT_TIMESTAMP)");
             
 			stmt.executeUpdate(`DROP TABLE IF EXISTS "employee"`);
@@ -300,7 +314,8 @@ int main(string[] args)
             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (
 				`id` INTEGER NOT NULL PRIMARY KEY AUTO_INCREMENT, 
 				`name` VARCHAR(250), 
-				`comment` MEDIUMTEXT, 
+				`comment` MEDIUMTEXT,
+				`unicode` NVARCHAR(512),
 				`ts` TIMESTAMP NULL DEFAULT NULL
 				)");
 
@@ -331,6 +346,7 @@ int main(string[] args)
 				[id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY,
 				[name] VARCHAR(250),
 				[comment] VARCHAR(max),
+				[unicode] NVARCHAR(512),
 				[ts] DATETIME
 				)");
 
