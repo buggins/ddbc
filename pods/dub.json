@@ -1,0 +1,7 @@
+{
+	"name": "pods",
+	"targetType": "library",
+    "dependencies": {
+        "ddbc:core": "*"
+    }
+}

@@ -7,10 +7,12 @@
     "targetPath": "lib",
     "targetType": "staticLibrary",
     "dependencies": {
-        "ddbc:core": "*"
+        "ddbc:core": "*",
+        "ddbc:pods": "*"
     },
     "subPackages": [
-		"./core/"
+		"./core/",
+        "./pods"
 	],
     "buildRequirements": [
 		"allowWarnings"
