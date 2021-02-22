@@ -1,0 +1,7 @@
+{
+	"name": "drivers",
+	"targetType": "library",
+    "dependencies": {
+        "ddbc:core": "*"
+    }
+}
