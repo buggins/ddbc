@@ -6,6 +6,12 @@
     "license": "BSL-1.0",
     "targetPath": "lib",
     "targetType": "staticLibrary",
+    "dependencies": {
+        "ddbc:core": "*"
+    },
+    "subPackages": [
+		"./core/"
+	],
     "buildRequirements": [
 		"allowWarnings"
 	],
