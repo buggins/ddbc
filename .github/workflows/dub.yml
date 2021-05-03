@@ -23,8 +23,18 @@ jobs:
         compiler:
           - dmd-latest
           - ldc-latest
+          - dmd-2.096.1
+          - dmd-2.095.1
           - dmd-2.094.2
+          - dmd-2.093.1
+          - dmd-2.092.1
+          - dmd-2.091.1
+          - dmd-2.090.1
+          - ldc-1.25.1 # eq to dmd v2.095.1
           - ldc-1.24.0 # eq to dmd v2.094.1
+          - ldc-1.23.0 # eq to dmd v2.093.1
+          - ldc-1.22.0 # eq to dmd v2.092.1
+          - ldc-1.21.0 # eq to dmd v2.091.1
     steps:
       - uses: actions/checkout@v2
 
