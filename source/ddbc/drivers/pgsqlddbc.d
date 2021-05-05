@@ -24,6 +24,7 @@ module ddbc.drivers.pgsqlddbc;
 
 
 version(USE_PGSQL) {
+    pragma(msg, "DDBC will use PGSQL driver");
 
     import std.algorithm;
     import std.conv;

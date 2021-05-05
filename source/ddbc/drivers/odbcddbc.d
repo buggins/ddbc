@@ -49,6 +49,7 @@ import ddbc.core;
 
 version (USE_ODBC)
 {
+    pragma(msg, "DDBC will use ODBC driver");
 
     version (unittest)
     {

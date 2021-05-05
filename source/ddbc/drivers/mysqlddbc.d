@@ -50,6 +50,7 @@ import ddbc.common;
 import ddbc.core;
 
 version(USE_MYSQL) {
+    pragma(msg, "DDBC will use MySQL driver");
 
 import std.array;
 import mysql.connection : prepare;

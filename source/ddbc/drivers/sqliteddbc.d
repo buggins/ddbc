@@ -22,6 +22,7 @@ module ddbc.drivers.sqliteddbc;
 
 
 version(USE_SQLITE) {
+    pragma(msg, "DDBC will use SQLite driver");
 
     import std.algorithm;
     import std.conv;
