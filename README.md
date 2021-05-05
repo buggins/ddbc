@@ -1,27 +1,22 @@
 DDBC
 ====
 
-[![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/buggins/ddbc?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
-[![CI](https://github.com/buggins/ddbc/workflows/CI/badge.svg)](https://github.com/buggins/ddbc/actions?query=workflow%3ACI)
-
-[![Build Status](https://travis-ci.org/buggins/ddbc.svg?branch=master)](https://travis-ci.org/buggins/ddbc)
+[![DUB Package](https://img.shields.io/dub/v/ddbc.svg)](https://code.dlang.org/packages/ddbc) [![CI](https://github.com/buggins/ddbc/workflows/CI/badge.svg)](https://github.com/buggins/ddbc/actions?query=workflow%3ACI) [![Build Status](https://travis-ci.org/buggins/ddbc.svg?branch=master)](https://travis-ci.org/buggins/ddbc) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/buggins/ddbc?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 DDBC is DB Connector for D language (similar to JDBC)
 
-Currently supports MySQL, PostgreSQL, SQLite and ODBC.
+Currently supports MySQL, PostgreSQL, SQLite and SQL Server (via ODBC).
 
-Project homepage: https://github.com/buggins/ddbc
-Documentation: https://github.com/buggins/ddbc/wiki
+The project is hosted on [github](https://github.com/buggins/ddbc) with documentation available on the [wiki](https://github.com/buggins/ddbc/wiki).
 
 
-See also: https://github.com/buggins/hibernated - ORM for D language which uses DDBC.
+See also: [hibernated](https://github.com/buggins/hibernated) - ORM for D language which uses DDBC.
 
 
 NOTE: project has been moved from SourceForge to GitHub
 
 
-Example:
+## Sample code
 
 ```d
 import ddbc;
