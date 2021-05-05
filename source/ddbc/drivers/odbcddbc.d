@@ -64,9 +64,10 @@ version (USE_ODBC)
 
             DataSource createUnitTestODBCDataSource()
             {
-                import std.file;
+                //import std.file : read;
+                //cast(string) read("test_connection.txt");
 
-                string url = "ddbc:odbc://localhost,1433?user=SA,password=bbk4k77JKH88g54,driver=FreeTDS";//cast(string) read("test_connection.txt");
+                string url = "ddbc:odbc://localhost,1433?user=SA,password=bbk4k77JKH88g54,driver=FreeTDS";
 
                 return createConnectionPool(url);
             }
