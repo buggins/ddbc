@@ -15,7 +15,7 @@
             "name": "full",
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL", "USE_ODBC"],
             "dependencies": {
-                "mysql-native": "~>3.0.1",
+                "mysql-native": "~>3.0.2",
                 "derelict-pq": "~>2.2.0"
             },
             "libs-posix": ["sqlite3", "odbc"],
@@ -33,7 +33,7 @@
             "platforms": ["windows-x86"],
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL", "USE_ODBC"],
             "dependencies": {
-                "mysql-native": "~>3.0.1",
+                "mysql-native": "~>3.0.2",
                 "derelict-pq": "~>2.2.0"
             },
             "libs-windows": ["odbc32"],
@@ -44,7 +44,7 @@
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
             "dependencies": {
-                "mysql-native": "~>3.0.1"
+                "mysql-native": "~>3.0.2"
             }
         },
         {
