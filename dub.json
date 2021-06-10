@@ -20,7 +20,8 @@
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL", "USE_ODBC"],
             "dependencies": {
                 "mysql-native": "~>3.0.3",
-                "derelict-pq": "~>2.2.0"
+                "derelict-pq": "~>2.2.0",
+                "odbc": "~>1.0.0"
             },
             "libs-posix": ["sqlite3", "odbc"],
             "libs-windows": ["odbc32"],
@@ -38,7 +39,8 @@
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL", "USE_ODBC"],
             "dependencies": {
                 "mysql-native": "~>3.0.3",
-                "derelict-pq": "~>2.2.0"
+                "derelict-pq": "~>2.2.0",
+                "odbc": "~>1.0.0"
             },
             "libs-windows": ["odbc32"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll"],
@@ -84,7 +86,10 @@
             "name": "ODBC",
             "versions": ["USE_ODBC"],
             "libs-posix": ["odbc"],
-            "libs-windows": ["odbc32"]
+            "libs-windows": ["odbc32"],
+            "dependencies": {
+                "odbc": "~>1.0.0"
+            }
         },
         {
             "name": "API"

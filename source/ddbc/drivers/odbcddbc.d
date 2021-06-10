@@ -76,16 +76,10 @@ version (USE_ODBC)
 
     // The etc.c.odbc.* modules are deprecated and due for removal in Feb 2022
     // https://dlang.org/phobos/etc_c_odbc_sql.html
-    // We should now use core.sys.windows.* instead
-    static if(__VERSION__ < 2096) {
-        import etc.c.odbc.sql;
-        import etc.c.odbc.sqlext;
-        import etc.c.odbc.sqltypes;
-    } else {
-        import core.sys.windows.sql;
-        import core.sys.windows.sqlext;
-        import core.sys.windows.sqltypes;
-    }
+    // We should now use the odbc dub package instead
+    import odbc.sql;
+    import odbc.sqlext;
+    import odbc.sqltypes;
 
     /*private SQLRETURN check(lazy SQLRETURN fn, SQLHANDLE h, SQLSMALLINT t,
             string file = __FILE__, size_t line = __LINE__)
