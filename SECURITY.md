@@ -12,3 +12,5 @@ We only support the latest major/minor release. Fixes for security issues that d
 ## Reporting a Vulnerability
 
 Development on ddbc is not particularly active. If a vulnerability is found please consider making a pull request with a description of the problem and the appropriate fix. Appropriate testing should also be included.
+
+You can also make contact via gitter.im: [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/buggins/ddbc?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
