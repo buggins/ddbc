@@ -52,6 +52,10 @@ jobs:
         if: startsWith(matrix.os, 'windows')
         uses: WebFreak001/dub-upgrade@v0.1
 
+      # full build
+      - name: dub build (FULL)
+        run: dub build --config=full --arch=x86_64
+
       # x86 (Windows Only)
       - name: dub test with SQLite config (x86)
         if: ${{ startsWith(matrix.os, 'windows') }}
