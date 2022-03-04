@@ -31,14 +31,14 @@ services:
   # accepted their terms & conditions. Then prior to running 'docker-compose up -d' you
   # will need to run 'docker login container-registry.oracle.com' to pull the Oracle Database image.
   # Also, Oracle takes considerably more resources.
-  oracle:
-    image: container-registry.oracle.com/database/standard:12.1.0.2
-    ports:
-      - 1521:1521
-      - 8080:8080
-      - 5500:5500
-    environment:
-      - DB_SID=travis
-      - DB_PASSWD=bbk4k77JKH88g54
-      - USERNAME=travis
-      - PASSWORD=bbk4k77JKH88g54
+#  oracle:
+#    image: container-registry.oracle.com/database/standard:12.1.0.2
+#    ports:
+#      - 1521:1521
+#      - 8080:8080
+#      - 5500:5500
+#    environment:
+#      - DB_SID=travis
+#      - DB_PASSWD=bbk4k77JKH88g54
+#      - USERNAME=travis
+#      - PASSWORD=bbk4k77JKH88g54

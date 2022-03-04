@@ -31,7 +31,9 @@
             "dependencies": {
                 "mysql-native": "~>3.0.3",
                 "derelict-pq": "~>2.2.0",
-                "odbc": "~>1.0.0"
+                "odbc": "~>1.0.0",
+                "ddbc:drivers": "*",
+                "ddbc:pods": "*"
             },
             "libs-posix": ["sqlite3", "odbc"],
             "libs-windows": ["odbc32"],
@@ -50,7 +52,9 @@
             "dependencies": {
                 "mysql-native": "~>3.0.3",
                 "derelict-pq": "~>2.2.0",
-                "odbc": "~>1.0.0"
+                "odbc": "~>1.0.0",
+                "ddbc:drivers": "*",
+                "ddbc:pods": "*"
             },
             "libs-windows": ["odbc32"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll", "libs/win32/libpq.dll"],
@@ -60,12 +64,18 @@
             "name": "MySQL",
             "versions": ["USE_MYSQL"],
             "dependencies": {
-                "mysql-native": "~>3.0.3"
+                "mysql-native": "~>3.0.3",
+                "ddbc:drivers": "*",
+                "ddbc:pods": "*"
             }
         },
         {
             "name": "SQLite",
             "versions": ["USE_SQLITE"],
+            "dependencies": {
+                "ddbc:drivers": "*",
+                "ddbc:pods": "*"
+            },
             "libs-posix": ["sqlite3"],
             "lflags-osx": ["-L/usr/local/opt/sqlite3/lib/"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
@@ -79,6 +89,10 @@
             "name": "SQLite-omf",
             "platforms": ["windows-x86-dmd"],
             "versions": ["USE_SQLITE"],
+            "dependencies": {
+                "ddbc:drivers": "*",
+                "ddbc:pods": "*"
+            },
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
             "sourceFiles-windows-x86" : [ "libs/win32/sqlite3.lib" ]
         },
@@ -89,7 +103,9 @@
             "copyFiles-windows-x86": [ "libs/win32/libpq.dll"],
             "copyFiles-windows-x86_64": [ "libs/win64/libpq.dll"],
             "dependencies": {
-                "derelict-pq": "~>2.2.0"
+                "derelict-pq": "~>2.2.0",
+                "ddbc:drivers": "*",
+                "ddbc:pods": "*"
             }
         },
         {
@@ -98,7 +114,9 @@
             "libs-posix": ["odbc"],
             "libs-windows": ["odbc32"],
             "dependencies": {
-                "odbc": "~>1.0.0"
+                "odbc": "~>1.0.0",
+                "ddbc:drivers": "*",
+                "ddbc:pods": "*"
             }
         },
         {
