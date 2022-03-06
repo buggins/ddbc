@@ -101,6 +101,9 @@
             "targetName": "ddbc-tests",
             "targetPath": "test",
             "targetType": "executable",
+            "dependencies": {
+                "d-unit": "~>0.10.2"
+            },
             "versions": ["USE_SQLITE"],
             "libs-posix": ["sqlite3"],
             "lflags-osx": ["-L/usr/local/opt/sqlite3/lib/"],
@@ -119,6 +122,9 @@
             "targetName": "ddbc-tests",
             "targetPath": "test",
             "targetType": "executable",
+            "dependencies": {
+                "d-unit": "~>0.10.2"
+            },
             "versions": ["USE_SQLITE"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
             "sourceFiles-windows-x86-dmd" : [ "libs/win32/sqlite3.lib" ]

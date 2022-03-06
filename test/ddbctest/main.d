@@ -1,32 +1,132 @@
 module ddbc.ddbctest;
 
+import std.conv : to;
+import std.datetime : Date, DateTime;
+import std.datetime.systime : SysTime, Clock;
+import std.variant;
+import std.stdio;
 
-void main() {
+import dunit;
+import ddbc.core;
+import ddbc.common;
+import ddbc.pods;
 
-    import ddbc;
-    import std.datetime : Date, DateTime;
-    import std.datetime.systime : SysTime;
-    import std.format : format;
-    import std.stdio;
+class DdbcTestFixture {
 
-    // prepare database connectivity
-    auto conn = createConnection("sqlite::memory:");
-    scope(exit) conn.close();
-    Statement stmt = conn.createStatement();
-    Statement stmt2 = conn.createStatement();
-    scope(exit) stmt.close();
-    // fill database with test data
-    stmt.executeUpdate("DROP TABLE IF EXISTS user");
-    stmt.executeUpdate("CREATE TABLE user (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null, dob DATE, created DATETIME, updated DATETIME)");
-    stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (1, "John", 5, "1976-04-18", "2017-11-23T20:45", "2010-12-30T00:00:00Z")`);
-    stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (2, "Andrei", 2, "1977-09-11", "2018-02-28T13:45", "2010-12-30T12:10:12Z")`);
-    stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (3, "Walter", 2, "1986-03-21", "2018-03-08T10:30", "2010-12-30T12:10:04.100Z")`);
-    stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (4, "Rikki", 3, "1979-05-24", "2018-06-13T11:45", "2010-12-30T12:10:58Z")`);
-    stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (5, "Iain", 0, "1971-11-12", "2018-11-09T09:33", "20101230T121001Z")`);
-    stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (6, "Robert", 1, "1966-03-19", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
+    mixin UnitTest;
 
-    // our POD object
-    struct User {
+    private static Connection conn;
+
+    private immutable string setupSql;
+    private immutable string teardownSql;
+
+    public this(string setupSql = null, string teardownSql = null) {
+        this.setupSql = setupSql;
+        this.teardownSql = teardownSql;
+    }
+
+    @BeforeAll
+    public static void setUpAll() {
+        debug writeln("@BeforeAll : creating db connection");
+        conn = createConnection("sqlite::memory:");
+        conn.setAutoCommit(true);
+    }
+
+    @AfterAll
+    public static void tearDownAll() {
+        debug writeln("@AfterAll : closing db connection");
+        conn.close();
+    }
+
+    @BeforeEach
+    public void setUp() {
+        debug writeln("@BeforeEach");
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+        
+        // fill database with test data
+        if(this.setupSql !is null) {
+            stmt.executeUpdate(this.setupSql);
+        }
+    }
+
+    @AfterEach
+    public void tearDown() {
+        debug writeln("@AfterEach");
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+        
+        // fill database with test data
+        if(this.teardownSql !is null) {
+            stmt.executeUpdate(this.teardownSql);
+        }
+    }
+}
+
+
+// tests the use of exec update with raw sql and prepared statements
+class SQLiteTest : DdbcTestFixture {
+    mixin UnitTest;
+
+    this() {
+        super(
+            "CREATE TABLE my_first_test (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL)",
+            "DROP TABLE IF EXISTS my_first_test"
+        );
+    }
+
+    @Test
+    public void testExecutingRawSqlInsertStatements() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        int result1 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`);
+        assertEquals(1, result1);
+
+        Variant id;
+        int result2 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`, id);
+        assertEquals(1, result2);
+        assertEquals("long", to!string(id.type));
+        assertEquals(2L, id.get!(long));
+    }
+
+    @Test
+    public void testExecutingPreparedSqlInsertStatements() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('Apple')`);
+        stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('Orange')`);
+        stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('Banana')`);
+
+        PreparedStatement ps = conn.prepareStatement(`SELECT * FROM my_first_test WHERE name = ?`);
+        scope(exit) ps.close();
+
+        ps.setString(1, "Orange");
+        
+        ddbc.core.ResultSet resultSet = ps.executeQuery();
+
+        //assertEquals(1, resultSet.getFetchSize()); // getFetchSize() isn't support by all db
+        assertTrue(resultSet.next());
+
+        // int result1 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`);
+        // assertEquals(1, result1);
+
+        // Variant id;
+        // int result2 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`, id);
+        // assertEquals(1, result2);
+        // assertEquals("long", to!string(id.type));
+        // assertEquals(2L, id.get!(long));
+    }
+}
+
+
+// tests the use of POD
+class SQLitePodTest : DdbcTestFixture {
+    mixin UnitTest;
+
+    // our POD object (needs to be a struct)
+    private struct User {
         long id;
         string name;
         int flags;
@@ -35,73 +135,286 @@ void main() {
         SysTime updated;
     }
 
+    // todo: look into getting the same functionality with a class
     // class User {
-    //     long id;
-    //     string name;
-    //     int flags;
-    //     Date dob;
-    //     DateTime created;
-    //     SysTime updated;
-    //     override string toString() {
-    //         return format("{id: %s, name: %s, flags: %s, dob: %s, created: %s, updated: %s}", id, name, flags, dob, created, updated);
-    //     }
+    //    long id;
+    //    string name;
+    //    int flags;
+    //    Date dob;
+    //    DateTime created;
+    //    override string toString() {
+    //        return format("{id: %s, name: %s, flags: %s, dob: %s, created: %s}", id, name, flags, dob, created);
+    //    }
     // }
 
-    writeln("reading all user table rows");
-    foreach(ref e; stmt.select!User) {
-        writeln("id:", e.id, " name:", e.name, " flags:", e.flags, ", dob: ", e.dob, ", created: ", e.created);
+    this() {
+        super(
+            "CREATE TABLE user (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null, dob DATE, created DATETIME, updated DATETIME)",
+            "DROP TABLE IF EXISTS user"
+        );
     }
 
-    writeln("\nReading user table rows with WHERE id < 6 ORDER BY name DESC...");
-    foreach(ref e; stmt.select!User.where("id < 6").orderBy("name desc")) {
-        writeln("id:", e.id, " name:", e.name, " flags:", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated);
+    @Test
+    public void testSavingPod() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        immutable SysTime now = Clock.currTime();
+
+        User u;
+        u.name = "Test Person";
+        u.flags = 1;
+        u.dob = Date(1979, 8, 5);
+        u.created = cast(DateTime) now;
+        u.updated = now;
+
+        auto inserted = stmt.insert!User(u);
+
+        assertTrue(inserted);
     }
 
-    writeln("\nReading all user table rows, but fetching only id and name (you will see default value 0 in flags field)");
-    foreach(ref e; stmt.select!(User, "id", "name")) {
-        writeln("id:", e.id, " name:", e.name, " flags:", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated);
+    @Test
+    public void testGettingPodById() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (12, "Jessica", 5, "1985-04-18", "2017-11-23T20:45", "2018-03-11T00:30:59Z")`);
+
+        immutable User u = stmt.get!User(12L); // testing this function
+        
+        //writeln("id:", u.id, " name:", u.name, " flags:", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
+        assertEquals(12, u.id);
+        assertEquals("Jessica", u.name);
+        assertEquals(5, u.flags);
+
+        // dob Date "1985-04-18":
+        assertEquals(1985, u.dob.year);
+        assertEquals(4, u.dob.month);
+        assertEquals(18, u.dob.day);
+
+        // created DateTime "2017-11-23T20:45":
+        assertEquals(2017, u.created.year);
+        assertEquals(11, u.created.month);
+        assertEquals(23, u.created.day);
+        assertEquals(20, u.created.hour);
+        assertEquals(45, u.created.minute);
+        assertEquals(0, u.created.second);
+
+        // updated SysTime "2018-03-11T00:30:59Z":
+        assertEquals(2018, u.updated.year);
+        assertEquals(3, u.updated.month);
+        assertEquals(11, u.updated.day);
+        assertEquals(0, u.updated.hour);
+        assertEquals(30, u.updated.minute);
+        assertEquals(59, u.updated.second);
     }
 
-    writeln("\nReading all user table rows, but fetching only id and name, placing result into vars");
-    long id;
-    string name;
-    foreach(e; stmt.select!()("SELECT id, name FROM user", id, name)) {
-        writeln("id:", id, " name:", name);
+    @Test
+    public void testSelectAllPod() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (1, "John", 5, "1976-04-18", "2017-11-23T20:45", "2010-12-30T00:00:00Z")`);
+
+        writeln("reading all user table rows");
+
+        auto users = stmt.select!User;
+
+        assertFalse(users.empty());
+
+        foreach(ref u; users) {
+            //writeln("id:", u.id, " name:", u.name, " flags:", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
+
+            assertEquals(1, u.id);
+            assertEquals("John", u.name);
+            assertEquals(5, u.flags);
+
+            // dob Date "1976-04-18":
+            assertEquals(1976, u.dob.year);
+		    assertEquals(4, u.dob.month);
+		    assertEquals(18, u.dob.day);
+
+            // created DateTime "2017-11-23T20:45":
+            assertEquals(2017, u.created.year);
+		    assertEquals(11, u.created.month);
+		    assertEquals(23, u.created.day);
+		    assertEquals(20, u.created.hour);
+            assertEquals(45, u.created.minute);
+            assertEquals(0, u.created.second);
+
+            // updated SysTime "2010-12-30T03:15:28Z":
+            assertEquals(2010, u.updated.year);
+		    assertEquals(12, u.updated.month);
+		    assertEquals(30, u.updated.day);
+		    assertEquals(3, u.updated.hour);
+            assertEquals(15, u.updated.minute);
+            assertEquals(28, u.updated.second);
+        }
     }
 
-    writeln("\nupdating user id=1, change name to 'JB' (:))");
-    foreach(ref john; stmt.select!User.where("id=1")) {
-        writeln(john);
-        john.name = "JB";
-        stmt2.update(john);
-    }
-    User[1] jb_users;
-    foreach(jb; stmt.select!User.where("id=1")) {
-        jb_users[0] = jb;
-        writeln(jb);
-    }
+    @Test
+    public void testQueryUsersWhereIdLessThanSix() {
+        givenMultipleUsersInDatabase();
 
-    writeln("reading all user table rows");
-    foreach(ref e; stmt.select!User) {
-        writeln("id:", e.id, " name:", e.name, " flags:", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated);
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        writeln("\nReading user table rows with WHERE id < 6 ORDER BY name DESC...");
+        foreach(ref u; stmt.select!User.where("id < 6").orderBy("name desc")) {
+            assertTrue(u.id < 6);
+            writeln("id:", u.id, " name:", u.name, " flags:", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
+        }
     }
 
-    writeln("\ndelete user id=1");
-    stmt.remove(jb_users[0]);
-    writeln("reading all user table rows");
-    foreach(ref e; stmt.select!User) {
-        writeln("id:", e.id, " name:", e.name, " flags:", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated);
+    // Select all user table rows, but fetching only id and name (you will see default value 0 in flags field)
+    @Test
+    public void testQueryAllUsersJustIdAndName() {
+        givenMultipleUsersInDatabase();
+
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        //writeln("\nReading all user table rows, but fetching only id and name (you will see default value 0 in flags field)");
+        foreach(ref u; stmt.select!(User, "id", "name")) {
+            assertTrue(u.id > 0);
+            assertTrue(u.name.length > 0);
+            writeln("id:", u.id, " name:", u.name, " flags:", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
+        }
     }
 
-    writeln("\nGet user id=2");
-    User u = stmt.get!User(2L);
-    writeln(u);
+    // Select all user table rows, but fetching only id and name, placing result into vars
+    @Test
+    public void testQueryAllUsersJustIdAndName_IntoVars() {
+        givenMultipleUsersInDatabase();
 
-    //writeln("\nGet user id=789 (throws!)");
-    //try {
-    //  u = stmt.get!User(789L);
-    //} catch (SQLException e) {
-    //  writeln("Exception thrown as expected.");
-    //}
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
 
+        int count = 0;
+        //writeln("\nSelect all user table rows, but fetching only id and name, placing result into vars");
+        long id;
+        string name;
+        foreach(ref resultNumber; stmt.select!()("SELECT id, name FROM user", id, name)) {
+            assertEquals(count, resultNumber);
+
+            assertTrue(id > 0);
+            assertTrue(name.length > 0);
+
+            count++;
+        }
+        assertEquals(6, count); // rows in user table minus 1 as results start from 0
+    }
+
+    // @Test
+    // public void testQueryUserThenUpdate() {
+    //     givenMultipleUsersInDatabase();
+
+    //     Statement stmt = conn.createStatement();
+    //     scope(exit) stmt.close();
+
+    //     //writeln("\nSelect user id=1, change name to 'JB' (:))");
+    //     auto results = stmt.select!User.where("id=1");
+
+    //     foreach(ref u; results) { // <--- doesn't work for some reason 
+    //         u.name = "JB";
+    //         assertTrue(stmt.update(u));
+    //     }
+
+    //     User u = stmt.get!User(1L);
+    //     assertEquals("JB", u.name);
+    // }
+
+    @Test
+    public void testGetUserThenUpdate() {
+        givenMultipleUsersInDatabase();
+
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        User u = stmt.get!User(3L);
+        assertEquals("Walter", u.name);
+
+        u.name = "Walter Bright";
+        assertTrue(stmt.update(u));
+
+        u = stmt.get!User(3L);
+        assertEquals("Walter Bright", u.name);
+    }
+
+    @Test
+    public void testGetNonExistingRowShouldThrowException() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        bool exCaught = false;
+        //writeln("\nGet user id=789 (throws!)");
+
+        try {
+            User u = stmt.get!User(789L);
+            assertTrue(false, "Should not get here");
+        } catch (SQLException e) {
+            exCaught = true;
+            writeln("Exception thrown as expected.");
+        }
+        assertTrue(exCaught, "There should be an exception");
+    }
+
+    @Test
+    public void testRemovingPod() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (123, "Steve", 5, "1976-04-18", "2017-11-23T20:45", "2010-12-30T00:00:00Z")`);
+
+        User u = stmt.get!User(123L);
+        //User u = stmt.select!User.where("id = 111").front();
+
+        // make sure we have the user:
+        assertEquals(123, u.id);
+        assertEquals("Steve", u.name);
+
+        bool removed = stmt.remove!User(u);
+
+        assertTrue(removed, "Should return true on successful removal");
+
+        auto users = stmt.select!User;
+
+        assertTrue(users.empty(), "There shouldn't be users in the table");
+    }
+
+    @Test
+    public void testDeletingPodById() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (111, "Sharon", 5, "1976-04-18", "2017-11-23T20:45", "2010-12-30T00:00:00Z")`);
+
+        User u;
+        u.id = 111;
+
+        bool removed = stmt.remove!User(u);
+
+        assertTrue(removed, "Should return true on successful removal");
+
+        auto users = stmt.select!User;
+
+        assertTrue(users.empty(), "There shouldn't be users in the table");
+    }
+
+    private void givenMultipleUsersInDatabase() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (1, "John", 5, "1976-04-18", "2017-11-23T20:45", "2010-12-30T00:00:00Z")`);
+        stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (2, "Andrei", 2, "1977-09-11", "2018-02-28T13:45", "2010-12-30T12:10:12Z")`);
+        stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (3, "Walter", 2, "1986-03-21", "2018-03-08T10:30", "2010-12-30T12:10:04.100Z")`);
+        stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (4, "Rikki", 3, "1979-05-24", "2018-06-13T11:45", "2010-12-30T12:10:58Z")`);
+        stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (5, "Iain", 0, "1971-11-12", "2018-11-09T09:33", "20101230T121001Z")`);
+        stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (6, "Robert", 1, "1966-03-19", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`);
+    }
 }
+
+
+
+// either use the 'Main' mixin or call 'dunit_main(args)'
+mixin Main;
