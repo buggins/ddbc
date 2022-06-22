@@ -1134,28 +1134,21 @@ version(USE_SQLITE) {
         // }
     }
 
-
-    // sample URL:
-    // mysql://localhost:3306/DatabaseName
-
-    //String url = "jdbc:postgresql://localhost/test";
-    //Properties props = new Properties();
-    //props.setProperty("user","fred");
-    //props.setProperty("password","secret");
-    //Connection conn = DriverManager.getConnection(url, props);
     class SQLITEDriver : Driver {
         // helper function
-        public static string generateUrl(string host, ushort port, string dbname) {
-            return "sqlite://" ~ host ~ ":" ~ to!string(port) ~ "/" ~ dbname;
-        }
+        public static string generateUrl(string dbname)
+        {
+            return "sqlite:" ~ dbname;
+	}
+
         public static string[string] setUserAndPassword(string username, string password) {
             string[string] params;
             params["user"] = username;
             params["password"] = password;
             return params;
         }
-        override ddbc.core.Connection connect(string url, string[string] params) {
-            //writeln("SQLITEDriver.connect " ~ url);
+        
+	override ddbc.core.Connection connect(string url, string[string] params) {
             return new SQLITEConnection(url, params);
         }
     }
