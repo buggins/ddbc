@@ -226,6 +226,9 @@ public:
 /// Helper implementation of ResultSet - throws Method not implemented for most of methods.
 /// Useful for driver implementations
 class ResultSetImpl : ddbc.core.ResultSet {
+	private import std.datetime : DateTime, Date, TimeOfDay;
+	private import std.datetime.systime : SysTime;
+
 public:
     override int opApply(int delegate(DataSetReader) dg) { 
         int result = 0;
@@ -372,29 +375,29 @@ public:
 		throw new SQLException("Method not implemented");
 	}
 
-	override std.datetime.systime.SysTime getSysTime(int columnIndex) {
+	override SysTime getSysTime(int columnIndex) {
 		throw new SQLException("Method not implemented");
 	}
-	override std.datetime.DateTime getDateTime(int columnIndex) {
+	override DateTime getDateTime(int columnIndex) {
 		throw new SQLException("Method not implemented");
 	}
-	override std.datetime.Date getDate(int columnIndex) {
+	override Date getDate(int columnIndex) {
 		throw new SQLException("Method not implemented");
 	}
-	override std.datetime.TimeOfDay getTime(int columnIndex) {
+	override TimeOfDay getTime(int columnIndex) {
 		throw new SQLException("Method not implemented");
 	}
 
-	override std.datetime.systime.SysTime getSysTime(string columnName) {
+	override SysTime getSysTime(string columnName) {
 		return getSysTime(findColumn(columnName));
 	}
-	override std.datetime.DateTime getDateTime(string columnName) {
+	override DateTime getDateTime(string columnName) {
 		return getDateTime(findColumn(columnName));
 	}
-	override std.datetime.Date getDate(string columnName) {
+	override Date getDate(string columnName) {
 		return getDate(findColumn(columnName));
 	}
-	override std.datetime.TimeOfDay getTime(string columnName) {
+	override TimeOfDay getTime(string columnName) {
 		return getTime(findColumn(columnName));
 	}
 }

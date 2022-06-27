@@ -53,7 +53,7 @@ version(USE_MYSQL) {
     pragma(msg, "DDBC will use MySQL driver");
 
 import std.array;
-import mysql.connection : prepare;
+import mysql.connection : prepare, MySqlNativeConnection = Connection;
 import mysql.commands : query, exec;
 import mysql.prepared;
 import mysql.protocol.constants;
@@ -139,7 +139,7 @@ private:
     string password;
     string hostname;
     int port = 3306;
-    mysql.connection.Connection conn;
+    MySqlNativeConnection conn;
     bool closed;
     bool autocommit;
     Mutex mutex;
@@ -169,7 +169,7 @@ public:
         mutex.unlock();
     }
 
-    mysql.connection.Connection getConnection() { return conn; }
+    MySqlNativeConnection getConnection() { return conn; }
 
 
 	void onStatementClosed(MySQLStatement stmt) {
@@ -211,7 +211,7 @@ public:
 
             //writeln("host " ~ hostname ~ " : " ~ to!string(port) ~ " db=" ~ dbName ~ " user=" ~ username ~ " pass=" ~ password);
 
-            conn = new mysql.connection.Connection(hostname, username, password, dbName, cast(ushort)port);
+            conn = new MySqlNativeConnection(hostname, username, password, dbName, cast(ushort)port);
             closed = false;
             setAutoCommit(true);
         } catch (Throwable e) {
