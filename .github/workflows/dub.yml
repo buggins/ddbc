@@ -23,15 +23,12 @@ jobs:
         compiler:
           - dmd-latest
           - ldc-latest
+          - dmd-2.099.1
           - dmd-2.098.1
           - dmd-2.097.2
           - dmd-2.096.1
-          - dmd-2.095.1
-          - dmd-2.094.2
           - ldc-1.28.1 # eq to dmd v2.098.1
           - ldc-1.27.1 # eq to dmd v2.097.2
-          - ldc-1.25.1 # eq to dmd v2.095.1
-          - ldc-1.24.0 # eq to dmd v2.094.1
     steps:
       - uses: actions/checkout@v2
 
@@ -100,142 +97,6 @@ jobs:
         if: startsWith(matrix.os, 'windows')
         with: { store: true }
 
-  # before dub 1.23.0(x86_omf unsupported)
-  test-older:
-    name: ${{ matrix.compiler }} on ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ ubuntu-latest, windows-latest ] # don't bother with macos-latest
-        compiler:
-          - dmd-2.093.1
-#          - dmd-2.092.1
-#          - dmd-2.091.1
-          - dmd-2.090.1
-#          - dmd-2.089.1
-#          - dmd-2.088.1
-#          - dmd-2.087.1
-          - dmd-2.086.1
-          - ldc-1.23.0 # eq to dmd v2.093.1
-#          - ldc-1.22.0 # eq to dmd v2.092.1
-#          - ldc-1.21.0 # eq to dmd v2.091.1
-#          - ldc-1.20.1 # eq to dmd v2.090.1
-#          - ldc-1.19.0 # eq to dmd v2.089.1
-#          - ldc-1.18.0 # eq to dmd v2.088.1
-#          - ldc-1.17.0 # eq to dmd v2.087
-          - ldc-1.16.0 # eq to dmd v2.086.1
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Install D ${{ matrix.compiler }}
-        uses: dlang-community/setup-dlang@v1
-        with:
-          compiler: ${{ matrix.compiler }}
-
-      - name: Install dependencies on Ubuntu
-        if: startsWith(matrix.os, 'ubuntu')
-        run: sudo apt-get update && sudo apt-get install libev-dev libpq-dev libevent-dev libsqlite3-dev -y
-
-      - name: Upgrade dub dependencies
-        uses: WebFreak001/dub-upgrade@v0.1
-
-      # x86 (without windows-dmd, ubuntu)
-      - name: dub test with SQLite config
-        if: ${{ !(startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd')) && !startsWith(matrix.os, 'ubuntu') }}
-        run: dub test --config=SQLite --arch=x86
-        
-      - name: dub run with test config
-        if: ${{ !(startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd')) && !startsWith(matrix.os, 'ubuntu') }}
-        run: dub run --config=test --arch=x86
-        
-      - name: run the ddbctest project
-        if: ${{ !(startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd')) && !startsWith(matrix.os, 'ubuntu') }}
-        working-directory: example
-        run: dub build --config=SQLite --arch=x86 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
-
-      # x86_64 (all platforms)
-      - name: dub test with SQLite config
-        run: dub test --config=SQLite --arch=x86_64
-        
-      - name: dub run with test config
-        run: dub run --config=test --arch=x86_64
-        
-      - name: run the ddbctest project
-        working-directory: example
-        run: dub build --config=SQLite --arch=x86_64 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
-
-      # cache
-      - uses: WebFreak001/dub-upgrade@v0.1
-        with: { store: true }
-
-  # before dub 1.23.0(x86_omf unsupported)
-  test-win32-dmd-older:
-    name: ${{ matrix.compiler }} on Win 32
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        compiler:
-          - dmd-2.093.1
-#          - dmd-2.092.1
-#          - dmd-2.091.1
-          - dmd-2.090.1
-#          - dmd-2.089.1
-#          - dmd-2.088.1
-#          - dmd-2.087.1
-          - dmd-2.086.1
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Install D ${{ matrix.compiler }}
-        uses: dlang-community/setup-dlang@v1
-        with:
-          compiler: ${{ matrix.compiler }}
-
-      - name: Upgrade dub dependencies
-        uses: WebFreak001/dub-upgrade@v0.1
-
-      # x86 (windows-dmd)
-      - name: dub test with SQLite config (x86)
-        run: dub test --config=SQLite-omf --arch=x86
-
-      - name: dub run with test config (x86)
-        run: dub run --config=test-omf --arch=x86
-
-      - name: run the ddbctest project (x86)
-        if: ${{ !(matrix.compiler == 'dmd-2.089.1' || matrix.compiler == 'dmd-2.090.1') }}
-        working-directory: example
-        run: dub build --config=SQLite-omf --arch=x86 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
-
-      - name: run the ddbctest project (x86)
-        if: ${{ (matrix.compiler == 'dmd-2.089.1' || matrix.compiler == 'dmd-2.090.1') }}
-        working-directory: example
-        run: dub build --config=SQLite-omf --arch=x86 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
-        env: { "DFLAGS": "-lowmem" }
-
-      # Windows x86_mscoff (dmd only)
-      - name: dub test with SQLite config (x86_mscoff)
-        run: dub test --config=SQLite --arch=x86_mscoff
-
-      - name: dub run with test config (x86_mscoff)
-        run: dub run --config=test --arch=x86_mscoff
-
-      - name: run the ddbctest project (x86_mscoff)
-        if: ${{ !(matrix.compiler == 'dmd-2.089.1' || matrix.compiler == 'dmd-2.090.1') }}
-        working-directory: example
-        run: dub build --config=SQLite --arch=x86_mscoff && ./ddbctest --connection=sqlite:ddbc-test.sqlite
-
-      - name: run the ddbctest project (x86_mscoff)
-        if: ${{ (matrix.compiler == 'dmd-2.089.1' || matrix.compiler == 'dmd-2.090.1') }}
-        working-directory: example
-        run: dub build --config=SQLite --arch=x86_mscoff && ./ddbctest --connection=sqlite:ddbc-test.sqlite
-        env: { "DFLAGS": "-lowmem" }
-
-      # cache
-      - uses: WebFreak001/dub-upgrade@v0.1
-        with: { store: true }
-
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-20.04
@@ -290,7 +151,7 @@ jobs:
       - name: Install latest DMD
         uses: dlang-community/setup-dlang@v1
         with:
-          compiler: dmd-2.095.1
+          compiler: dmd-latest
 
       - name: Build The Example Project
         working-directory: ./example
