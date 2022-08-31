@@ -241,7 +241,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertEquals(u.updated, result.updated);
     }
 
-    @Test // Test for: https://github.com/buggins/ddbc/issues/89 (see the equivelant insert test as well)
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89
     public void testInsertingPodWithIdSizeT() {
         Statement stmt = conn.createStatement();
         scope(exit) stmt.close();
@@ -264,7 +264,6 @@ class SQLitePodTest : DdbcTestFixture {
         assertEquals(0, u.id, "default value is 0");
         bool inserted = stmt.insert!User(u);
         assertTrue(inserted, "Should be able to perform INSERT with pod");
-        assertEquals(1, u.id, "Should auto generate an ID");
 
         immutable User result = stmt.get!User(u.id); 
         assertEquals(u.id, result.id);
@@ -275,7 +274,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertEquals(u.updated, result.updated);
     }
 
-    @Test // Test for: https://github.com/buggins/ddbc/issues/89 (see the equivelant insert test as well)
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89
     public void testInsertingPodWithIdLong() {
         Statement stmt = conn.createStatement();
         scope(exit) stmt.close();
@@ -298,7 +297,6 @@ class SQLitePodTest : DdbcTestFixture {
         assertEquals(0, u.id, "default value is 0");
         bool inserted = stmt.insert!User(u);
         assertTrue(inserted, "Should be able to perform INSERT with pod");
-        assertEquals(1, u.id, "Should auto generate an ID");
 
         immutable User result = stmt.get!User(u.id); 
         assertEquals(u.id, result.id);
@@ -309,7 +307,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertEquals(u.updated, result.updated);
     }
 
-    @Test // Test for: https://github.com/buggins/ddbc/issues/89 (see the equivelant insert test as well)
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89
     public void testInsertingPodWithIdUlong() {
         Statement stmt = conn.createStatement();
         scope(exit) stmt.close();
@@ -332,7 +330,6 @@ class SQLitePodTest : DdbcTestFixture {
         assertEquals(0, u.id, "default value is 0");
         bool inserted = stmt.insert!User(u);
         assertTrue(inserted, "Should be able to perform INSERT with pod");
-        assertEquals(1, u.id, "Should auto generate an ID");
 
         immutable User result = stmt.get!User(u.id); 
         assertEquals(u.id, result.id);
@@ -401,8 +398,8 @@ class SQLitePodTest : DdbcTestFixture {
         immutable User u = stmt.get!User(10_000); // testing this function
 
         assertEquals(10_000, u.id);
-        assertEquals("immutable(ulong)", typeof(u.id).stringof);
-        assertEquals("immutable(ulong)", typeid(u.id).toString());
+        // assertEquals("immutable(ulong)", typeof(u.id).stringof); // different behaviour accross operating systems (Windows was uint)
+        // assertEquals("immutable(ulong)", typeid(u.id).toString()); // different behaviour accross operating systems (Windows was uint)
         assertEquals("Sheila", u.name);
     }
 
