@@ -276,6 +276,74 @@ class SQLitePodTest : DdbcTestFixture {
     }
 
     @Test // Test for: https://github.com/buggins/ddbc/issues/89
+    public void testInsertingPodWithIdInt() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        // A POD with an int for an id
+        struct User {
+            int id;
+            string name;
+            int flags;
+            Date dob;
+            DateTime created;
+            SysTime updated;
+        }
+
+        User u;
+        u.id = 0;
+        u.name = "Test 89";
+        u.flags = 5;
+
+        assertEquals(0, u.id, "default value is 0");
+        bool inserted = stmt.insert!User(u);
+        assertTrue(inserted, "Should be able to perform INSERT with pod");
+        assertEquals(1, u.id, "Should auto generate an ID");
+
+        immutable User result = stmt.get!User(u.id); 
+        assertEquals(u.id, result.id);
+        assertEquals(u.name, result.name);
+        assertEquals(u.flags, result.flags);
+        assertEquals(u.dob, result.dob);
+        assertEquals(u.created, result.created);
+        assertEquals(u.updated, result.updated);
+    }
+
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89
+    public void testInsertingPodWithIdUint() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        // A POD with an uint for an id
+        struct User {
+            uint id;
+            string name;
+            int flags;
+            Date dob;
+            DateTime created;
+            SysTime updated;
+        }
+
+        User u;
+        u.id = 0;
+        u.name = "Test 89";
+        u.flags = 5;
+
+        assertEquals(0, u.id, "default value is 0");
+        bool inserted = stmt.insert!User(u);
+        assertTrue(inserted, "Should be able to perform INSERT with pod");
+        assertEquals(1, u.id, "Should auto generate an ID");
+
+        immutable User result = stmt.get!User(u.id); 
+        assertEquals(u.id, result.id);
+        assertEquals(u.name, result.name);
+        assertEquals(u.flags, result.flags);
+        assertEquals(u.dob, result.dob);
+        assertEquals(u.created, result.created);
+        assertEquals(u.updated, result.updated);
+    }
+
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89
     public void testInsertingPodWithIdLong() {
         Statement stmt = conn.createStatement();
         scope(exit) stmt.close();
