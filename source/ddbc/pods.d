@@ -1070,6 +1070,10 @@ bool insert(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
     stmt.executeUpdate(insertSQL, insertId);
     
     // Get the Variant using the correct type. See: https://github.com/buggins/ddbc/issues/89
+    // Due to phobos bug that was not fixed until 2.097, the convertsTo function call could
+    // fail even for valid scenarios. See:
+    // https://issues.dlang.org/show_bug.cgi?id=18780
+    // https://github.com/dlang/phobos/pull/7954
     if(insertId.convertsTo!(typeof(o.id))) {
         static if(__traits(compiles, (){ import std.experimental.logger; } )) {
             import std.experimental.logger ; sharedLog;
