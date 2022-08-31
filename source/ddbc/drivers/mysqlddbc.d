@@ -29,15 +29,7 @@ import std.conv : to;
 import std.datetime : Date, DateTime, TimeOfDay;
 import std.datetime.date;
 import std.datetime.systime;
-import std.exception;
-
-// For backwards compatibily
-// 'enforceEx' will be removed with 2.089
-static if(__VERSION__ < 2080) {
-    alias enforceHelper = enforceEx;
-} else {
-    alias enforceHelper = enforce;
-}
+import std.exception : enforce;
 
 static if(__traits(compiles, (){ import std.experimental.logger; } )) {
     import std.experimental.logger;
@@ -349,7 +341,7 @@ private:
 
 public:
     void checkClosed() {
-        enforceHelper!SQLException(!closed, "Statement is already closed");
+        enforce!SQLException(!closed, "Statement is already closed");
     }
 
     void lock() {
@@ -847,8 +839,8 @@ class MySQLResultSet : ResultSetImpl {
 
     private Variant getValue(int columnIndex) {
 		checkClosed();
-        enforceHelper!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
-        enforceHelper!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
+        enforce!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+        enforce!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
         lastIsNull = this.rows[currentRowIndex].isNull(columnIndex - 1);
 		Variant res;
 		if (!lastIsNull)
@@ -1206,8 +1198,8 @@ public:
         checkClosed();
         lock();
         scope(exit) unlock();
-        enforceHelper!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
-        enforceHelper!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
+        enforce!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
+        enforce!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
         return this.rows[currentRowIndex].isNull(columnIndex - 1);
     }
 

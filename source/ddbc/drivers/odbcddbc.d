@@ -26,15 +26,7 @@ import std.conv;
 import std.datetime : Date, DateTime, TimeOfDay;
 import std.datetime.date;
 import std.datetime.systime;
-import std.exception;
-
-// For backwards compatibily
-// 'enforceEx' will be removed with 2.089
-static if(__VERSION__ < 2080) {
-    alias enforceHelper = enforceEx;
-} else {
-    alias enforceHelper = enforce;
-}
+import std.exception : enforce;
 
 static if(__traits(compiles, (){ import std.experimental.logger; } )) {
     import std.experimental.logger;
@@ -595,7 +587,7 @@ version (USE_ODBC)
     public:
         void checkClosed()
         {
-            enforceHelper!SQLException(!closed, "Statement is already closed");
+            enforce!SQLException(!closed, "Statement is already closed");
         }
 
         void lock()
