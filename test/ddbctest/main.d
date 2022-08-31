@@ -183,7 +183,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertEquals(1, u.id, "a proper value is now assigned based on the database value");
     }
 
-    @Test // Test for: https://github.com/buggins/ddbc/issues/89 (see the equivelant insert test as well)
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89
     public void testInsertingPodWithZeroDefinedId() {
         Statement stmt = conn.createStatement();
         scope(exit) stmt.close();
@@ -212,7 +212,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertEquals(u.updated, result.updated);
     }
 
-    @Test // Test for: https://github.com/buggins/ddbc/issues/89 (see the equivelant insert test as well)
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89
     public void testInsertingPodWithNonZeroDefinedId() {
         Statement stmt = conn.createStatement();
         scope(exit) stmt.close();
@@ -257,13 +257,14 @@ class SQLitePodTest : DdbcTestFixture {
         }
 
         User u;
-        //u.id = 0; // ignored when inserting
+        u.id = 0;
         u.name = "Test 89";
         u.flags = 5;
 
         assertEquals(0, u.id, "default value is 0");
         bool inserted = stmt.insert!User(u);
         assertTrue(inserted, "Should be able to perform INSERT with pod");
+        assertEquals(1, u.id, "Should auto generate an ID");
 
         immutable User result = stmt.get!User(u.id); 
         assertEquals(u.id, result.id);
@@ -290,13 +291,14 @@ class SQLitePodTest : DdbcTestFixture {
         }
 
         User u;
-        //u.id = 0L; // ignored when inserting
+        u.id = 0;
         u.name = "Test 89";
         u.flags = 5;
 
         assertEquals(0, u.id, "default value is 0");
         bool inserted = stmt.insert!User(u);
         assertTrue(inserted, "Should be able to perform INSERT with pod");
+        assertEquals(1, u.id, "Should auto generate an ID");
 
         immutable User result = stmt.get!User(u.id); 
         assertEquals(u.id, result.id);
@@ -323,13 +325,14 @@ class SQLitePodTest : DdbcTestFixture {
         }
 
         User u;
-        //u.id = 0L; // ignored when inserting
+        u.id = 0;
         u.name = "Test 89";
         u.flags = 5;
 
         assertEquals(0, u.id, "default value is 0");
         bool inserted = stmt.insert!User(u);
         assertTrue(inserted, "Should be able to perform INSERT with pod");
+        assertEquals(1, u.id, "Should auto generate an ID");
 
         immutable User result = stmt.get!User(u.id); 
         assertEquals(u.id, result.id);
