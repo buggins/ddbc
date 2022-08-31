@@ -1068,7 +1068,24 @@ bool insert(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
     insertSQL ~= "(" ~ join(values, ",") ~ ")";
     Variant insertId;
     stmt.executeUpdate(insertSQL, insertId);
-    o.id = insertId.get!long;
+    
+    // Get the Variant using the correct type. See: https://github.com/buggins/ddbc/issues/89
+    if(insertId.convertsTo!(typeof(o.id))) {
+        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+            import std.experimental.logger ; sharedLog;
+            sharedLog.tracef("The ID is of type '%s' and can be a '%s'", insertId.type().toString(), typeof(o.id).stringof);
+        }
+        o.id = insertId.get!(typeof(o.id)); // potentially could use coerce instead of get
+    } else {
+        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+            import std.experimental.logger ; sharedLog;
+            sharedLog.errorf("The ID is of type '%s' and cannot be converted to type '%s'", insertId.type().toString(), typeof(o.id).stringof);
+        } else {
+            import std.stdio : writeln;
+            writeln("The ID is of type '" ~ insertId.type().toString() ~ "' and cannot be converted to type: " ~ typeof(o.id).stringof);
+        }
+    }
+
     return true;
 }
 

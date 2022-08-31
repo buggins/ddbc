@@ -23,6 +23,15 @@ class DdbcTestFixture {
     public this(string setupSql = null, string teardownSql = null) {
         this.setupSql = setupSql;
         this.teardownSql = teardownSql;
+
+        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+            import std.experimental.logger : sharedLog, LogLevel;
+            //import std.experimental.logger.core : StdForwardLogger;
+            import std.experimental.logger.filelogger : FileLogger;
+            pragma(msg, "Setting 'std.experimental.logger : sharedLog' to use trace logging...");
+            //sharedLog = new StdForwardLogger(LogLevel.all);
+            sharedLog = new FileLogger(stdout);
+        }
     }
 
     @BeforeAll
@@ -155,7 +164,7 @@ class SQLitePodTest : DdbcTestFixture {
     }
 
     @Test
-    public void testSavingPod() {
+    public void testInsertingPodWithoutDefiningId() {
         Statement stmt = conn.createStatement();
         scope(exit) stmt.close();
 
@@ -168,9 +177,170 @@ class SQLitePodTest : DdbcTestFixture {
         u.created = cast(DateTime) now;
         u.updated = now;
 
-        auto inserted = stmt.insert!User(u);
-
+        assertEquals(0, u.id, "default value is 0");
+        bool inserted = stmt.insert!User(u);
         assertTrue(inserted);
+        assertEquals(1, u.id, "a proper value is now assigned based on the database value");
+    }
+
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89 (see the equivelant insert test as well)
+    public void testInsertingPodWithZeroDefinedId() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        immutable SysTime now = Clock.currTime();
+
+        User u;
+        u.id = 0;
+        u.name = "Test Person";
+        u.flags = 1;
+        u.dob = Date(1979, 8, 5);
+        u.created = cast(DateTime) now;
+        u.updated = now;
+
+        assertEquals(0, u.id, "default value is 0");
+        bool inserted = stmt.insert!User(u);
+        assertTrue(inserted);
+        assertEquals(1, u.id, "a proper value is now assigned based on the database value");
+
+        immutable User result = stmt.get!User(u.id);
+        assertEquals(u.id, result.id);
+        assertEquals(u.name, result.name);
+        assertEquals(u.flags, result.flags);
+        assertEquals(u.dob, result.dob);
+        assertEquals(u.created, result.created);
+        assertEquals(u.updated, result.updated);
+    }
+
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89 (see the equivelant insert test as well)
+    public void testInsertingPodWithNonZeroDefinedId() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        immutable SysTime now = Clock.currTime();
+
+        User u;
+        u.id = 55L; // setting a non-zero value is effectively ignored when performing an insert with a pod 
+        u.name = "Test Person";
+        u.flags = 1;
+        u.dob = Date(1979, 8, 5);
+        u.created = cast(DateTime) now;
+        u.updated = now;
+
+        assertEquals(55L, u.id, "the struct will have our assigned value prior to the insert");
+        bool inserted = stmt.insert!User(u);
+        assertTrue(inserted);
+        assertEquals(1, u.id, "a proper value is now assigned based on the database value");
+
+        immutable User result = stmt.get!User(u.id);
+        assertEquals(u.id, result.id);
+        assertEquals(u.name, result.name);
+        assertEquals(u.flags, result.flags);
+        assertEquals(u.dob, result.dob);
+        assertEquals(u.created, result.created);
+        assertEquals(u.updated, result.updated);
+    }
+
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89 (see the equivelant insert test as well)
+    public void testInsertingPodWithIdSizeT() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        // A POD with a size_t for an id
+        struct User {
+            size_t id;
+            string name;
+            int flags;
+            Date dob;
+            DateTime created;
+            SysTime updated;
+        }
+
+        User u;
+        //u.id = 0; // ignored when inserting
+        u.name = "Test 89";
+        u.flags = 5;
+
+        assertEquals(0, u.id, "default value is 0");
+        bool inserted = stmt.insert!User(u);
+        assertTrue(inserted, "Should be able to perform INSERT with pod");
+        assertEquals(1, u.id, "Should auto generate an ID");
+
+        immutable User result = stmt.get!User(u.id); 
+        assertEquals(u.id, result.id);
+        assertEquals(u.name, result.name);
+        assertEquals(u.flags, result.flags);
+        assertEquals(u.dob, result.dob);
+        assertEquals(u.created, result.created);
+        assertEquals(u.updated, result.updated);
+    }
+
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89 (see the equivelant insert test as well)
+    public void testInsertingPodWithIdLong() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        // A POD with an long for an id
+        struct User {
+            long id;
+            string name;
+            int flags;
+            Date dob;
+            DateTime created;
+            SysTime updated;
+        }
+
+        User u;
+        //u.id = 0L; // ignored when inserting
+        u.name = "Test 89";
+        u.flags = 5;
+
+        assertEquals(0, u.id, "default value is 0");
+        bool inserted = stmt.insert!User(u);
+        assertTrue(inserted, "Should be able to perform INSERT with pod");
+        assertEquals(1, u.id, "Should auto generate an ID");
+
+        immutable User result = stmt.get!User(u.id); 
+        assertEquals(u.id, result.id);
+        assertEquals(u.name, result.name);
+        assertEquals(u.flags, result.flags);
+        assertEquals(u.dob, result.dob);
+        assertEquals(u.created, result.created);
+        assertEquals(u.updated, result.updated);
+    }
+
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89 (see the equivelant insert test as well)
+    public void testInsertingPodWithIdUlong() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        // A POD with an ulong for an id
+        struct User {
+            ulong id;
+            string name;
+            int flags;
+            Date dob;
+            DateTime created;
+            SysTime updated;
+        }
+
+        User u;
+        //u.id = 0L; // ignored when inserting
+        u.name = "Test 89";
+        u.flags = 5;
+
+        assertEquals(0, u.id, "default value is 0");
+        bool inserted = stmt.insert!User(u);
+        assertTrue(inserted, "Should be able to perform INSERT with pod");
+        assertEquals(1, u.id, "Should auto generate an ID");
+
+        immutable User result = stmt.get!User(u.id); 
+        assertEquals(u.id, result.id);
+        assertEquals(u.name, result.name);
+        assertEquals(u.flags, result.flags);
+        assertEquals(u.dob, result.dob);
+        assertEquals(u.created, result.created);
+        assertEquals(u.updated, result.updated);
     }
 
     @Test
@@ -184,6 +354,8 @@ class SQLitePodTest : DdbcTestFixture {
         
         //writeln("id:", u.id, " name:", u.name, " flags:", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
         assertEquals(12, u.id);
+        assertEquals("immutable(long)", typeof(u.id).stringof);
+        assertEquals("immutable(long)", typeid(u.id).toString());
         assertEquals("Jessica", u.name);
         assertEquals(5, u.flags);
 
@@ -207,6 +379,31 @@ class SQLitePodTest : DdbcTestFixture {
         assertEquals(0, u.updated.hour);
         assertEquals(30, u.updated.minute);
         assertEquals(59, u.updated.second);
+    }
+
+    @Test // Test for: https://github.com/buggins/ddbc/issues/89 (see the equivelant insert test as well)
+    public void testGettingPodByIdSizeT() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (10000, "Sheila", 5, "1985-04-18", "2017-11-23T20:45", "2018-03-11T00:30:59Z")`);
+
+        // A POD with a size_t for an id
+        struct User {
+            size_t id;
+            string name;
+            int flags;
+            Date dob;
+            DateTime created;
+            SysTime updated;
+        }
+
+        immutable User u = stmt.get!User(10_000); // testing this function
+
+        assertEquals(10_000, u.id);
+        assertEquals("immutable(ulong)", typeof(u.id).stringof);
+        assertEquals("immutable(ulong)", typeid(u.id).toString());
+        assertEquals("Sheila", u.name);
     }
 
     @Test
