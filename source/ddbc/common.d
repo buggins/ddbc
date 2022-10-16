@@ -473,6 +473,10 @@ class ParameterMetaDataImpl : ParameterMetaData {
 	int isNullable(int param) { return col(param).isNullable; }
 	/// Retrieves whether values for the designated parameter can be signed numbers.
 	bool isSigned(int param) { return col(param).isSigned; }
+
+	override string toString() {
+		return to!string(cols.map!(c => c.typeName).joiner(","));
+	}
 }
 
 /// Metadata for result set - to be used in driver implementations
@@ -527,6 +531,10 @@ class ResultSetMetaDataImpl : ResultSetMetaData {
 	override bool isSigned(int column) { return col(column).isSigned; }
 	// Indicates whether it is possible for a write on the designated column to succeed.
 	override bool isWritable(int column) { return col(column).isWritable; }
+
+	override string toString() {
+		return to!string(cols.map!(c => c.name).joiner(","));
+	}
 }
 
 version (unittest) {
