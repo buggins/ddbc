@@ -420,6 +420,7 @@ version (USE_ODBC)
             addToConnectionString("username", "Uid");
             addToConnectionString("password", "Pwd");
             addToConnectionString("database", "Database");
+            addToConnectionString("trusted_connection", "TrustServerCertificate");
             string connectionString = connectionProps.join(';');
             
             sharedLog.info(connectionString);

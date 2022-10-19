@@ -136,7 +136,8 @@ jobs:
 
       mssql:
         #image: microsoft/mssql-server-linux:2017-latest
-        image: mcr.microsoft.com/mssql/server:2019-latest
+        #image: mcr.microsoft.com/mssql/server:2019-latest
+        image: mcr.microsoft.com/mssql/server:2022-latest
         ports: [1433]
         env:
           MSSQL_PID: Developer
@@ -185,4 +186,4 @@ jobs:
           PORT: ${{ job.services.mssql.ports[1433] }}
         run: |
           sudo ACCEPT_EULA=Y apt-get install msodbcsql17 -y
-          ./ddbctest --connection=odbc://127.0.0.1:$PORT --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 17 for SQL Server"
+          ./ddbctest --connection=odbc://127.0.0.1:$PORT --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 17 for SQL Server" --trusted_connection=yes
