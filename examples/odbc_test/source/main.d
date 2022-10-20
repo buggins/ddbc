@@ -48,12 +48,42 @@ int main(string[] argv)
 
     // reading DB
     //auto rs = stmt.executeQuery("SELECT * FROM ddbct1");
-    auto rs = stmt.executeQuery("SELECT id, name, comment, ts FROM ddbct1");
-    
+    auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1");
+
+    // testing result set meta data
+    ResultSetMetaData meta = rs.getMetaData();
+    assert(meta.getColumnCount() == 4);
+    assert(meta.getColumnName(1) == "id");
+    assert(meta.getColumnLabel(1) == "id");
+    assert(meta.isNullable(1) == false);
+    assert(meta.isNullable(2) == true);
+    assert(meta.isNullable(3) == true);
+    assert(meta.getColumnName(2) == "name_alias");
+    assert(meta.getColumnLabel(2) == "name_alias");
+    assert(meta.getColumnName(3) == "comment");
+    assert(meta.getColumnName(4) == "ts");
+
+    scope(exit) rs.close();
+
     while (rs.next())
     {
         writeln(rs.getVariant(1), "\t", rs.getVariant(2), "\t", rs.getString(3), "\t", rs.getVariant(4));
     }
+
+    //prepared statement
+    PreparedStatement ps = conn.prepareStatement("UPDATE ddbct1 SET name=? WHERE id=?");
+    ps.setString(1, "ccc");
+    ps.setLong(2, 3);
+    assert(ps.executeUpdate() == 1);
+
+    PreparedStatement ps2 = conn.prepareStatement("SELECT id, name, comment FROM ddbct1 WHERE id >= ?");
+    scope (exit)
+        ps2.close();
+    ps2.setLong(1, 3);
+    auto rs2 = ps2.executeQuery();
+    scope(exit)
+        rs2.close();
+    assert(rs2.getMetaData().getColumnCount() == 3);
 
     // ODBC bytea blobs test
 

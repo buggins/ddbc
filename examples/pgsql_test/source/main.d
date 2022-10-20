@@ -36,6 +36,14 @@ int main(string[] argv)
 
     // reading DB
     auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
+    assert(rs.getMetaData().getColumnCount() == 4);
+    assert(rs.getMetaData().getColumnName(1) == "id");
+    assert(rs.getMetaData().getColumnName(2) == "name_alias");
+    assert(rs.getMetaData().getColumnName(3) == "comment");
+    assert(rs.getMetaData().getColumnName(3) == "ts");
+
+    scope(exit) rs.close();
+
     while (rs.next())
         writeln(to!string(rs.getLong(1)), "\t", rs.getString(2), "\t", rs.getString(3), "\t", rs.getString(4));
 

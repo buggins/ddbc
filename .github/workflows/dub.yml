@@ -57,9 +57,9 @@ jobs:
         run: dub build --config=full --arch=x86_64
 
       # x86 (Windows Only)
-      - name: dub test with SQLite config (x86)
+      - name: dub test with full config (x86)
         if: ${{ startsWith(matrix.os, 'windows') }}
-        run: dub test --config=SQLite --arch=x86
+        run: dub test --config=full --arch=x86
         
       - name: dub run with test config (x86)
         if: ${{ startsWith(matrix.os, 'windows') }}
@@ -71,8 +71,8 @@ jobs:
         run: dub build --config=SQLite --arch=x86 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
 
       # x86_64 (all platforms)
-      - name: dub test with SQLite config (x86_64)
-        run: dub test --config=SQLite --arch=x86_64
+      - name: dub test with full config (x86_64)
+        run: dub test --config=full --arch=x86_64
         
       - name: dub run with test config (x86_64)
         run: dub run --config=test --arch=x86_64
@@ -82,9 +82,9 @@ jobs:
         run: dub build --config=SQLite --arch=x86_64 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
 
       # x86_mscoff (Windows with dmd Only)
-      - name: dub test with SQLite config (x86_mscoff)
+      - name: dub test with full config (x86_mscoff)
         if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}
-        run: dub test --config=SQLite --arch=x86_mscoff
+        run: dub test --config=full --arch=x86_mscoff
         
       - name: dub run with test config (x86_mscoff)
         if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}

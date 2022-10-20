@@ -43,28 +43,28 @@ version (USE_ODBC)
 {
     pragma(msg, "DDBC will use ODBC driver");
 
-    version (unittest)
-    {
+    // version (unittest)
+    // {
 
-        /// change to false to disable tests on real ODBC server
-        immutable bool ODBC_TESTS_ENABLED = false;
+    //     /// change to false to disable tests on real ODBC server
+    //     immutable bool ODBC_TESTS_ENABLED = false;
 
-        static if (ODBC_TESTS_ENABLED)
-        {
+    //     static if (ODBC_TESTS_ENABLED)
+    //     {
 
-            /// use this data source for tests
+    //         /// use this data source for tests
 
-            DataSource createUnitTestODBCDataSource()
-            {
-                //import std.file : read;
-                //cast(string) read("test_connection.txt");
+    //         DataSource createUnitTestODBCDataSource()
+    //         {
+    //             //import std.file : read;
+    //             //cast(string) read("test_connection.txt");
 
-                string url = "ddbc:odbc://localhost,1433?user=SA,password=bbk4k77JKH88g54,driver=FreeTDS";
+    //             string url = "ddbc:odbc://localhost,1433?user=SA,password=bbk4k77JKH88g54,driver=FreeTDS";
 
-                return createConnectionPool(url);
-            }
-        }
-    }
+    //             return createConnectionPool(url);
+    //         }
+    //     }
+    // }
 
     // The etc.c.odbc.* modules are deprecated and due for removal in Feb 2022
     // https://dlang.org/phobos/etc_c_odbc_sql.html
@@ -1703,151 +1703,150 @@ version (USE_ODBC)
         }
     }
 
-    unittest
-    {
-        static if (ODBC_TESTS_ENABLED)
-        {
+    // unittest
+    // {
+    //     static if (ODBC_TESTS_ENABLED)
+    //     {
 
-            import std.conv;
+    //         import std.conv;
 
-            DataSource ds = createUnitTestODBCDataSource();
+    //         DataSource ds = createUnitTestODBCDataSource();
 
-            auto conn = ds.getConnection();
-            scope (exit)
-                conn.close();
-            auto stmt = conn.createStatement();
-            scope (exit)
-                stmt.close();
+    //         auto conn = ds.getConnection();
+    //         scope (exit)
+    //             conn.close();
+    //         auto stmt = conn.createStatement();
+    //         scope (exit)
+    //             stmt.close();
 
-            //assert(stmt.executeUpdate("CREATE DATABASE testdb") == -1);
-            //assert(stmt.executeUpdate("USE testdb") == -1);
+    //         //assert(stmt.executeUpdate("CREATE DATABASE testdb") == -1);
+    //         //assert(stmt.executeUpdate("USE testdb") == -1);
 
-            assert(stmt.executeUpdate(
-                    "IF OBJECT_ID('ddbct1', 'U') IS NOT NULL DROP TABLE ddbct1") == -1);
+    //         assert(stmt.executeUpdate(
+    //                 "IF OBJECT_ID('ddbct1', 'U') IS NOT NULL DROP TABLE ddbct1") == -1);
             
-            // Some Databases has `not null` as default.
-            assert(stmt.executeUpdate("CREATE TABLE ddbct1 ( " ~ "id int not null primary key, "
-                    ~ "name varchar(250) null, " ~ "comment varchar(max) null, " ~ "ts datetime null)") == -1);
-            assert(stmt.executeUpdate("INSERT INTO ddbct1(id, name, comment, ts) VALUES(1, 'name1dfgdfg', 'comment for line 1', '2017-02-03T12:30:25' )") == 1);
-            assert(stmt.executeUpdate("INSERT INTO ddbct1(id, name, comment) VALUES"
-                    ~ "(2, 'name2', 'comment for line 2 - can be very long'), "
-                    ~ "(3, 'name3', 'this is line 3')") == 2);
+    //         // Some Databases has `not null` as default.
+    //         assert(stmt.executeUpdate("CREATE TABLE ddbct1 ( " ~ "id int not null primary key, "
+    //                 ~ "name varchar(250) null, " ~ "comment varchar(max) null, " ~ "ts datetime null)") == -1);
+    //         assert(stmt.executeUpdate("INSERT INTO ddbct1(id, name, comment, ts) VALUES(1, 'name1dfgdfg', 'comment for line 1', '2017-02-03T12:30:25' )") == 1);
+    //         assert(stmt.executeUpdate("INSERT INTO ddbct1(id, name, comment) VALUES"
+    //                 ~ "(2, 'name2', 'comment for line 2 - can be very long'), "
+    //                 ~ "(3, 'name3', 'this is line 3')") == 2);
 
-            assert(stmt.executeUpdate("INSERT INTO ddbct1(id, name) VALUES (4, 'name4')") == 1);
-            assert(stmt.executeUpdate("INSERT INTO ddbct1(id, comment) VALUES(5, '')") == 1);
-            assert(stmt.executeUpdate("INSERT INTO ddbct1(id, name) VALUES(6, '')") == 1);
-            assert(stmt.executeUpdate("UPDATE ddbct1 SET name= name + '_x' WHERE id IN (3, 4)") == 2);
+    //         assert(stmt.executeUpdate("INSERT INTO ddbct1(id, name) VALUES (4, 'name4')") == 1);
+    //         assert(stmt.executeUpdate("INSERT INTO ddbct1(id, comment) VALUES(5, '')") == 1);
+    //         assert(stmt.executeUpdate("INSERT INTO ddbct1(id, name) VALUES(6, '')") == 1);
+    //         assert(stmt.executeUpdate("UPDATE ddbct1 SET name= name + '_x' WHERE id IN (3, 4)") == 2);
 
-            PreparedStatement ps = conn.prepareStatement("UPDATE ddbct1 SET name=? WHERE id=?");
-            //ps.setString(1, null);
-            ps.setString(1, "null");
-            ps.setLong(2, 3);
-            assert(ps.executeUpdate() == 1);
+    //         PreparedStatement ps = conn.prepareStatement("UPDATE ddbct1 SET name=? WHERE id=?");
+    //         //ps.setString(1, null);
+    //         ps.setString(1, "null");
+    //         ps.setLong(2, 3);
+    //         assert(ps.executeUpdate() == 1);
 
-            auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
+    //         auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
 
-            // testing result set meta data
-            ResultSetMetaData meta = rs.getMetaData();
-            assert(meta.getColumnCount() == 4);
-            assert(meta.getColumnName(1) == "id");
-            assert(meta.getColumnLabel(1) == "id");
-            assert(meta.isNullable(1) == false);
-            assert(meta.isNullable(2) == true);
-            assert(meta.isNullable(3) == true);
-            assert(meta.getColumnName(2) == "name_alias");
-            assert(meta.getColumnLabel(2) == "name_alias");
-            assert(meta.getColumnName(3) == "comment");
+    //         // testing result set meta data
+    //         ResultSetMetaData meta = rs.getMetaData();
+    //         assert(meta.getColumnCount() == 4);
+    //         assert(meta.getColumnName(1) == "id");
+    //         assert(meta.getColumnLabel(1) == "id");
+    //         assert(meta.isNullable(1) == false);
+    //         assert(meta.isNullable(2) == true);
+    //         assert(meta.isNullable(3) == true);
+    //         assert(meta.getColumnName(2) == "name_alias");
+    //         assert(meta.getColumnLabel(2) == "name_alias");
+    //         assert(meta.getColumnName(3) == "comment");
 
-            //writeln("type: ", meta.getColumnTypeName(1));
-            //writeln("type: ", meta.getColumnTypeName(2));
-            //writeln("type: ", meta.getColumnTypeName(3));
-            //writeln("type: ", meta.getColumnTypeName(4));
+    //         //writeln("type: ", meta.getColumnTypeName(1));
+    //         //writeln("type: ", meta.getColumnTypeName(2));
+    //         //writeln("type: ", meta.getColumnTypeName(3));
+    //         //writeln("type: ", meta.getColumnTypeName(4));
 
-            // not supported
-            //int rowCount = rs.getFetchSize();
-            //assert(rowCount == 6);
-            int index = 1;
-            while (rs.next())
-            {
-                assert(!rs.isNull(1));
-                //ubyte[] bytes = rs.getUbytes(3);
-                //int rowIndex = rs.getRow();
-                //writeln("row = ", rs.getRow());
-                //assert(rowIndex == index);
+    //         // not supported
+    //         //int rowCount = rs.getFetchSize();
+    //         //assert(rowCount == 6);
+    //         int index = 1;
+    //         while (rs.next())
+    //         {
+    //             assert(!rs.isNull(1));
+    //             //ubyte[] bytes = rs.getUbytes(3);
+    //             //int rowIndex = rs.getRow();
+    //             //writeln("row = ", rs.getRow());
+    //             //assert(rowIndex == index);
                 
-                // BUG: the Type is defined as `BIGINT` but is read as double on some platforms insted of long! `INT` works with getLong()!
-                // long id = rs.getLong(1);
-                long id = rs.getDouble(1).to!long;
+    //             // BUG: the Type is defined as `BIGINT` but is read as double on some platforms insted of long! `INT` works with getLong()!
+    //             // long id = rs.getLong(1);
+    //             long id = rs.getDouble(1).to!long;
 
-                //writeln("id = ", id);
+    //             //writeln("id = ", id);
 
-                //writeln("field2 = '" ~ rs.getString(2) ~ "'");
-                assert(id == index);
-                //writeln("field2 = '" ~ rs.getString(2) ~ "'");
-                //writeln("field3 = '" ~ rs.getString(3) ~ "'");
-                //writeln("wasNull = " ~ to!string(rs.wasNull()));
-                if (id == 1)
-                {
-                    DateTime ts = rs.getDateTime(4);
-                    assert(ts == DateTime(2017, 02, 03, 12, 30, 25));
-                }
-                if (id == 4)
-                {
-                    assert(rs.getString(2) == "name4_x");
-                    assert(rs.isNull(3));
-                }
-                if (id == 5)
-                {
-                    assert(rs.isNull(2));
-                    assert(!rs.isNull(3));
-                }
-                if (id == 6)
-                {
-                    assert(!rs.isNull(2));
-                    assert(rs.isNull(3));
-                }
-                //writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ strNull(rs.getString(3)) ~ "\t[" ~ to!string(bytes.length) ~ "]");
-                index++;
-            }
+    //             //writeln("field2 = '" ~ rs.getString(2) ~ "'");
+    //             assert(id == index);
+    //             //writeln("field2 = '" ~ rs.getString(2) ~ "'");
+    //             //writeln("field3 = '" ~ rs.getString(3) ~ "'");
+    //             //writeln("wasNull = " ~ to!string(rs.wasNull()));
+    //             if (id == 1)
+    //             {
+    //                 DateTime ts = rs.getDateTime(4);
+    //                 assert(ts == DateTime(2017, 02, 03, 12, 30, 25));
+    //             }
+    //             if (id == 4)
+    //             {
+    //                 assert(rs.getString(2) == "name4_x");
+    //                 assert(rs.isNull(3));
+    //             }
+    //             if (id == 5)
+    //             {
+    //                 assert(rs.isNull(2));
+    //                 assert(!rs.isNull(3));
+    //             }
+    //             if (id == 6)
+    //             {
+    //                 assert(!rs.isNull(2));
+    //                 assert(rs.isNull(3));
+    //             }
+    //             //writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ strNull(rs.getString(3)) ~ "\t[" ~ to!string(bytes.length) ~ "]");
+    //             index++;
+    //         }
 
-            PreparedStatement ps2 = conn.prepareStatement(
-                    "SELECT id, name, comment FROM ddbct1 WHERE id >= ?");
-            scope (exit)
-                ps2.close();
-            ps2.setLong(1, 3);
-            rs = ps2.executeQuery();
-            while (rs.next())
-            {
-                //writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ strNull(rs.getString(3)));
-                index++;
-            }
+    //         PreparedStatement ps2 = conn.prepareStatement(
+    //                 "SELECT id, name, comment FROM ddbct1 WHERE id >= ?");
+    //         scope (exit)
+    //             ps2.close();
+    //         ps2.setLong(1, 3);
+    //         rs = ps2.executeQuery();
+    //         while (rs.next())
+    //         {
+    //             //writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ strNull(rs.getString(3)));
+    //             index++;
+    //         }
 
-            // checking last insert ID for prepared statement
-            PreparedStatement ps3 = conn.prepareStatement(
-                    "INSERT INTO ddbct1 (id, name) values (7, 'New String 1')");
-            scope (exit)
-                ps3.close();
-            Variant newId;
-            // does not work!
-            //assert(ps3.executeUpdate(newId) == 1);
-            //writeln("Generated insert id = " ~ newId.toString());
-            //assert(newId.get!ulong > 0);
+    //         // checking last insert ID for prepared statement
+    //         PreparedStatement ps3 = conn.prepareStatement(
+    //                 "INSERT INTO ddbct1 (id, name) values (7, 'New String 1')");
+    //         scope (exit)
+    //             ps3.close();
+    //         Variant newId;
+    //         // does not work!
+    //         //assert(ps3.executeUpdate(newId) == 1);
+    //         //writeln("Generated insert id = " ~ newId.toString());
+    //         //assert(newId.get!ulong > 0);
 
-            // checking last insert ID for normal statement
-            Statement stmt4 = conn.createStatement();
-            scope (exit)
-                stmt4.close();
-            Variant newId2;
-            // does not work!
-            //assert(stmt.executeUpdate("INSERT INTO ddbct1 (id, name) values (8, 'New String 2')", newId2) == 1);
-            //writeln("Generated insert id = " ~ newId2.toString());
-            //assert(newId2.get!ulong > 0);
+    //         // checking last insert ID for normal statement
+    //         Statement stmt4 = conn.createStatement();
+    //         scope (exit)
+    //             stmt4.close();
+    //         Variant newId2;
+    //         // does not work!
+    //         //assert(stmt.executeUpdate("INSERT INTO ddbct1 (id, name) values (8, 'New String 2')", newId2) == 1);
+    //         //writeln("Generated insert id = " ~ newId2.toString());
+    //         //assert(newId2.get!ulong > 0);
 
-        }
-    }
+    //     }
+    // }
 
-    __gshared static this()
-    {
+    __gshared static this() {
         // register ODBCDriver
         import ddbc.common;
 
@@ -1856,11 +1855,4 @@ version (USE_ODBC)
         });
     }
 
-}
-else
-{ // version(USE_ODBC)
-    version (unittest)
-    {
-        immutable bool ODBC_TESTS_ENABLED = false;
-    }
 }

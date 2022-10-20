@@ -60,22 +60,22 @@ version(USE_SQLITE) {
         pragma (msg, "You will need to manually link in the SQLite library.");
     } 
 
-    version(unittest) {
-        /*
-            To allow unit tests using PostgreSQL server,
-         */
-        /// change to false to disable tests on real PostgreSQL server
-        immutable bool SQLITE_TESTS_ENABLED = true;
-        /// change parameters if necessary
-        const string SQLITE_UNITTEST_URL = "sqlite::memory:"; // "sqlite:ddbctest.sqlite";
+    // version(unittest) {
+    //     /*
+    //         To allow unit tests using PostgreSQL server,
+    //      */
+    //     /// change to false to disable tests on real PostgreSQL server
+    //     immutable bool SQLITE_TESTS_ENABLED = true;
+    //     /// change parameters if necessary
+    //     const string SQLITE_UNITTEST_URL = "sqlite::memory:"; // "sqlite:ddbctest.sqlite";
 
-        static if (SQLITE_TESTS_ENABLED) {
-            /// use this data source for tests
-            DataSource createUnitTestSQLITEDataSource() {
-                return createConnectionPool(SQLITE_UNITTEST_URL);
-            }
-        }
-    }
+    //     static if (SQLITE_TESTS_ENABLED) {
+    //         /// use this data source for tests
+    //         DataSource createUnitTestSQLITEDataSource() {
+    //             return createConnectionPool(SQLITE_UNITTEST_URL);
+    //         }
+    //     }
+    // }
 
     /// Converts from a selection of the standard SQLite time formats into a SysTime object.
     // Should have similar features to 'DateTime fromResultSet(string)' but handling TZ as well
@@ -195,7 +195,7 @@ version(USE_SQLITE) {
         throw new DateTimeException(format("Unknown SQLite date string: %s", sqliteString));
     }
 
-    unittest {
+    private static unittest {
         DateTime hm = fromResultSet("15:18"); // HH:MM
         DateTime hms = fromResultSet("15:18:51"); // HH:MM:SS
 
@@ -1136,10 +1136,9 @@ version(USE_SQLITE) {
 
     class SQLITEDriver : Driver {
         // helper function
-        public static string generateUrl(string dbname)
-        {
+        public static string generateUrl(string dbname) {
             return "sqlite:" ~ dbname;
-	}
+	    }
 
         public static string[string] setUserAndPassword(string username, string password) {
             string[string] params;
@@ -1148,102 +1147,102 @@ version(USE_SQLITE) {
             return params;
         }
         
-	override ddbc.core.Connection connect(string url, string[string] params) {
+	    override ddbc.core.Connection connect(string url, string[string] params) {
             return new SQLITEConnection(url, params);
         }
     }
 
-    unittest {
-        if (SQLITE_TESTS_ENABLED) {
+    // unittest {
+    //     if (SQLITE_TESTS_ENABLED) {
             
-            import std.conv;
-            DataSource ds = createUnitTestSQLITEDataSource();
-            //writeln("trying to open connection");        
-            auto conn = ds.getConnection();
-            //writeln("connection is opened");        
-            assert(conn !is null);
-            scope(exit) conn.close();
-            {
-                //writeln("dropping table");
-                Statement stmt = conn.createStatement();
-                scope(exit) stmt.close();
-                stmt.executeUpdate("DROP TABLE IF EXISTS t1");
-            }
-            {
-                //writeln("creating table");
-                Statement stmt = conn.createStatement();
-                scope(exit) stmt.close();
-                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS t1 (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)");
-            }
-            {
-                //writeln("populating table");
-                PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test1')");
-                scope(exit) stmt.close();
-                Variant id = 0;
-                assert(stmt.executeUpdate(id) == 1);
-                assert(id.get!long > 0);
-            }
-            {
-                //writeln("populating table");
-                PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test2')");
-                scope(exit) stmt.close();
-                Variant id = 0;
-                assert(stmt.executeUpdate(id) == 1);
-                assert(id.get!long > 0);
-            }
-            {
-                //writeln("reading table");
-                Statement stmt = conn.createStatement();
-                scope(exit) stmt.close();
-                ResultSet rs = stmt.executeQuery("SELECT id, name, flags FROM t1");
-                assert(rs.getMetaData().getColumnCount() == 3);
-                assert(rs.getMetaData().getColumnName(1) == "id");
-                assert(rs.getMetaData().getColumnName(2) == "name");
-                assert(rs.getMetaData().getColumnName(3) == "flags");
-                scope(exit) rs.close();
-                //writeln("id" ~ "\t" ~ "name");
-                while (rs.next()) {
-                    long id = rs.getLong(1);
-                    string name = rs.getString(2);
-                    assert(rs.isNull(3));
-                    //writeln("" ~ to!string(id) ~ "\t" ~ name);
-                }
-            }
-            {
-                //writeln("reading table with parameter id=1");
-                PreparedStatement stmt = conn.prepareStatement("SELECT id, name, flags FROM t1 WHERE id = ?");
-                scope(exit) stmt.close();
-                assert(stmt.getMetaData().getColumnCount() == 3);
-                assert(stmt.getMetaData().getColumnName(1) == "id");
-                assert(stmt.getMetaData().getColumnName(2) == "name");
-                assert(stmt.getMetaData().getColumnName(3) == "flags");
-                stmt.setLong(1, 1);
-                {
-                    ResultSet rs = stmt.executeQuery();
-                    scope(exit) rs.close();
-                    //writeln("id" ~ "\t" ~ "name");
-                    while (rs.next()) {
-                        long id = rs.getLong(1);
-                        string name = rs.getString(2);
-                        assert(rs.isNull(3));
-                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
-                    }
-                }
-                //writeln("changing parameter id=2");
-                stmt.setLong(1, 2);
-                {
-                    ResultSet rs = stmt.executeQuery();
-                    scope(exit) rs.close();
-                    //writeln("id" ~ "\t" ~ "name");
-                    while (rs.next()) {
-                        long id = rs.getLong(1);
-                        string name = rs.getString(2);
-                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
-                    }
-                }
-            }
-        }
-    }
+    //         import std.conv;
+    //         DataSource ds = createUnitTestSQLITEDataSource();
+    //         //writeln("trying to open connection");        
+    //         auto conn = ds.getConnection();
+    //         //writeln("connection is opened");        
+    //         assert(conn !is null);
+    //         scope(exit) conn.close();
+    //         {
+    //             //writeln("dropping table");
+    //             Statement stmt = conn.createStatement();
+    //             scope(exit) stmt.close();
+    //             stmt.executeUpdate("DROP TABLE IF EXISTS t1");
+    //         }
+    //         {
+    //             //writeln("creating table");
+    //             Statement stmt = conn.createStatement();
+    //             scope(exit) stmt.close();
+    //             stmt.executeUpdate("CREATE TABLE IF NOT EXISTS t1 (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null)");
+    //         }
+    //         {
+    //             //writeln("populating table");
+    //             PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test1')");
+    //             scope(exit) stmt.close();
+    //             Variant id = 0;
+    //             assert(stmt.executeUpdate(id) == 1);
+    //             assert(id.get!long > 0);
+    //         }
+    //         {
+    //             //writeln("populating table");
+    //             PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test2')");
+    //             scope(exit) stmt.close();
+    //             Variant id = 0;
+    //             assert(stmt.executeUpdate(id) == 1);
+    //             assert(id.get!long > 0);
+    //         }
+    //         {
+    //             //writeln("reading table");
+    //             Statement stmt = conn.createStatement();
+    //             scope(exit) stmt.close();
+    //             ResultSet rs = stmt.executeQuery("SELECT id, name, flags FROM t1");
+    //             assert(rs.getMetaData().getColumnCount() == 3);
+    //             assert(rs.getMetaData().getColumnName(1) == "id");
+    //             assert(rs.getMetaData().getColumnName(2) == "name");
+    //             assert(rs.getMetaData().getColumnName(3) == "flags");
+    //             scope(exit) rs.close();
+    //             //writeln("id" ~ "\t" ~ "name");
+    //             while (rs.next()) {
+    //                 long id = rs.getLong(1);
+    //                 string name = rs.getString(2);
+    //                 assert(rs.isNull(3));
+    //                 //writeln("" ~ to!string(id) ~ "\t" ~ name);
+    //             }
+    //         }
+    //         {
+    //             //writeln("reading table with parameter id=1");
+    //             PreparedStatement stmt = conn.prepareStatement("SELECT id, name, flags FROM t1 WHERE id = ?");
+    //             scope(exit) stmt.close();
+    //             assert(stmt.getMetaData().getColumnCount() == 3);
+    //             assert(stmt.getMetaData().getColumnName(1) == "id");
+    //             assert(stmt.getMetaData().getColumnName(2) == "name");
+    //             assert(stmt.getMetaData().getColumnName(3) == "flags");
+    //             stmt.setLong(1, 1);
+    //             {
+    //                 ResultSet rs = stmt.executeQuery();
+    //                 scope(exit) rs.close();
+    //                 //writeln("id" ~ "\t" ~ "name");
+    //                 while (rs.next()) {
+    //                     long id = rs.getLong(1);
+    //                     string name = rs.getString(2);
+    //                     assert(rs.isNull(3));
+    //                     //writeln("" ~ to!string(id) ~ "\t" ~ name);
+    //                 }
+    //             }
+    //             //writeln("changing parameter id=2");
+    //             stmt.setLong(1, 2);
+    //             {
+    //                 ResultSet rs = stmt.executeQuery();
+    //                 scope(exit) rs.close();
+    //                 //writeln("id" ~ "\t" ~ "name");
+    //                 while (rs.next()) {
+    //                     long id = rs.getLong(1);
+    //                     string name = rs.getString(2);
+    //                     //writeln("" ~ to!string(id) ~ "\t" ~ name);
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
     __gshared static this() {
         // register SQLiteDriver
@@ -1251,9 +1250,4 @@ version(USE_SQLITE) {
         DriverFactory.registerDriverFactory("sqlite", delegate() { return new SQLITEDriver(); });
     }
 
-
-} else { // version(USE_SQLITE)
-    version(unittest) {
-        immutable bool SQLITE_TESTS_ENABLED = false;
-    }
 }

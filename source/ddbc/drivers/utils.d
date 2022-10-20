@@ -66,7 +66,7 @@ SysTime parseSysTime(const string timestampString) @safe {
     }
 }
 
-unittest {
+private static unittest {
     // Accept valid (as per D language) systime formats
     parseSysTime("2019-May-04 13:34:10.500Z");
     parseSysTime("2019-Jan-02 13:34:10-03:00");
@@ -110,7 +110,7 @@ DateTime parseDateTime(const string timestampString) @safe {
         throw new DateTimeException("Can not convert '" ~ timestampString ~ "' to DateTime");
     }
 }
-unittest {
+private static unittest {
     // Accept valid (as per D language) datetime formats
     parseDateTime("20101230T000000");
     parseDateTime("2019-May-04 13:34:10");
