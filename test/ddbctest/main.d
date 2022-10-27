@@ -107,7 +107,7 @@ version(USE_ODBC) {
             // "ODBC Driver 18 for SQL Server"
             // "FreeTDS"
             super(
-                "odbc://localhost,1433?user=SA,password=bbk4k77JKH88g54,trusted_connection=yes,driver=ODBC Driver 18 for SQL Server", // don't specify database!
+                "odbc://localhost,1433?user=SA,password=MSbbk4k77JKH88g54,trusted_connection=yes,driver=ODBC Driver 18 for SQL Server", // don't specify database!
                 "DROP TABLE IF EXISTS [my_first_test];CREATE TABLE [my_first_test] ([id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY, [name] VARCHAR(255) NOT NULL)",
                 "DROP TABLE IF EXISTS [my_first_test]"
             );
