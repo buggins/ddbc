@@ -7,78 +7,162 @@ import std.variant;
 import std.stdio;
 
 import dunit;
-import ddbc.core;
-import ddbc.common;
+import ddbc.test.common : DdbcTestFixture;
+import ddbc.core : Connection, PreparedStatement, Statement, SQLException;
 import ddbc.pods;
 
-class DdbcTestFixture {
+version(USE_MYSQL) {
+    pragma(msg, "DDBC test will run MySQL tests");
 
-    mixin UnitTest;
+    class MySQLTest : DdbcTestFixture {
+        mixin UnitTest;
 
-    private static Connection conn;
-
-    private immutable string setupSql;
-    private immutable string teardownSql;
-
-    public this(string setupSql = null, string teardownSql = null) {
-        this.setupSql = setupSql;
-        this.teardownSql = teardownSql;
-
-        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-            import std.experimental.logger : sharedLog, LogLevel;
-            //import std.experimental.logger.core : StdForwardLogger;
-            import std.experimental.logger.filelogger : FileLogger;
-            pragma(msg, "Setting 'std.experimental.logger : sharedLog' to use trace logging...");
-            //sharedLog = new StdForwardLogger(LogLevel.all);
-            sharedLog = new FileLogger(stdout);
+        this() {
+            super(
+                "ddbc:mysql://localhost:3306/testdb?user=testuser,password=passw0rd",
+                "CREATE TABLE `my_first_test` (`id` INTEGER AUTO_INCREMENT PRIMARY KEY, `name` VARCHAR(255) NOT NULL)",
+                "DROP TABLE IF EXISTS `my_first_test`"
+            );
         }
-    }
 
-    @BeforeAll
-    public static void setUpAll() {
-        debug writeln("@BeforeAll : creating db connection");
-        conn = createConnection("sqlite::memory:");
-        conn.setAutoCommit(true);
-    }
+        @Test
+        public void testVerifyTableExists() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
 
-    @AfterAll
-    public static void tearDownAll() {
-        debug writeln("@AfterAll : closing db connection");
-        conn.close();
-    }
+            //ddbc.core.ResultSet resultSet = stmt.executeQuery("SHOW TABLES");
+            ddbc.core.ResultSet resultSet = stmt.executeQuery("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_NAME = 'my_first_test'");
 
-    @BeforeEach
-    public void setUp() {
-        debug writeln("@BeforeEach");
-        Statement stmt = conn.createStatement();
-        scope(exit) stmt.close();
-        
-        // fill database with test data
-        if(this.setupSql !is null) {
-            stmt.executeUpdate(this.setupSql);
+            assertEquals(1, resultSet.getFetchSize()); // MySQL can support getFetchSize()
+            assertTrue(resultSet.next());
         }
-    }
 
-    @AfterEach
-    public void tearDown() {
-        debug writeln("@AfterEach");
-        Statement stmt = conn.createStatement();
-        scope(exit) stmt.close();
-        
-        // fill database with test data
-        if(this.teardownSql !is null) {
-            stmt.executeUpdate(this.teardownSql);
+        @Test
+        public void testExecutingRawSqlInsertStatements() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            int result1 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`);
+            assertEquals(1, result1);
+
+            Variant id;
+            int result2 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`, id);
+            assertEquals(1, result2);
+            //assertEquals("long", to!string(id.type));
+            //assertEquals(2L, id.get!(long));
         }
     }
 }
 
+version(USE_PGSQL) {
+    pragma(msg, "DDBC test will run Postgres tests");
+
+    class PostgresTest : DdbcTestFixture {
+        mixin UnitTest;
+
+        this() {
+            super(
+                "ddbc:postgresql://localhost:5432/testdb?user=testuser,password=passw0rd,ssl=false",
+                "CREATE TABLE my_first_test (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)",
+                "DROP TABLE IF EXISTS my_first_test"
+            );
+        }
+
+        @Test
+        public void testVerifyTableExists() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            ddbc.core.ResultSet resultSet = stmt.executeQuery(`SELECT * FROM pg_catalog.pg_tables WHERE tablename = 'my_first_test'`);
+
+            assertEquals(1, resultSet.getFetchSize()); // Postgres can support getFetchSize()
+            assertTrue(resultSet.next());
+        }
+
+        @Test
+        public void testExecutingRawSqlInsertStatements() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            int result1 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`);
+            assertEquals(1, result1);
+
+            Variant id;
+            int result2 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`, id);
+            assertEquals(1, result2);
+            //assertEquals("long", to!string(id.type));
+            //assertEquals(2L, id.get!(long));
+        }
+    }
+}
+
+version(USE_ODBC) {
+    pragma(msg, "DDBC test will run SQL Server tests");
+    class SQLServerTest : DdbcTestFixture {
+        mixin UnitTest;
+
+        this() {
+            // Will require MS SQL Server driver to be installed (or FreeTDS)
+            // "ODBC Driver 17 for SQL Server"
+            // "ODBC Driver 18 for SQL Server"
+            // "FreeTDS"
+            super(
+                "odbc://localhost,1433?user=SA,password=bbk4k77JKH88g54,trusted_connection=yes,driver=ODBC Driver 18 for SQL Server", // don't specify database!
+                "DROP TABLE IF EXISTS [my_first_test];CREATE TABLE [my_first_test] ([id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY, [name] VARCHAR(255) NOT NULL)",
+                "DROP TABLE IF EXISTS [my_first_test]"
+            );
+        }
+
+        @Test
+        public void testVerifyTableExists() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            ddbc.core.ResultSet resultSet = stmt.executeQuery(`SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME = 'my_first_test'`);
+
+            //assertEquals(1, resultSet.getFetchSize()); // getFetchSize() isn't working for ODBC
+            assertTrue(resultSet.next());
+        }
+
+        @Test
+        public void testExecutingRawSqlInsertStatements() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            int result1 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`);
+            assertEquals(1, result1);
+
+            Variant id;
+            int result2 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`, id);
+            assertEquals(1, result2);
+            //assertEquals("long", to!string(id.type)); // expected longbut was "odbc.sqltypes.SQL_NUMERIC_STRUCT"
+            //assertEquals(2L, id.get!(long));
+        }
+    }
+
+    //pragma(msg, "DDBC test will run Oracle tests");
+    //
+    //class OracleTest : DdbcTestFixture {
+    //    mixin UnitTest;
+    //
+    //    this() {
+    //        super(
+    //            "todo Oracle",
+    //            "CREATE TABLE my_first_test (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL)",
+    //            "DROP TABLE IF EXISTS my_first_test"
+    //        );
+    //    }
+    //}
+}
 
 // tests the use of exec update with raw sql and prepared statements
+pragma(msg, "DDBC test will run SQLite tests (always enabled)");
 class SQLiteTest : DdbcTestFixture {
     mixin UnitTest;
 
     this() {
         super(
+            "sqlite::memory:",
             "CREATE TABLE my_first_test (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL)",
             "DROP TABLE IF EXISTS my_first_test"
         );
@@ -115,7 +199,7 @@ class SQLiteTest : DdbcTestFixture {
         
         ddbc.core.ResultSet resultSet = ps.executeQuery();
 
-        //assertEquals(1, resultSet.getFetchSize()); // getFetchSize() isn't support by all db
+        //assertEquals(1, resultSet.getFetchSize()); // getFetchSize() isn't supported by SQLite
         assertTrue(resultSet.next());
 
         // int result1 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`);
@@ -158,6 +242,7 @@ class SQLitePodTest : DdbcTestFixture {
 
     this() {
         super(
+            "sqlite::memory:",
             "CREATE TABLE user (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null, dob DATE, created DATETIME, updated DATETIME)",
             "DROP TABLE IF EXISTS user"
         );

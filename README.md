@@ -138,6 +138,10 @@ ddbc:mysql://127.0.0.1:3306
 
 ```
 ddbc:postgresql://127.0.0.1:5432
+
+or
+
+ddbc:postgresql://hostname:5432/dbname
 ```
 
 ### Microsoft SQL Server (via ODBC)
