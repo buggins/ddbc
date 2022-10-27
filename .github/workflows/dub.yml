@@ -61,9 +61,9 @@ jobs:
         if: ${{ startsWith(matrix.os, 'windows') }}
         run: dub test --config=full --arch=x86
         
-      - name: dub run with test config (x86)
-        if: ${{ startsWith(matrix.os, 'windows') }}
-        run: dub run --config=test --arch=x86
+      #- name: dub run with test config (x86)
+      #  if: ${{ startsWith(matrix.os, 'windows') }}
+      #  run: dub run --config=test --arch=x86
         
       - name: run the ddbctest project (x86)
         if: ${{ startsWith(matrix.os, 'windows') }}
@@ -74,8 +74,8 @@ jobs:
       - name: dub test with full config (x86_64)
         run: dub test --config=full --arch=x86_64
         
-      - name: dub run with test config (x86_64)
-        run: dub run --config=test --arch=x86_64
+      #- name: dub run with test config (x86_64)
+      #  run: dub run --config=test --arch=x86_64
         
       - name: run the ddbctest project (x86_64)
         working-directory: example
@@ -86,9 +86,9 @@ jobs:
         if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}
         run: dub test --config=full --arch=x86_mscoff
         
-      - name: dub run with test config (x86_mscoff)
-        if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}
-        run: dub run --config=test --arch=x86_mscoff
+      #- name: dub run with test config (x86_mscoff)
+      #  if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}
+      #  run: dub run --config=test --arch=x86_mscoff
         
       - name: run the ddbctest project (x86_mscoff)
         if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}
@@ -157,6 +157,9 @@ jobs:
         with:
           compiler: dmd-latest
 
+      - name: Run ddbctest
+        run: dub run --config=test
+        
       - name: Build The Example Project
         working-directory: ./example
         run: dub build
