@@ -157,9 +157,12 @@ jobs:
         with:
           compiler: dmd-latest
 
+      - name: Install Microsoft ODBC
+        run: sudo ACCEPT_EULA=Y apt-get install msodbcsql18 -y
+
       - name: Run ddbctest
         run: dub run --config=test
-        
+
       - name: Build The Example Project
         working-directory: ./example
         run: dub build
@@ -188,5 +191,4 @@ jobs:
         env:
           PORT: ${{ job.services.mssql.ports[1433] }}
         run: |
-          sudo ACCEPT_EULA=Y apt-get install msodbcsql17 -y
-          ./ddbctest --connection=odbc://127.0.0.1:$PORT --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 17 for SQL Server" --trusted_connection=yes
+          ./ddbctest --connection=odbc://127.0.0.1:$PORT --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 18 for SQL Server" --trusted_connection=yes
