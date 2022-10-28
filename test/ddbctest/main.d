@@ -3,6 +3,8 @@ module ddbc.ddbctest;
 import std.conv : to;
 import std.datetime : Date, DateTime;
 import std.datetime.systime : SysTime, Clock;
+import std.format;
+import std.process: environment;
 import std.variant;
 import std.stdio;
 
@@ -19,7 +21,7 @@ version(USE_MYSQL) {
 
         this() {
             super(
-                "ddbc:mysql://localhost:3306/testdb?user=testuser,password=passw0rd",
+                "ddbc:mysql://localhost:%s/testdb?user=testuser,password=passw0rd".format(environment.get("MYSQL_PORT", "3306")),
                 "CREATE TABLE `my_first_test` (`id` INTEGER AUTO_INCREMENT PRIMARY KEY, `name` VARCHAR(255) NOT NULL)",
                 "DROP TABLE IF EXISTS `my_first_test`"
             );
@@ -62,7 +64,7 @@ version(USE_PGSQL) {
 
         this() {
             super(
-                "ddbc:postgresql://localhost:5432/testdb?user=testuser,password=passw0rd,ssl=false",
+                "ddbc:postgresql://localhost:%s/testdb?user=testuser,password=passw0rd,ssl=false".format(environment.get("POSTGRES_PORT", "5432")),
                 "CREATE TABLE my_first_test (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)",
                 "DROP TABLE IF EXISTS my_first_test"
             );
@@ -107,7 +109,7 @@ version(USE_ODBC) {
             // "ODBC Driver 18 for SQL Server"
             // "FreeTDS"
             super(
-                "odbc://localhost,1433?user=SA,password=MSbbk4k77JKH88g54,trusted_connection=yes,driver=ODBC Driver 18 for SQL Server", // don't specify database!
+                "odbc://localhost,%s?user=SA,password=MSbbk4k77JKH88g54,trusted_connection=yes,driver=ODBC Driver 18 for SQL Server".format(environment.get("MSSQL_PORT", "1433")), // don't specify database!
                 "DROP TABLE IF EXISTS [my_first_test];CREATE TABLE [my_first_test] ([id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY, [name] VARCHAR(255) NOT NULL)",
                 "DROP TABLE IF EXISTS [my_first_test]"
             );

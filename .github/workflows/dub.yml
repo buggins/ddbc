@@ -161,6 +161,10 @@ jobs:
         run: sudo ACCEPT_EULA=Y apt-get install msodbcsql18 -y
 
       - name: Run ddbctest
+        env:
+          MYSQL_PORT: ${{ job.services.mysql.ports[3306] }}
+          POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+          MSSQL_PORT: ${{ job.services.mssql.ports[1433] }}
         run: dub run --config=test
 
       - name: Build The Example Project
@@ -191,4 +195,4 @@ jobs:
         env:
           PORT: ${{ job.services.mssql.ports[1433] }}
         run: |
-          ./ddbctest --connection=odbc://127.0.0.1:$PORT --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 18 for SQL Server" --trusted_connection=yes
+          ./ddbctest --connection=odbc://127.0.0.1:$PORT --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 18 for SQL Server" --trusted_connection=yes
