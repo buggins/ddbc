@@ -52,42 +52,6 @@ import mysql.protocol.constants;
 import mysql.protocol.packets : FieldDescription, ParamDescription;
 import mysql.result : Row, ResultRange;
 
-// version(unittest) {
-//     /*
-//         To allow unit tests using MySQL server,
-//         run mysql client using admin privileges, e.g. for MySQL server on localhost:
-//         > mysql -uroot
-
-//         Create test user and test DB:
-
-//         mysql> CREATE DATABASE IF NOT EXISTS testdb;
-//         mysql> CREATE USER 'travis'@'localhost' IDENTIFIED BY '';
-//         mysql> GRANT ALL PRIVILEGES ON testdb.* TO 'travis'@'localhost';
-
-//         mysql> CREATE USER 'testuser'@'localhost';
-//         mysql> GRANT ALL PRIVILEGES ON testdb.* TO 'testuser'@'localhost' IDENTIFIED BY 'testpassword';
-//         mysql> FLUSH PRIVILEGES;
-//      */
-//     /// change to false to disable tests on real MySQL server
-//     immutable bool MYSQL_TESTS_ENABLED = true;
-//     /// change parameters if necessary
-//     const string MYSQL_UNITTEST_HOST = "localhost";
-//     const int    MYSQL_UNITTEST_PORT = 3306;
-//     const string MYSQL_UNITTEST_USER = "travis"; // "testuser";
-//     const string MYSQL_UNITTEST_PASSWORD = ""; // "testpassword";
-//     const string MYSQL_UNITTEST_DB = "testdb";
-
-//     static if (MYSQL_TESTS_ENABLED) {
-//         /// use this data source for tests
-        
-//         DataSource createUnitTestMySQLDataSource() {
-//             string url = makeDDBCUrl("mysql", MYSQL_UNITTEST_HOST, MYSQL_UNITTEST_PORT, MYSQL_UNITTEST_DB);
-//             string[string] params;
-//             setUserAndPassword(params, MYSQL_UNITTEST_USER, MYSQL_UNITTEST_PASSWORD);
-//             return createConnectionPool(url, params);
-//         }
-//     }
-// }
 
 SqlType fromMySQLType(int t) {
 	switch(t) {
@@ -1249,117 +1213,11 @@ class MySQLDriver : Driver {
     }
 }
 
-// unittest {
-//     static if (MYSQL_TESTS_ENABLED) {
-
-//         DataSource ds = createUnitTestMySQLDataSource();
-
-//         auto conn = ds.getConnection();
-//         scope(exit) conn.close();
-//         auto stmt = conn.createStatement();
-//         scope(exit) stmt.close();
-
-//         assert(stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1") == 0);
-//         assert(stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ddbct1 (id bigint not null primary key AUTO_INCREMENT, name varchar(250), comment mediumtext, ts datetime)") == 0);
-//         assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=1, name='name1', comment='comment for line 1', ts='20130202123025'") == 1);
-//         assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=2, name='name2', comment='comment for line 2 - can be very long'") == 1);
-//         assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=3, name='name3', comment='this is line 3'") == 1);
-//         assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=4, name='name4', comment=NULL") == 1);
-//         assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=5, name=NULL, comment=''") == 1);
-//         assert(stmt.executeUpdate("INSERT INTO ddbct1 SET id=6, name='', comment=NULL") == 1);
-//         assert(stmt.executeUpdate("UPDATE ddbct1 SET name=concat(name, '_x') WHERE id IN (3, 4)") == 2);
-        
-//         PreparedStatement ps = conn.prepareStatement("UPDATE ddbct1 SET name=? WHERE id=?");
-//         ps.setString(1, null);
-//         ps.setLong(2, 3);
-//         assert(ps.executeUpdate() == 1);
-        
-//         auto rs = stmt.executeQuery("SELECT id, name name_alias, comment, ts FROM ddbct1 ORDER BY id");
-
-//         // testing result set meta data
-//         ResultSetMetaData meta = rs.getMetaData();
-//         assert(meta.getColumnCount() == 4);
-//         assert(meta.getColumnName(1) == "id");
-//         assert(meta.getColumnLabel(1) == "id");
-//         assert(meta.isNullable(1) == false);
-//         assert(meta.isNullable(2) == true);
-//         assert(meta.isNullable(3) == true);
-//         assert(meta.isNullable(4) == true);
-//         assert(meta.getColumnName(2) == "name");
-//         assert(meta.getColumnLabel(2) == "name_alias");
-//         assert(meta.getColumnName(3) == "comment");
-//         assert(meta.getColumnLabel(3) == "comment");
-//         assert(meta.getColumnName(4) == "ts");
-//         assert(meta.getColumnLabel(4) == "ts");
-
-//         //auto rowCount = rs.getFetchSize();
-//         //assert(rowCount == 6, "Expected 6 rows but there were " ~ to!string(rowCount));
-
-//         int index = 1;
-//         while (rs.next()) {
-//             assert(!rs.isNull(1));
-//             //ubyte[] bytes = rs.getUbytes(3);
-//             int rowIndex = rs.getRow();
-//             assert(rowIndex == index);
-//             long id = rs.getLong(1);
-//             assert(id == index);
-//             //writeln("field2 = '" ~ rs.getString(2) ~ "'");
-//             //writeln("field3 = '" ~ rs.getString(3) ~ "'");
-//             //writeln("wasNull = " ~ to!string(rs.wasNull()));
-// 			if (id == 1) {
-// 				DateTime ts = rs.getDateTime(4);
-// 				assert(ts == DateTime(2013,02,02,12,30,25));
-// 			}
-// 			if (id == 4) {
-//                 assert(rs.getString(2) == "name4_x");
-//                 assert(rs.isNull(3));
-//             }
-//             if (id == 5) {
-//                 assert(rs.isNull(2));
-//                 assert(!rs.isNull(3));
-//             }
-//             if (id == 6) {
-//                 assert(!rs.isNull(2));
-//                 assert(rs.isNull(3));
-//             }
-//             //writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ strNull(rs.getString(3)) ~ "\t[" ~ to!string(bytes.length) ~ "]");
-//             index++;
-//         }
-//         assert(index - 1 == 6, "Expected 6 rows but there were " ~ to!string(index));
-        
-//         PreparedStatement ps2 = conn.prepareStatement("SELECT id, name, comment FROM ddbct1 WHERE id >= ?");
-// 		scope(exit) ps2.close();
-//         ps2.setLong(1, 3);
-//         rs = ps2.executeQuery();
-//         while (rs.next()) {
-//             //writeln(to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ strNull(rs.getString(3)));
-//             index++;
-//         }
-
-// 		// checking last insert ID for prepared statement
-// 		PreparedStatement ps3 = conn.prepareStatement("INSERT INTO ddbct1 (name) values ('New String 1')");
-// 		scope(exit) ps3.close();
-// 		Variant newId;
-// 		assert(ps3.executeUpdate(newId) == 1);
-// 		//writeln("Generated insert id = " ~ newId.toString());
-// 		assert(newId.get!ulong > 0);
-
-// 		// checking last insert ID for normal statement
-// 		Statement stmt4 = conn.createStatement();
-// 		scope(exit) stmt4.close();
-// 		Variant newId2;
-// 		assert(stmt.executeUpdate("INSERT INTO ddbct1 (name) values ('New String 2')", newId2) == 1);
-// 		//writeln("Generated insert id = " ~ newId2.toString());
-// 		assert(newId2.get!ulong > 0);
-
-// 	}
-// }
 
 __gshared static this() {
     // register MySQLDriver
     import ddbc.common;
     DriverFactory.registerDriverFactory("mysql", delegate() { return new MySQLDriver(); });
 }
-
 
 }
