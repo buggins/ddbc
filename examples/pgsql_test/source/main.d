@@ -2,8 +2,7 @@ import std.stdio;
 
 import ddbc;
 
-int main(string[] argv)
-{
+int main(string[] argv) {
     string url = "postgresql://localhost:5432/ddbctestdb?user=ddbctest,password=ddbctestpass,ssl=true";
     //string url = "mysql://localhost:3306/ddbctestdb?user=ddbctest,password=ddbctestpass";
     //string url = "sqlite:testdb.sqlite";
@@ -19,7 +18,7 @@ int main(string[] argv)
     scope(exit) stmt.close();
 
     import std.conv : to;
-    writeln("Hello D-World!");
+
     // execute simple queries to create and fill table
     stmt.executeUpdate("DROP TABLE IF EXISTS ddbct1");
     stmt.executeUpdate("CREATE TABLE ddbct1 
