@@ -9,6 +9,10 @@ Thumbs.db
 .idea/
 *.iml
 
+#Ignore project files by Visual Studio
+*.sln
+*.visualdproj
+
 #Ignore files build by Visual Studio
 *.user
 *.aps
@@ -28,7 +32,6 @@ Thumbs.db
 obj/
 [Rr]elease*/
 _ReSharper*/
-code.visualdproj
 HibernatedTest/*
 Unittest/*
 

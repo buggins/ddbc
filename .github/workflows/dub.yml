@@ -57,13 +57,13 @@ jobs:
         run: dub build --config=full --arch=x86_64
 
       # x86 (Windows Only)
-      - name: dub test with SQLite config (x86)
+      - name: dub test with full config (x86)
         if: ${{ startsWith(matrix.os, 'windows') }}
-        run: dub test --config=SQLite --arch=x86
+        run: dub test --config=full --arch=x86
         
-      - name: dub run with test config (x86)
-        if: ${{ startsWith(matrix.os, 'windows') }}
-        run: dub run --config=test --arch=x86
+      #- name: dub run with test config (x86)
+      #  if: ${{ startsWith(matrix.os, 'windows') }}
+      #  run: dub run --config=test --arch=x86
         
       - name: run the ddbctest project (x86)
         if: ${{ startsWith(matrix.os, 'windows') }}
@@ -71,24 +71,24 @@ jobs:
         run: dub build --config=SQLite --arch=x86 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
 
       # x86_64 (all platforms)
-      - name: dub test with SQLite config (x86_64)
-        run: dub test --config=SQLite --arch=x86_64
+      - name: dub test with full config (x86_64)
+        run: dub test --config=full --arch=x86_64
         
-      - name: dub run with test config (x86_64)
-        run: dub run --config=test --arch=x86_64
+      #- name: dub run with test config (x86_64)
+      #  run: dub run --config=test --arch=x86_64
         
       - name: run the ddbctest project (x86_64)
         working-directory: example
         run: dub build --config=SQLite --arch=x86_64 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
 
       # x86_mscoff (Windows with dmd Only)
-      - name: dub test with SQLite config (x86_mscoff)
+      - name: dub test with full config (x86_mscoff)
         if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}
-        run: dub test --config=SQLite --arch=x86_mscoff
+        run: dub test --config=full --arch=x86_mscoff
         
-      - name: dub run with test config (x86_mscoff)
-        if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}
-        run: dub run --config=test --arch=x86_mscoff
+      #- name: dub run with test config (x86_mscoff)
+      #  if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}
+      #  run: dub run --config=test --arch=x86_mscoff
         
       - name: run the ddbctest project (x86_mscoff)
         if: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.compiler, 'dmd') }}
@@ -157,6 +157,16 @@ jobs:
         with:
           compiler: dmd-latest
 
+      - name: Install Microsoft ODBC
+        run: sudo ACCEPT_EULA=Y apt-get install msodbcsql18 -y
+
+      - name: Run ddbctest
+        env:
+          MYSQL_PORT: ${{ job.services.mysql.ports[3306] }}
+          POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+          MSSQL_PORT: ${{ job.services.mssql.ports[1433] }}
+        run: dub run --config=test
+
       - name: Build The Example Project
         working-directory: ./example
         run: dub build
@@ -185,5 +195,4 @@ jobs:
         env:
           PORT: ${{ job.services.mssql.ports[1433] }}
         run: |
-          sudo ACCEPT_EULA=Y apt-get install msodbcsql17 -y
-          ./ddbctest --connection=odbc://127.0.0.1:$PORT --database=dbo --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 17 for SQL Server" --trusted_connection=yes
+          ./ddbctest --connection=odbc://127.0.0.1:$PORT --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 18 for SQL Server" --trusted_connection=yes

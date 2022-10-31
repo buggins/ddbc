@@ -101,11 +101,15 @@
             "targetName": "ddbc-tests",
             "targetPath": "test",
             "targetType": "executable",
+            "versions": ["USE_MYSQL", "USE_SQLITE", "USE_PGSQL", "USE_ODBC"],
             "dependencies": {
-                "d-unit": "~>0.10.2"
+                "d-unit": "~>0.10.2",
+                "mysql-native": "~>3.1.0",
+                "derelict-pq": "~>2.2.0",
+                "odbc": "~>1.0.0"
             },
-            "versions": ["USE_SQLITE"],
-            "libs-posix": ["sqlite3"],
+            "libs-posix": ["sqlite3", "pq", "odbc"],
+            "libs-windows": ["odbc32"],
             "lflags-osx": ["-L/usr/local/opt/sqlite3/lib/"],
             "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
             "copyFiles-windows-x86_64": [ "libs/win64/sqlite3.dll" ],

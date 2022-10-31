@@ -205,41 +205,6 @@ version(USE_PGSQL) {
         }
         return res;
     }
-    version(unittest) {
-    	/*
-            To allow unit tests using PostgreSQL server,
-            run postgres client using admin privileges, e.g. for postgres server on localhost:
-            sudo -u postgres psql
-
-            Then create a user and test database:
-
-            postgres=# CREATE USER testuser WITH ENCRYPTED PASSWORD 'testpassword';
-            postgres=# CREATE DATABASE testdb OWNER testuser;
-
-            CREATE DATABASE testdb WITH OWNER testuser ENCODING 'UTF8' LC_COLLATE = 'en_US.UTF-8' LC_CTYPE = 'en_US.UTF-8' TEMPLATE template0;
-         */
-    	/// change to false to disable tests on real PostgreSQL server
-    	immutable bool PGSQL_TESTS_ENABLED = true;
-    	/// change parameters if necessary
-    	const string PGSQL_UNITTEST_HOST = "localhost";
-    	const int    PGSQL_UNITTEST_PORT = 5432;
-    	const string PGSQL_UNITTEST_USER = "postgres"; // "testuser";
-    	const string PGSQL_UNITTEST_PASSWORD = ""; // "testpassword";
-    	const string PGSQL_UNITTEST_DB = "testdb";
-    	
-    	static if (PGSQL_TESTS_ENABLED) {
-    		/// use this data source for tests
-    		DataSource createUnitTestPGSQLDataSource() {
-                //string url = makeDDBCUrl("postgresql", PGSQL_UNITTEST_HOST, PGSQL_UNITTEST_PORT, PGSQL_UNITTEST_DB);
-                string url = "ddbc:postgresql://localhost:5432/testdb";
-
-                string[string] params;
-                setUserAndPassword(params, PGSQL_UNITTEST_USER, PGSQL_UNITTEST_PASSWORD);
-                return createConnectionPool(url, params);
-    		}
-    	}
-    }
-
 
     class PGSQLConnection : ddbc.core.Connection {
     private:
@@ -1455,122 +1420,10 @@ version(USE_PGSQL) {
     	}
     }
 
-    unittest {
-    	static if (PGSQL_TESTS_ENABLED) {
-    		
-    		import std.conv;
-    		DataSource ds = createUnitTestPGSQLDataSource();
-    	
-    		auto conn = ds.getConnection();
-    		assert(conn !is null);
-    		scope(exit) conn.close();
-            {
-                //writeln("dropping table");
-                Statement stmt = conn.createStatement();
-                scope(exit) stmt.close();
-                stmt.executeUpdate("DROP TABLE IF EXISTS t1");
-            }
-            {
-                //writeln("creating table");
-                Statement stmt = conn.createStatement();
-                scope(exit) stmt.close();
-                stmt.executeUpdate("CREATE TABLE IF NOT EXISTS t1 (id SERIAL, name VARCHAR(255) NOT NULL, flags int null)");
-                //writeln("populating table");
-                Variant id = 0;
-                assert(stmt.executeUpdate("INSERT INTO t1 (name) VALUES ('test1') returning id", id) == 1);
-                assert(id.get!long > 0);
-            }
-            {
-                PreparedStatement stmt = conn.prepareStatement("INSERT INTO t1 (name) VALUES ('test2') returning id");
-                scope(exit) stmt.close();
-                Variant id = 0;
-                assert(stmt.executeUpdate(id) == 1);
-                assert(id.get!long > 0);
-            }
-            {
-                //writeln("reading table");
-                Statement stmt = conn.createStatement();
-                scope(exit) stmt.close();
-                ResultSet rs = stmt.executeQuery("SELECT id, name, flags FROM t1");
-                assert(rs.getMetaData().getColumnCount() == 3);
-                assert(rs.getMetaData().getColumnName(1) == "id");
-                assert(rs.getMetaData().getColumnName(2) == "name");
-                assert(rs.getMetaData().getColumnName(3) == "flags");
-                scope(exit) rs.close();
-                //writeln("id" ~ "\t" ~ "name");
-                while (rs.next()) {
-                    long id = rs.getLong(1);
-                    string name = rs.getString(2);
-                    assert(rs.isNull(3));
-                    //writeln("" ~ to!string(id) ~ "\t" ~ name);
-                }
-            }
-            {
-                //writeln("reading table");
-                Statement stmt = conn.createStatement();
-                scope(exit) stmt.close();
-                ResultSet rs = stmt.executeQuery("SELECT id, name, flags FROM t1");
-                assert(rs.getMetaData().getColumnCount() == 3);
-                assert(rs.getMetaData().getColumnName(1) == "id");
-                assert(rs.getMetaData().getColumnName(2) == "name");
-                assert(rs.getMetaData().getColumnName(3) == "flags");
-                scope(exit) rs.close();
-                //writeln("id" ~ "\t" ~ "name");
-                while (rs.next()) {
-                    //writeln("calling getLong");
-                    long id = rs.getLong(1);
-                    //writeln("done getLong");
-                    string name = rs.getString(2);
-                    assert(rs.isNull(3));
-                    //writeln("" ~ to!string(id) ~ "\t" ~ name);
-                }
-            }
-            {
-                //writeln("reading table with parameter id=1");
-                PreparedStatement stmt = conn.prepareStatement("SELECT id, name, flags FROM t1 WHERE id = ?");
-                scope(exit) stmt.close();
-//                assert(stmt.getMetaData().getColumnCount() == 3);
-//                assert(stmt.getMetaData().getColumnName(1) == "id");
-//                assert(stmt.getMetaData().getColumnName(2) == "name");
-//                assert(stmt.getMetaData().getColumnName(3) == "flags");
-                //writeln("calling setLong");
-                stmt.setLong(1, 1);
-                //writeln("done setLong");
-                {
-                    ResultSet rs = stmt.executeQuery();
-                    scope(exit) rs.close();
-                    //writeln("id" ~ "\t" ~ "name");
-                    while (rs.next()) {
-                        long id = rs.getLong(1);
-                        string name = rs.getString(2);
-                        assert(rs.isNull(3));
-                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
-                    }
-                }
-                //writeln("changing parameter id=2");
-                //writeln("calling setLong");
-                stmt.setLong(1, 2);
-                //writeln("done setLong");
-                {
-                    ResultSet rs = stmt.executeQuery();
-                    scope(exit) rs.close();
-                    //writeln("id" ~ "\t" ~ "name");
-                    while (rs.next()) {
-                        long id = rs.getLong(1);
-                        string name = rs.getString(2);
-                        //writeln("" ~ to!string(id) ~ "\t" ~ name);
-                    }
-                }
-            }
-        }
-    }
-
     __gshared static this() {
         // register PGSQLDriver
         import ddbc.common;
         DriverFactory.registerDriverFactory("postgresql", delegate() { return new PGSQLDriver(); });
     }
 
-} else { // version(USE_PGSQL)
-    immutable bool PGSQL_TESTS_ENABLED = false;
 }
