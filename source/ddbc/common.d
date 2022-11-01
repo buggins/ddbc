@@ -568,6 +568,25 @@ string extractDriverNameFromURL(string url) {
 	return dbName == "sqlserver" || dbName == "oracle" ? "odbc" : dbName;
 }
 
+private unittest {
+	assert(extractDriverNameFromURL("ddbc:sqlite::memory:") == "sqlite");
+	assert(extractDriverNameFromURL("ddbc:sqlite:ddbc-test.sqlite") == "sqlite");
+	assert(extractDriverNameFromURL("ddbc:mysql://127.0.0.1:3306/mydb") == "mysql");
+	assert(extractDriverNameFromURL("ddbc:postgresql://127.0.0.1:5432/mydb") == "postgresql");
+	assert(extractDriverNameFromURL("ddbc:sqlserver://127.0.0.1:1433/mydb") == "odbc");
+	assert(extractDriverNameFromURL("ddbc:oracle://127.0.0.1:1521/mydb") == "odbc");
+	assert(extractDriverNameFromURL("ddbc:odbc://127.0.0.1:3306/mydb") == "odbc");
+
+	// same again without the ddbc prefix:
+	assert(extractDriverNameFromURL("sqlite::memory:") == "sqlite");
+	assert(extractDriverNameFromURL("sqlite:ddbc-test.sqlite") == "sqlite");
+	assert(extractDriverNameFromURL("mysql://127.0.0.1:3306/mydb") == "mysql");
+	assert(extractDriverNameFromURL("postgresql://127.0.0.1:5432/mydb") == "postgresql");
+	assert(extractDriverNameFromURL("sqlserver://127.0.0.1:1433/mydb") == "odbc");
+	assert(extractDriverNameFromURL("oracle://127.0.0.1:1521/mydb") == "odbc");
+	assert(extractDriverNameFromURL("odbc://127.0.0.1:3306/mydb") == "odbc");
+}
+
 /// extract parameters from URL string to string[string] map, update url to strip params
 void extractParamsFromURL(ref string url, ref string[string] params) {
     url = stripDdbcPrefix(url);
@@ -584,6 +603,18 @@ void extractParamsFromURL(ref string url, ref string[string] params) {
             }
         }
     }
+}
+
+private unittest {
+	string url = "ddbc:odbc://localhost:1433?user=sa,password=p@ss,driver=FreeTDS";
+	string[string] params;
+	extractParamsFromURL(url, params);
+
+	assert(url == "odbc://localhost:1433");
+	assert(params.length == 3);
+	assert(params["user"] == "sa");
+	assert(params["password"] == "p@ss");
+	assert(params["driver"] == "FreeTDS");
 }
 
 /// sets user and password parameters in parameter map
