@@ -1075,29 +1075,14 @@ bool insert(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
     // https://issues.dlang.org/show_bug.cgi?id=18780
     // https://github.com/dlang/phobos/pull/7954
     if(insertId.convertsTo!(typeof(o.id))) {
-        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-            import std.experimental.logger ; sharedLog;
-            sharedLog.tracef("The ID is of type '%s' and can be a '%s'", insertId.type().toString(), typeof(o.id).stringof);
-        }
+        tracef("The ID is of type '%s' and can be a '%s'", insertId.type().toString(), typeof(o.id).stringof);
         o.id = insertId.get!(typeof(o.id)); // potentially could use coerce instead of get
     } else if(is(typeof(o.id) == uint) || is(typeof(o.id) == int)) {
         // This isn't generally an issue but on Windows (x86) using a size_t will result in a uint
-        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-            import std.experimental.logger ; sharedLog;
-            sharedLog.warningf("The ID is of type '%s', converting to type '%s' could cause data errors", insertId.type().toString(), typeof(o.id).stringof);
-        } else {
-            import std.stdio : writeln;
-            writeln("The ID is of type '" ~ insertId.type().toString() ~ "', converting to type '" ~ typeof(o.id).stringof ~ "' could cause data errors");
-        }
+        warningf("The ID is of type '%s', converting to type '%s' could cause data errors", insertId.type().toString(), typeof(o.id).stringof);
         o.id = to!(typeof(o.id))(insertId.get!ulong);  //  alternative syntax:   o.id = cast(typeof(o.id))insertId.get!ulong;
     } else {
-        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-            import std.experimental.logger ; sharedLog;
-            sharedLog.errorf("The ID is of type '%s' and cannot be converted to type '%s'", insertId.type().toString(), typeof(o.id).stringof);
-        } else {
-            import std.stdio : writeln;
-            writeln("The ID is of type '" ~ insertId.type().toString() ~ "' and cannot be converted to type: " ~ typeof(o.id).stringof);
-        }
+        errorf("The ID is of type '%s' and cannot be converted to type '%s'", insertId.type().toString(), typeof(o.id).stringof);
     }
 
     return true;

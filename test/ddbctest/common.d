@@ -21,15 +21,13 @@ class DdbcTestFixture {
         this.setupSql = setupSql;
         this.teardownSql = teardownSql;
 
-        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-            import std.experimental.logger : globalLogLevel, sharedLog, LogLevel;
-            import std.experimental.logger.core : StdForwardLogger;
-            //pragma(msg, "Setting 'std.experimental.logger : sharedLog' to use 'stdout' logging...");
-            globalLogLevel(LogLevel.all);
-            //import std.experimental.logger.filelogger : FileLogger;
-            //sharedLog = new FileLogger(stdout);
-            //sharedLog = new StdForwardLogger(LogLevel.all);
-        }
+        import std.logger : globalLogLevel, sharedLog, LogLevel;
+        import std.logger.core : StdForwardLogger;
+        //pragma(msg, "Setting 'std.logger : sharedLog' to use 'stdout' logging...");
+        globalLogLevel(LogLevel.all);
+        //import std.logger.filelogger : FileLogger;
+        //sharedLog = new FileLogger(stdout);
+        //sharedLog = new StdForwardLogger(LogLevel.all);
     }
 
     @BeforeEach

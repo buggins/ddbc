@@ -30,10 +30,7 @@ import std.datetime : Date, DateTime, TimeOfDay;
 import std.datetime.date;
 import std.datetime.systime;
 import std.exception : enforce;
-
-static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-    import std.experimental.logger;
-}
+import std.logger;
 import std.stdio;
 import std.string;
 import std.variant;
@@ -361,9 +358,7 @@ public:
         lock();
         scope(exit) unlock();
 
-        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-            sharedLog.trace(queryString);
-        }
+        trace(queryString);
 
 		try {
 	        results = query(conn.getConnection(), queryString);
@@ -379,9 +374,7 @@ public:
         scope(exit) unlock();
 		ulong rowsAffected = 0;
 
-        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-            sharedLog.trace(query);
-        }
+        trace(query);
         
 		try {
 			rowsAffected = exec(conn.getConnection(), query);
@@ -511,9 +504,7 @@ public:
         lock();
         scope(exit) unlock();
 
-        static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-            sharedLog.trace(statement.sql());
-        }
+            trace(statement.sql());
 
         try {
             results = query(conn.getConnection(), statement);
