@@ -55,6 +55,11 @@ import std.conv;
 import std.datetime;
 import std.string;
 import std.variant;
+static if (__traits(compiles, () { import std.logger; } )) {
+  import std.logger;
+} else {
+  import std.experimental.logger;
+}
 
 static import std.ascii;
 

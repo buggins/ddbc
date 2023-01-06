@@ -13,6 +13,8 @@ import ddbc.test.common : DdbcTestFixture;
 import ddbc.core : Connection, PreparedStatement, Statement, SQLException;
 import ddbc.pods;
 
+static import ddbc.core;
+
 version(USE_MYSQL) {
     pragma(msg, "DDBC test will run MySQL tests");
 
