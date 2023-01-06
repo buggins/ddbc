@@ -31,7 +31,12 @@ version(USE_SQLITE) {
     import std.datetime.systime : SysTime, Clock;
     import std.datetime.timezone : UTC;
     import std.exception : enforce;
-    import std.logger;
+    static if (__traits(compiles, (){ import std.logger; } )) {
+        import std.logger;
+    } else {
+        import std.experimental.logger;
+    }
+
     import std.stdio;
     import std.string;
     import std.variant;

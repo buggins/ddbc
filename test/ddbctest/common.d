@@ -21,8 +21,14 @@ class DdbcTestFixture {
         this.setupSql = setupSql;
         this.teardownSql = teardownSql;
 
-        import std.logger : globalLogLevel, sharedLog, LogLevel;
-        import std.logger.core : StdForwardLogger;
+        static if (__traits(compiles, (){ import std.logger; } )) {
+            import std.logger : globalLogLevel, sharedLog, LogLevel;
+            import std.logger.core : StdForwardLogger;
+        } else {
+            import std.experimental.logger : globalLogLevel, sharedLog, LogLevel;
+            import std.experimental.logger.core : StdForwardLogger;
+        }
+
         //pragma(msg, "Setting 'std.logger : sharedLog' to use 'stdout' logging...");
         globalLogLevel(LogLevel.all);
         //import std.logger.filelogger : FileLogger;

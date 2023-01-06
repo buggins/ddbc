@@ -24,7 +24,12 @@ module ddbc.common;
 import ddbc.core;
 import std.algorithm;
 import std.exception;
-import std.logger;
+static if (__traits(compiles, (){ import std.logger; } )) {
+    import std.logger;
+} else {
+    import std.experimental.logger;
+}
+
 import std.stdio;
 import std.conv;
 import std.variant;
