@@ -86,10 +86,13 @@ struct ConnectionParams
 }
 int main(string[] args)
 {
-	static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+	static if (__traits(compiles, (){ import std.logger; } )) {
+		import std.logger;
+	} else {
 		import std.experimental.logger;
-		globalLogLevel(LogLevel.all);
 	}
+
+	globalLogLevel(LogLevel.all);
 
 	ConnectionParams par;
 	string URI;

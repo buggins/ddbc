@@ -58,10 +58,7 @@ SysTime parseSysTime(const string timestampString) @safe {
             return SysTime(parseDateTime(timestampString), UTC());
         }
     } catch (ConvException e) {
-        // static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-        //     import std.experimental.logger : sharedLog; 
-        //     sharedLog.error("Could not parse " ~ timestampString ~ " to SysTime", e);
-        // }
+        // error("Could not parse " ~ timestampString ~ " to SysTime", e);
         throw new DateTimeException("Can not convert '" ~ timestampString ~ "' to SysTime");
     }
 }
@@ -103,10 +100,7 @@ DateTime parseDateTime(const string timestampString) @safe {
         }
         throw new DateTimeException("Can not convert " ~ timestampString);
     } catch (ConvException e) {
-        // static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-        //     import std.experimental.logger : sharedLog;
-        //     sharedLog.error("Could not parse " ~ timestampString ~ " to SysTime", e);
-        // }
+        // error("Could not parse " ~ timestampString ~ " to SysTime", e);
         throw new DateTimeException("Can not convert '" ~ timestampString ~ "' to DateTime");
     }
 }

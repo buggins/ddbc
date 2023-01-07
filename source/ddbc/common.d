@@ -24,10 +24,12 @@ module ddbc.common;
 import ddbc.core;
 import std.algorithm;
 import std.exception;
-static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+static if (__traits(compiles, (){ import std.logger; } )) {
+    import std.logger;
+} else {
     import std.experimental.logger;
-    pragma(msg, "DDBC will log using 'std.experimental.logger'.");
 }
+
 import std.stdio;
 import std.conv;
 import std.variant;
@@ -162,9 +164,7 @@ public:
 		Connection conn = null;
         //writeln("getConnection(): freeConnections.length = " ~ to!string(freeConnections.length));
         if (freeConnections.length > 0) {
-			static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-				sharedLog.tracef("Retrieving database connection from pool of %s", freeConnections.length);
-			}
+    				tracef("Retrieving database connection from pool of %s", freeConnections.length);
             conn = freeConnections[freeConnections.length - 1]; // $ - 1
             auto oldSize = freeConnections.length;
             myRemove(freeConnections, freeConnections.length - 1);
@@ -172,14 +172,12 @@ public:
             auto newSize = freeConnections.length;
             assert(newSize == oldSize - 1);
         } else {
-            sharedLog.tracef("Creating new database connection (%s) %s %s", driver, url, params);
+            tracef("Creating new database connection (%s) %s %s", driver, url, params);
 
             try {
                 conn = super.getConnection();
             } catch (Throwable e) {
-				static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-					sharedLog.errorf("could not create db connection : %s", e.msg);
-				}
+                errorf("could not create db connection : %s", e.msg);
                 throw e;
             }
             //writeln("getConnection(): connection created");
@@ -201,9 +199,7 @@ public:
                 //activeConnections.length = oldSize - 1;
                 auto newSize = activeConnections.length;
                 assert(oldSize == newSize + 1);
-				static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-					sharedLog.tracef("database connections reduced from %s to %s", oldSize, newSize);
-				}
+                tracef("database connections reduced from %s to %s", oldSize, newSize);
                 return;
 			}
 		}

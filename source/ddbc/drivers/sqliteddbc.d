@@ -31,10 +31,12 @@ version(USE_SQLITE) {
     import std.datetime.systime : SysTime, Clock;
     import std.datetime.timezone : UTC;
     import std.exception : enforce;
-
-    static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+    static if (__traits(compiles, (){ import std.logger; } )) {
+        import std.logger;
+    } else {
         import std.experimental.logger;
     }
+
     import std.stdio;
     import std.string;
     import std.variant;
@@ -171,10 +173,8 @@ version(USE_SQLITE) {
                     // YYYY-MM-DD HH:MM:SS.SSS
                     // YYYY-MM-DDTHH:MM:SS
                     // YYYY-MM-DDTHH:MM:SS.SSS
-                    static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-                        if(sqliteString.length > 19) {
-                            sharedLog.warning(sqliteString ~ " will be converted to DateTime and lose the milliseconds. Consider using SysTime");
-                        }
+                    if(sqliteString.length > 19) {
+                        warning(sqliteString ~ " will be converted to DateTime and lose the milliseconds. Consider using SysTime");
                     }
 
                     auto date = Date.fromISOExtString(sqliteString[0..10]);
@@ -442,9 +442,7 @@ version(USE_SQLITE) {
         override ddbc.core.ResultSet executeQuery(string query) {
             closePreparedStatement();
             _currentStatement = conn.prepareStatement(query);
-            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-                sharedLog.trace(_currentStatement);
-            }
+            trace(_currentStatement);
             _currentResultSet = _currentStatement.executeQuery();
             return _currentResultSet;
         }
@@ -462,9 +460,7 @@ version(USE_SQLITE) {
             closePreparedStatement();
             _currentStatement = conn.prepareStatement(query);
 
-            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-                sharedLog.trace(_currentStatement);
-            }
+            trace(_currentStatement);
 
             return _currentStatement.executeUpdate(insertId);
         }

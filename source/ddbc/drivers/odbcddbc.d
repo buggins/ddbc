@@ -27,10 +27,12 @@ import std.datetime : Date, DateTime, TimeOfDay;
 import std.datetime.date;
 import std.datetime.systime;
 import std.exception : enforce;
-
-static if(__traits(compiles, (){ import std.experimental.logger; } )) {
+static if (__traits(compiles, (){ import std.logger; } )) {
+    import std.logger;
+} else {
     import std.experimental.logger;
 }
+
 import std.stdio;
 import std.string;
 import std.variant;
@@ -105,9 +107,9 @@ version (USE_ODBC)
         debug
         {
             if(retval < 0) {
-                sharedLog.errorf("%s(%s) : %s", fullyQualifiedName!fn, format("%(%s%|, %)", tuple(args)), cast(RetVals) retval);
+                errorf("%s(%s) : %s", fullyQualifiedName!fn, format("%(%s%|, %)", tuple(args)), cast(RetVals) retval);
             } else {
-                //sharedLog.tracef("%s(%s) : %s", fullyQualifiedName!fn, format("%(%s%|, %)", tuple(args)), cast(RetVals) retval);
+                //tracef("%s(%s) : %s", fullyQualifiedName!fn, format("%(%s%|, %)", tuple(args)), cast(RetVals) retval);
             }
         }
 
@@ -423,7 +425,7 @@ version (USE_ODBC)
             addToConnectionString("trusted_connection", "TrustServerCertificate");
             string connectionString = connectionProps.join(';');
             
-            sharedLog.info(connectionString);
+            info(connectionString);
 
             SQLCHAR[1024] outstr;
             SQLSMALLINT outstrlen;
@@ -622,9 +624,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
             
-            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-                sharedLog.trace(query);
-            }
+            trace(query);
 
             try
             {
@@ -657,9 +657,7 @@ version (USE_ODBC)
                 unlock();
             int rowsAffected = 0;
 
-            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-                sharedLog.trace(query);
-            }
+            trace(query);
 
             try
             {
@@ -682,9 +680,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
             
-            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-                sharedLog.trace(query);
-            }
+            trace(query);
 
             try
             {
@@ -1011,9 +1007,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
             
-            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-                sharedLog.trace(stmt);
-            }
+            trace(stmt);
 
             try
             {
@@ -1037,9 +1031,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
             
-            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-                sharedLog.trace(stmt);
-            }
+            trace(stmt);
 
             try
             {
@@ -1069,9 +1061,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            static if(__traits(compiles, (){ import std.experimental.logger; } )) {
-                sharedLog.trace(stmt);
-            }
+            trace(stmt);
 
             try
             {
@@ -1340,7 +1330,7 @@ version (USE_ODBC)
                 items[i].typeName = (cast(SqlType) items[i].type).to!(string);
                 items[i].isNullable = col.nullAble == SQL_NULLABLE;
 
-                debug sharedLog.tracef("Column meta data: catalogName='%s', name='%s', typeName='%s'", items[i].catalogName, items[i].name, items[i].typeName);
+                debug tracef("Column meta data: catalogName='%s', name='%s', typeName='%s'", items[i].catalogName, items[i].name, items[i].typeName);
             }
 
             metadata = new ResultSetMetaDataImpl(items);
