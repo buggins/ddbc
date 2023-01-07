@@ -23,6 +23,7 @@ jobs:
         compiler:
           - dmd-latest
           - ldc-latest
+          - dmd-2.100.2
           - dmd-2.099.1
           - dmd-2.098.1
           - dmd-2.097.2
@@ -31,6 +32,8 @@ jobs:
         exclude:
           - { os: windows-latest, compiler: dmd-2.098.1 }
           - { os: windows-latest, compiler: dmd-2.097.2 }
+          - { os: macos-latest, compiler: dmd-2.098.1 }
+          - { os: macos-latest, compiler: dmd-2.097.2 }
 
     steps:
       - uses: actions/checkout@v3
