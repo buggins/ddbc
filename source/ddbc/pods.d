@@ -993,6 +993,8 @@ struct select(T, fieldList...) if (__traits(isPOD, T)) {
   static immutable selectSQL = generateSelectSQL!(T, fieldList)();
   string whereCondSQL;
   string orderBySQL;
+  string limitSQL;
+  string offsetSQL;
   this(Statement stmt) {
     this.stmt = stmt;
   }
@@ -1004,6 +1006,14 @@ struct select(T, fieldList...) if (__traits(isPOD, T)) {
     orderBySQL = " ORDER BY " ~ order;
     return this;
   }
+  ref select limit(string numberOfRows) {
+    limitSQL = " LIMIT " ~ numberOfRows;
+    return this;
+  }
+  ref select offset(string offsetNumber) {
+    offsetSQL = " OFFSET " ~ offsetNumber;
+    return this;
+  }
   ref T front() {
     return entity;
   }
@@ -1011,7 +1021,8 @@ struct select(T, fieldList...) if (__traits(isPOD, T)) {
   }
   @property bool empty() {
     if (!r)
-      r = stmt.executeQuery(selectSQL ~ whereCondSQL ~ orderBySQL);
+      r = stmt.executeQuery(selectSQL ~ whereCondSQL ~ orderBySQL 
+			    ~ limitSQL ~ offsetSQL);
     if (!r.next())
       return true;
     mixin(getAllColumnsReadCode!(T, fieldList));
