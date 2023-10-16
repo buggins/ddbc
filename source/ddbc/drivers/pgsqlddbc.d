@@ -242,7 +242,12 @@ version(USE_PGSQL) {
     	}
     	
     public:
-    	
+
+    	// db connections are DialectAware
+		override Dialect getDialect() {
+			return Dialect.PGSQL;
+		}
+
     	void lock() {
     		mutex.lock();
     	}
@@ -415,6 +420,12 @@ version(USE_PGSQL) {
     	bool closed;
     	
     public:
+
+		// statements are DialectAware
+        override Dialect getDialect() {
+            return conn.getDialect();
+        }
+
     	void checkClosed() {
     		enforce!SQLException(!closed, "Statement is already closed");
     	}
@@ -778,7 +789,12 @@ version(USE_PGSQL) {
         }
 
     public:
-    	
+
+		// prepared statements are DialectAware
+        override Dialect getDialect() {
+            return conn.getDialect();
+        }
+
         override void close() {
             checkClosed();
             lock();

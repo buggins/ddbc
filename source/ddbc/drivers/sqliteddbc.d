@@ -270,6 +270,11 @@ version(USE_SQLITE) {
         
     public:
 
+        // db connections are DialectAware
+        override Dialect getDialect() {
+            return Dialect.SQLITE;
+        }
+
         private string getError() {
             return copyCString(sqlite3_errmsg(conn));
         }
@@ -403,6 +408,11 @@ version(USE_SQLITE) {
         bool closed;
         
     public:
+        // statements are DialectAware
+        override Dialect getDialect() {
+            return conn.getDialect();
+        }
+
         void checkClosed() {
             enforce!SQLException(!closed, "Statement is already closed");
         }
@@ -539,6 +549,12 @@ version(USE_SQLITE) {
             //      return cmd.param(cast(ushort)(index - 1));
         }
     public:
+
+        // prepared statements are DialectAware
+        override Dialect getDialect() {
+            return conn.getDialect();
+        }
+
         SqlType sqliteToSqlType(int t) {
             switch(t) {
                 case SQLITE_INTEGER: return SqlType.BIGINT;
@@ -795,7 +811,7 @@ version(USE_SQLITE) {
         ResultSetMetaData metadata;
         private bool closed;
         private int currentRowIndex;
-//        private int rowCount;
+        private ulong rowCount = 0;
         private int[string] columnMap;
         private bool lastIsNull;
         private int columnCount;
@@ -837,6 +853,13 @@ version(USE_SQLITE) {
             for (int i=0; i<columnCount; i++) {
                 columnMap[metadata.getColumnName(i + 1)] = i;
             }
+
+            // Count how many rows were returned
+            while(sqlite3_step(rs) != SQLITE_DONE) {
+                this.rowCount++;
+            }
+            sqlite3_reset(rs);
+
             currentRowIndex = -1;
             _first = true;
         }
@@ -907,7 +930,7 @@ version(USE_SQLITE) {
                 columnCount = sqlite3_data_count(rs);
                 //writeln("sqlite3_step = SQLITE_DONE columnCount=" ~ to!string(columnCount));
                 // end of data
-                return columnCount > 0;
+                return columnCount > 0; // why not just return false??
             } else if (res == SQLITE_ROW) {
                 //writeln("sqlite3_step = SQLITE_ROW");
                 // have a row
@@ -1122,12 +1145,9 @@ version(USE_SQLITE) {
         }
         
         //Retrieves the fetch size for this ResultSet object.
-        // override ulong getFetchSize() {
-        //     checkClosed();
-        //     lock();
-        //     scope(exit) unlock();
-        //     return -1;
-        // }
+        override ulong getFetchSize() {
+            return this.rowCount;
+        }
     }
 
     class SQLITEDriver : Driver {

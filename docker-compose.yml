@@ -7,6 +7,10 @@ services:
     #image: mariadb:latest
     restart: always
     ports: ['3306:3306', '33060:33060']
+    ulimits:
+      nofile:
+        soft: "1024"
+        hard: "10240"
     environment:
       - MYSQL_ROOT_PASSWORD=f48dfhw3Hd!Asah7i2aZ
       - MYSQL_DATABASE=testdb

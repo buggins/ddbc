@@ -119,6 +119,11 @@ private:
 
 public:
 
+    // db connections are DialectAware
+    override Dialect getDialect() {
+        return Dialect.MYSQL5; // TODO: add support for MySQL8
+    }
+
     void lock() {
         mutex.lock();
     }
@@ -306,6 +311,11 @@ private:
     bool closed;
 
 public:
+    // statements are DialectAware
+    override Dialect getDialect() {
+        return conn.getDialect();
+    }
+
     void checkClosed() {
         enforce!SQLException(!closed, "Statement is already closed");
     }
@@ -446,6 +456,11 @@ class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
         return this.statement.getArg( cast(ushort)(index - 1) );
     }
 public:
+
+    // prepared statements are DialectAware
+    override Dialect getDialect() {
+        return conn.getDialect();
+    }
 
     /// Retrieves a ResultSetMetaData object that contains information about the columns of the ResultSet object that will be returned when this PreparedStatement object is executed.
     override ResultSetMetaData getMetaData() {

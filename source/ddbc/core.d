@@ -134,7 +134,7 @@ enum SqlType {
 	VARCHAR,
 }
 
-interface Connection {
+interface Connection : DialectAware {
 	/// Releases this Connection object's database and JDBC resources immediately instead of waiting for them to be automatically released.
 	void close();
 	/// Makes all changes made since the previous commit/rollback permanent and releases any database locks currently held by this Connection object.
@@ -342,7 +342,21 @@ interface ResultSet : DataSetReader {
 
 }
 
-interface Statement {
+enum Dialect {
+	SQLITE, // SQLite has it's own quirks
+	MYSQL5, // for MySQL & MariaDB
+	MYSQL8, // todo: add support for MySQL 8
+	PGSQL, // PL/pgSQL (Procedural Language/PostgreSQL) used by PostgreSQL
+	TSQL, // T-SQL (Transact-SQL) is Microsoft’s extension of SQL
+	PLSQL // Oracle (PL/SQL)
+}
+
+interface DialectAware {
+	Dialect getDialect();
+}
+
+// statements are made via a db connection which are also DialectAware
+interface Statement : DialectAware {
 	ResultSet executeQuery(string query);
 	int executeUpdate(string query);
 	int executeUpdate(string query, out Variant insertId);

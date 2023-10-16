@@ -149,6 +149,8 @@ int main(string[] args)
 				}
 				version( USE_SQLITE ) {
 					driver = new SQLITEDriver();
+					//url = chompPrefix(URI, "sqlite:");
+					//url = SQLITEDriver.generateUrl();
 				}
 				url = chompPrefix(URI, "sqlite:");
 				break;
@@ -368,7 +370,7 @@ int main(string[] args)
     int i = 0;
 
     while (rs.next()) {
-        writeln("\tid: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2));
+        writeln(" - id: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2));
         i++;
     }
 	writefln("\tThere were %,d rows returned from the ddbct1 table...", i);
@@ -383,7 +385,7 @@ int main(string[] args)
     rs = stmt.executeQuery("SELECT id,comment FROM ddbct1 WHERE id = 2");
     i = 0;
     while (rs.next()) {
-        writeln("\tid: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2));
+        writeln(" - id: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2));
         i++;
     }
     assert(1 == i, "There should be 1 result but instead there was " ~ to!string(i));
@@ -392,7 +394,7 @@ int main(string[] args)
 	i = 0;
 	rs = stmt.executeQuery("SELECT id, comment, ts FROM ddbct1 ORDER BY id DESC");
 	while (rs.next()) {
-		writeln("\tid: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ to!string(rs.getDateTime(3)));
+		writeln(" - id: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ to!string(rs.getDateTime(3)));
 		i++;
 	}
 	assert(2 == i, "There should be 2 results but instead there was " ~ to!string(i));
@@ -410,7 +412,7 @@ int main(string[] args)
 		assert(rs.getDateTime(4).month == dtNow.month);
 		assert(rs.getDateTime(4).day == dtNow.day);
 		assert(rs.getDateTime(4).hour == dtNow.hour);
-		writeln("\tid: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ to!string(rs.getDateTime(4)));
+		writeln(" - id: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ to!string(rs.getDateTime(4)));
 		
 		// ddbc should also allow you to retrive the timestamp as a SysTime (defaulting UTC if no zone info given)
 		assert(rs.getSysTime(4).year == now.year);
@@ -420,6 +422,11 @@ int main(string[] args)
 		i++;
 	}
 	assert(2 == i, "There should be 2 results but instead there was " ~ to!string(i));
+	if(par.driver != "odbc") {
+		// ODBC doesn't support ResultSet::getFetchSize()
+		ulong fetchSize = rs.getFetchSize();
+		assert(i == fetchSize, "ResultSet::getFetchSize() should have returned " ~ to!string(i) ~ " but was " ~ to!string(fetchSize));
+	}
 
     writeln("\n > Testing prepared SQL statements");
 	PreparedStatement ps2 = conn.prepareStatement("SELECT id, name name_alias, comment, ts FROM ddbct1 WHERE id >= ?");
@@ -427,7 +434,7 @@ int main(string[] args)
     ps2.setUlong(1, 1);
     auto prs = ps2.executeQuery();
     while (prs.next()) {
-        writeln("\tid: " ~ to!string(prs.getLong(1)) ~ "\t" ~ prs.getString(2) ~ "\t" ~ prs.getString(3) ~ "\t" ~ to!string(prs.getDateTime(4)));
+        writeln(" - id: " ~ to!string(prs.getLong(1)) ~ "\t" ~ prs.getString(2) ~ "\t" ~ prs.getString(3) ~ "\t" ~ to!string(prs.getDateTime(4)));
     }
 
 	writeln("\n > Testing basic POD support");
@@ -442,26 +449,51 @@ int main(string[] args)
         SysTime updated;
     }
 
-	immutable SysTime now = Clock.currTime();
+	immutable DateTime now = cast(DateTime) Clock.currTime();
 
 	writeln(" > select all rows from employee table");
     foreach(ref e; conn.createStatement().select!Employee) {
 		//SysTime nextMonth = now.add!"months"(1);
 
-        writeln("\t{id: ", e.id, ", name: ", e.name, ", flags: ", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated, "}");
+        writeln(" - {id: ", e.id, ", name: ", e.name, ", flags: ", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated, "}");
 		assert(e.name !is null);
 		assert(e.dob.year > 1950);
-		assert(e.created <= cast(DateTime) now);
-		assert(e.updated <= now);
-    }
+		assert(e.created <= now);
+		assert(cast(DateTime) e.updated <= now, "Updated '" ~ to!string(e.updated) ~ "' should be <= '" ~ to!string(now) ~ "'");
+	}
 
+	i = 0;
     writeln(" > select all rows from employee table WHERE id < 4 ORDER BY name DESC...");
     foreach(ref e; conn.createStatement().select!Employee.where("id < 4").orderBy("name desc")) {
-        writeln("\t{id: ", e.id, ", name: ", e.name, ", flags: ", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated, "}");
+        writeln(" - {id: ", e.id, ", name: ", e.name, ", flags: ", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated, "}");
 		assert(e.id < 4);
 		assert(e.name != "Iain" && e.name != "Robert");
 		assert(e.flags > 1);
+		i++;
     }
+	assert(3 == i, "There should be 3 results but instead there was " ~ to!string(i));
+
+	i = 0;
+	writeln(" > select all rows from employee table WHERE id < 4 LIMIT 2...");
+    foreach(ref e; conn.createStatement().select!Employee.where("id < 4").orderBy("id ASC").limit(2)) {
+        writeln(" - {id: ", e.id, ", name: ", e.name, ", flags: ", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated, "}");
+		assert(e.id == 1 || e.id == 2, "results should start from id 1 as there's no offset");
+		assert(e.name != "Iain" && e.name != "Robert");
+		assert(e.flags > 1);
+		i++;
+    }
+	assert(2 == i, "There should be 2 results but instead there was " ~ to!string(i));
+
+	i = 0;
+	writeln(" > select all rows from employee table WHERE id < 4 LIMIT 2 OFFSET 1...");
+    foreach(ref e; conn.createStatement().select!Employee.where("id < 4").orderBy("id ASC").limit(2).offset(1)) {
+        writeln(" - {id: ", e.id, ", name: ", e.name, ", flags: ", e.flags, ", dob: ", e.dob, ", created: ", e.created, ", updated: ", e.updated, "}");
+		assert(e.id == 2 || e.id == 3, "results should start from id 2 due to offset");
+		assert(e.name != "Iain" && e.name != "Robert");
+		assert(e.flags > 1);
+		i++;
+    }
+	assert(2 == i, "There should be 2 results but instead there was " ~ to!string(i));
 
 	// todo: Fix the UPDATE/INSERT functionality for PODs
 	// Employee e; 

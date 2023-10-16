@@ -102,6 +102,11 @@ foreach(ref e; stmt.select!User.where("id < 6").orderBy("name desc")) {
     writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
 }
 
+writeln("reading user table rows with where and order by with limit and offset");
+foreach(e; stmt.select!User.where("id < 6").orderBy("name desc").limit(3).offset(1)) {
+    writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
+}
+
 writeln("reading all user table rows, but fetching only id and name (you will see default value 0 in flags field)");
 foreach(ref e; stmt.select!(User, "id", "name")) {
     writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
