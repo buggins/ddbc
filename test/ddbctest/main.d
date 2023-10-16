@@ -509,7 +509,7 @@ class SQLitePodTest : DdbcTestFixture {
 
         immutable User u = stmt.get!User(12L); // testing this function
         
-        //writeln("id:", u.id, " name:", u.name, " flags:", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
+        //writeln("id: ", u.id, " name: ", u.name, " flags: ", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
         assertEquals(12, u.id);
         assertEquals("immutable(long)", typeof(u.id).stringof);
         assertEquals("immutable(long)", typeid(u.id).toString());
@@ -577,7 +577,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertFalse(users.empty());
 
         foreach(ref u; users) {
-            //writeln("id:", u.id, " name:", u.name, " flags:", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
+            //writeln("id: ", u.id, " name: ", u.name, " flags: ", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
 
             assertEquals(1, u.id);
             assertEquals("John", u.name);
@@ -614,10 +614,63 @@ class SQLitePodTest : DdbcTestFixture {
         scope(exit) stmt.close();
 
         writeln("\nReading user table rows with WHERE id < 6 ORDER BY name DESC...");
-        foreach(ref u; stmt.select!User.where("id < 6").orderBy("name desc")) {
+
+        auto users = stmt.select!User.where("id < 6").orderBy("name desc");
+
+        //assertFalse(users.empty()); // this causes a bug due to empty() calling next()
+
+        int count = 0;
+        foreach(ref u; users) {
+            count++;
             assertTrue(u.id < 6);
-            writeln("id:", u.id, " name:", u.name, " flags:", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
+            writeln(" ", count, ": { id: ", u.id, " name: ", u.name, " flags: ", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated, " }");
         }
+
+        assertEquals(5, count);
+    }
+
+    @Test
+    public void testQueryUsersWhereIdLessThanSixWithLimitThree() {
+        givenMultipleUsersInDatabase();
+
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        writeln("\nReading user table rows with WHERE id < 6 ORDER BY name DESC LIMIT 3...");
+
+        auto users = stmt.select!User.where("id < 6").orderBy("name desc").limit(3);
+
+        //assertFalse(users.empty()); // this causes a bug due to empty() calling next()
+
+        int count = 0;
+        foreach(e; users) {
+            count++;
+            writeln(" ", count, ": { id: ", e.id, " name: ", e.name, " flags: ", e.flags, " }");
+        }
+
+        assertEquals(3, count);
+    }
+
+    @Test
+    public void testQueryUsersWhereIdLessThanSixWithLimitThreeAndOffsetTwo() {
+        givenMultipleUsersInDatabase();
+
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        writeln("\nReading user table rows with WHERE id < 6 ORDER BY name DESC LIMIT 3 OFFSET 2...");
+
+        auto users = stmt.select!User.where("id < 6").orderBy("name desc").limit(3).offset(2);
+
+        //assertFalse(users.empty()); // this causes a bug due to empty() calling next()
+
+        int count = 0;
+        foreach(e; users) {
+            count++;
+            writeln(" ", count, ": { id: ", e.id, " name: ", e.name, " flags: ", e.flags, " }");
+        }
+
+        assertEquals(3, count);
     }
 
     // Select all user table rows, but fetching only id and name (you will see default value 0 in flags field)
@@ -628,12 +681,15 @@ class SQLitePodTest : DdbcTestFixture {
         Statement stmt = conn.createStatement();
         scope(exit) stmt.close();
 
-        //writeln("\nReading all user table rows, but fetching only id and name (you will see default value 0 in flags field)");
+        writeln("\nReading all user table rows, but fetching only id and name (you will see default value 0 in flags field)");
+        int count = 0;
         foreach(ref u; stmt.select!(User, "id", "name")) {
+            count++;
             assertTrue(u.id > 0);
             assertTrue(u.name.length > 0);
-            writeln("id:", u.id, " name:", u.name, " flags:", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
+            writeln(" ", count, ": { id: ", u.id, " name: ", u.name, " flags: ", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated, " }");
         }
+        assertEquals(6, count);
     }
 
     // Select all user table rows, but fetching only id and name, placing result into vars
@@ -645,7 +701,7 @@ class SQLitePodTest : DdbcTestFixture {
         scope(exit) stmt.close();
 
         int count = 0;
-        //writeln("\nSelect all user table rows, but fetching only id and name, placing result into vars");
+        writeln("\nReading all user table rows, but fetching only id and name, placing result into vars");
         long id;
         string name;
         foreach(ref resultNumber; stmt.select!()("SELECT id, name FROM user", id, name)) {
@@ -656,7 +712,7 @@ class SQLitePodTest : DdbcTestFixture {
 
             count++;
         }
-        assertEquals(6, count); // rows in user table minus 1 as results start from 0
+        assertEquals(6, count);
     }
 
     // @Test

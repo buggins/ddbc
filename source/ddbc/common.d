@@ -94,6 +94,12 @@ class ConnectionWrapper : Connection {
 		this.pool = pool;
 		this.base = base;
 	}
+
+	// a db connection is DialectAware
+	override Dialect getDialect() {
+		return base.getDialect();
+	}
+
 	override void close() {
 		assert(!closed, "Connection is already closed");
 		closed = true;
@@ -234,7 +240,7 @@ public:
             result = dg(cast(DataSetReader)this); 
             if (result) break; 
         } while (next());
-        return result; 
+        return result;
     }
     override void close() {
 		throw new SQLException("Method not implemented");
@@ -248,6 +254,7 @@ public:
 	override bool isLast() {
 		throw new SQLException("Method not implemented");
 	}
+	/// returns true if ResultSet object contains more rows
 	override bool next() {
 		throw new SQLException("Method not implemented");
 	}

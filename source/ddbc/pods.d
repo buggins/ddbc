@@ -40,6 +40,11 @@ writeln("reading user table rows with where and order by");
 foreach(e; stmt.select!User.where("id < 6").orderBy("name desc")) {
     writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
 }
+
+writeln("reading user table rows with where and order by with limit and offset");
+foreach(e; stmt.select!User.where("id < 6").orderBy("name desc").limit("3").offset("1")) {
+    writeln("id:", e.id, " name:", e.name, " flags:", e.flags);
+}
 ----
 
  Copyright: Copyright 2013
@@ -993,6 +998,8 @@ struct select(T, fieldList...) if (__traits(isPOD, T)) {
   static immutable selectSQL = generateSelectSQL!(T, fieldList)();
   string whereCondSQL;
   string orderBySQL;
+  string limitSQL;
+  string offsetSQL;
   this(Statement stmt) {
     this.stmt = stmt;
   }
@@ -1004,14 +1011,85 @@ struct select(T, fieldList...) if (__traits(isPOD, T)) {
     orderBySQL = " ORDER BY " ~ order;
     return this;
   }
+  ref select limit(int number) {
+    this.limit(to!string(number));
+    return this;
+  }
+  ref select limit(string number) {
+    switch(this.stmt.getDialect()) {
+        case Dialect.SQLITE:
+            limitSQL = " LIMIT " ~ number; // SQLite
+            break;
+        case Dialect.MYSQL5:
+            limitSQL = " LIMIT " ~ number; // todo: check this
+            break;
+        case Dialect.MYSQL8:
+            warningf("MYSQL8 dialect is unsupported. Cannot set LIMIT to '%s'", number);
+            break;
+        case Dialect.PGSQL:
+            limitSQL = " LIMIT " ~ number; // Postgres
+            break;
+        case Dialect.TSQL:
+        case Dialect.PLSQL:
+            limitSQL = " FETCH NEXT " ~ number ~ " ROWS ONLY";
+            break;
+        default: assert(0); // ensure all dialects are handled
+    }
+    return this;
+  }
+  ref select offset(int number) {
+    this.offset(to!string(number));
+    return this;
+  }
+  ref select offset(string number) {
+    switch(this.stmt.getDialect()) {
+        case Dialect.SQLITE:
+            // SQLite also allows syntax of 'LIMIT <skip>, <count>' but that's not as convenient
+            offsetSQL = " OFFSET " ~ number; // SQLite
+            break;
+        case Dialect.MYSQL5:
+            offsetSQL = " OFFSET " ~ number; // todo: check this
+            break;
+        case Dialect.MYSQL8:
+            warningf("MYSQL8 dialect is unsupported. Cannot set OFFSET to '%s'", number);
+            break;
+        case Dialect.PGSQL:
+            offsetSQL = " OFFSET " ~ number; // Postgres
+            break;
+        case Dialect.TSQL:
+        case Dialect.PLSQL:
+            offsetSQL = " OFFSET " ~ number ~ " ROWS ";
+            break;
+        default: assert(0); // ensure all dialects are handled
+    }
+    return this;
+  }
   ref T front() {
     return entity;
   }
   void popFront() {
   }
+  //@property ulong size() {
+  //  // Currently ddbc.core.ResultSet::getFetchSize() only works for mysql and postgres 
+  //  // but not for odbc or sqlite
+  //  // return r ? r.getFetchSize() : 0; // todo: find out why resultset always null
+  //}
   @property bool empty() {
-    if (!r)
-      r = stmt.executeQuery(selectSQL ~ whereCondSQL ~ orderBySQL);
+    if (!r) {
+      if((limitSQL || offsetSQL) && !orderBySQL) {
+        warning("when using LIMIT and/or OFFSET then ORDER BY should be used");
+      }
+      switch(this.stmt.getDialect()) {
+        case Dialect.TSQL:
+          if(limitSQL && !offsetSQL) {
+            offset(0); // SQL Server requires offset if limit is used
+          }
+          r = stmt.executeQuery(selectSQL ~ whereCondSQL ~ orderBySQL ~ offsetSQL ~ limitSQL);
+          break;
+        default:
+          r = stmt.executeQuery(selectSQL ~ whereCondSQL ~ orderBySQL ~ limitSQL ~ offsetSQL);
+      }
+    }
     if (!r.next())
       return true;
     mixin(getAllColumnsReadCode!(T, fieldList));

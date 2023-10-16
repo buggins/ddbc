@@ -336,21 +336,23 @@ version (USE_ODBC)
             }
         }
 
-        void checkClosed()
-        {
+        void checkClosed() {
             if (closed)
                 throw new SQLException("Connection is already closed");
         }
 
     public:
 
-        void lock()
-        {
+        // db connections are DialectAware
+        override Dialect getDialect() {
+            return Dialect.TSQL; // todo: handle TSQL and PLSQL
+        }
+
+        void lock() {
             mutex.lock();
         }
 
-        void unlock()
-        {
+        void unlock() {
             mutex.unlock();
         }
 
@@ -582,14 +584,17 @@ version (USE_ODBC)
         bool closed = false;
 
         private SQLRETURN checkstmt(alias Fn, string file = __FILE__, size_t line = __LINE__)(
-                Parameters!Fn args)
-        {
+                Parameters!Fn args) {
             return check!(Fn, file, line)(stmt, SQL_HANDLE_STMT, args);
         }
 
     public:
-        void checkClosed()
-        {
+        // statements are DialectAware
+        override Dialect getDialect() {
+            return conn.getDialect();
+        }
+
+        void checkClosed() {
             enforce!SQLException(!closed, "Statement is already closed");
         }
 
@@ -987,6 +992,11 @@ version (USE_ODBC)
         }
 
     public:
+
+        // prepared statements are DialectAware
+        override Dialect getDialect() {
+            return conn.getDialect();
+        }
 
         /// Retrieves a ResultSetMetaData object that contains information about the columns of the ResultSet object that will be returned when this PreparedStatement object is executed.
         override ResultSetMetaData getMetaData()
