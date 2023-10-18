@@ -1,7 +1,7 @@
 DDBC
 ====
 
-[![DUB Package](https://img.shields.io/dub/v/ddbc.svg)](https://code.dlang.org/packages/ddbc) [![CI](https://github.com/buggins/ddbc/workflows/CI/badge.svg)](https://github.com/buggins/ddbc/actions?query=workflow%3ACI) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/buggins/ddbc?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![DUB Package](https://img.shields.io/dub/v/ddbc.svg)](https://code.dlang.org/packages/ddbc) [![CI](https://github.com/buggins/ddbc/actions/workflows/dub.yml/badge.svg)](https://github.com/buggins/ddbc/actions/workflows/dub.yml) [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/buggins/ddbc?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 DDBC is DB Connector for D language (similar to JDBC)
 
