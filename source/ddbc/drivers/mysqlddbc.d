@@ -120,8 +120,8 @@ private:
 public:
 
     // db connections are DialectAware
-    override Dialect getDialect() {
-        return Dialect.MYSQL5; // TODO: add support for MySQL8
+    override DialectType getDialectType() {
+        return DialectType.MYSQL5; // TODO: add support for MySQL8
     }
 
     void lock() {
@@ -312,8 +312,8 @@ private:
 
 public:
     // statements are DialectAware
-    override Dialect getDialect() {
-        return conn.getDialect();
+    override DialectType getDialectType() {
+        return conn.getDialectType();
     }
 
     void checkClosed() {
@@ -458,8 +458,8 @@ class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
 public:
 
     // prepared statements are DialectAware
-    override Dialect getDialect() {
-        return conn.getDialect();
+    override DialectType getDialectType() {
+        return conn.getDialectType();
     }
 
     /// Retrieves a ResultSetMetaData object that contains information about the columns of the ResultSet object that will be returned when this PreparedStatement object is executed.

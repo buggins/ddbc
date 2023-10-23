@@ -344,8 +344,8 @@ version (USE_ODBC)
     public:
 
         // db connections are DialectAware
-        override Dialect getDialect() {
-            return Dialect.TSQL; // todo: handle TSQL and PLSQL
+        override DialectType getDialectType() {
+            return DialectType.TSQL; // todo: handle TSQL and PLSQL
         }
 
         void lock() {
@@ -590,8 +590,8 @@ version (USE_ODBC)
 
     public:
         // statements are DialectAware
-        override Dialect getDialect() {
-            return conn.getDialect();
+        override DialectType getDialectType() {
+            return conn.getDialectType();
         }
 
         void checkClosed() {
@@ -994,8 +994,8 @@ version (USE_ODBC)
     public:
 
         // prepared statements are DialectAware
-        override Dialect getDialect() {
-            return conn.getDialect();
+        override DialectType getDialectType() {
+            return conn.getDialectType();
         }
 
         /// Retrieves a ResultSetMetaData object that contains information about the columns of the ResultSet object that will be returned when this PreparedStatement object is executed.

@@ -96,8 +96,8 @@ class ConnectionWrapper : Connection {
 	}
 
 	// a db connection is DialectAware
-	override Dialect getDialect() {
-		return base.getDialect();
+	override DialectType getDialectType() {
+		return base.getDialectType();
 	}
 
 	override void close() {

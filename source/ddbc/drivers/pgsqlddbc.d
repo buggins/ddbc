@@ -244,8 +244,8 @@ version(USE_PGSQL) {
     public:
 
     	// db connections are DialectAware
-		override Dialect getDialect() {
-			return Dialect.PGSQL;
+		override DialectType getDialectType() {
+			return DialectType.PGSQL;
 		}
 
     	void lock() {
@@ -422,8 +422,8 @@ version(USE_PGSQL) {
     public:
 
 		// statements are DialectAware
-        override Dialect getDialect() {
-            return conn.getDialect();
+        override DialectType getDialectType() {
+            return conn.getDialectType();
         }
 
     	void checkClosed() {
@@ -791,8 +791,8 @@ version(USE_PGSQL) {
     public:
 
 		// prepared statements are DialectAware
-        override Dialect getDialect() {
-            return conn.getDialect();
+        override DialectType getDialectType() {
+            return conn.getDialectType();
         }
 
         override void close() {

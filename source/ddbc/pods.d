@@ -1016,21 +1016,21 @@ struct select(T, fieldList...) if (__traits(isPOD, T)) {
     return this;
   }
   ref select limit(string number) {
-    switch(this.stmt.getDialect()) {
-        case Dialect.SQLITE:
+    switch(this.stmt.getDialectType()) {
+        case DialectType.SQLITE:
             limitSQL = " LIMIT " ~ number; // SQLite
             break;
-        case Dialect.MYSQL5:
+        case DialectType.MYSQL5:
             limitSQL = " LIMIT " ~ number; // todo: check this
             break;
-        case Dialect.MYSQL8:
+        case DialectType.MYSQL8:
             warningf("MYSQL8 dialect is unsupported. Cannot set LIMIT to '%s'", number);
             break;
-        case Dialect.PGSQL:
+        case DialectType.PGSQL:
             limitSQL = " LIMIT " ~ number; // Postgres
             break;
-        case Dialect.TSQL:
-        case Dialect.PLSQL:
+        case DialectType.TSQL:
+        case DialectType.PLSQL:
             limitSQL = " FETCH NEXT " ~ number ~ " ROWS ONLY";
             break;
         default: assert(0); // ensure all dialects are handled
@@ -1042,22 +1042,22 @@ struct select(T, fieldList...) if (__traits(isPOD, T)) {
     return this;
   }
   ref select offset(string number) {
-    switch(this.stmt.getDialect()) {
-        case Dialect.SQLITE:
+    switch(this.stmt.getDialectType()) {
+        case DialectType.SQLITE:
             // SQLite also allows syntax of 'LIMIT <skip>, <count>' but that's not as convenient
             offsetSQL = " OFFSET " ~ number; // SQLite
             break;
-        case Dialect.MYSQL5:
+        case DialectType.MYSQL5:
             offsetSQL = " OFFSET " ~ number; // todo: check this
             break;
-        case Dialect.MYSQL8:
+        case DialectType.MYSQL8:
             warningf("MYSQL8 dialect is unsupported. Cannot set OFFSET to '%s'", number);
             break;
-        case Dialect.PGSQL:
+        case DialectType.PGSQL:
             offsetSQL = " OFFSET " ~ number; // Postgres
             break;
-        case Dialect.TSQL:
-        case Dialect.PLSQL:
+        case DialectType.TSQL:
+        case DialectType.PLSQL:
             offsetSQL = " OFFSET " ~ number ~ " ROWS ";
             break;
         default: assert(0); // ensure all dialects are handled
@@ -1079,8 +1079,8 @@ struct select(T, fieldList...) if (__traits(isPOD, T)) {
       if((limitSQL || offsetSQL) && !orderBySQL) {
         warning("when using LIMIT and/or OFFSET then ORDER BY should be used");
       }
-      switch(this.stmt.getDialect()) {
-        case Dialect.TSQL:
+      switch(this.stmt.getDialectType()) {
+        case DialectType.TSQL:
           if(limitSQL && !offsetSQL) {
             offset(0); // SQL Server requires offset if limit is used
           }

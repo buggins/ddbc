@@ -271,8 +271,8 @@ version(USE_SQLITE) {
     public:
 
         // db connections are DialectAware
-        override Dialect getDialect() {
-            return Dialect.SQLITE;
+        override DialectType getDialectType() {
+            return DialectType.SQLITE;
         }
 
         private string getError() {
@@ -409,8 +409,8 @@ version(USE_SQLITE) {
         
     public:
         // statements are DialectAware
-        override Dialect getDialect() {
-            return conn.getDialect();
+        override DialectType getDialectType() {
+            return conn.getDialectType();
         }
 
         void checkClosed() {
@@ -551,8 +551,8 @@ version(USE_SQLITE) {
     public:
 
         // prepared statements are DialectAware
-        override Dialect getDialect() {
-            return conn.getDialect();
+        override DialectType getDialectType() {
+            return conn.getDialectType();
         }
 
         SqlType sqliteToSqlType(int t) {
