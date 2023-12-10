@@ -49,6 +49,8 @@ version(USE_PGSQL) {
     //import ddbc.drivers.pgsql;
     import ddbc.drivers.utils;
 
+    // Postgresql Object ID types, which can be checked for query result columns.
+    // See: https://github.com/postgres/postgres/blob/master/src/include/catalog/pg_type.dat
     const int BOOLOID = 16;
     const int BYTEAOID = 17;
     const int CHAROID = 18;
@@ -336,6 +338,9 @@ version(USE_PGSQL) {
     		Statement stmt = createStatement();
     		scope(exit) stmt.close();
     		stmt.executeUpdate("COMMIT");
+            if (!autocommit) {
+              stmt.executeUpdate("BEGIN");
+            }
     	}
 
     	override Statement createStatement() {
@@ -393,6 +398,9 @@ version(USE_PGSQL) {
     		Statement stmt = createStatement();
     		scope(exit) stmt.close();
     		stmt.executeUpdate("ROLLBACK");
+            if (!autocommit) {
+              stmt.executeUpdate("BEGIN");
+            }
     	}
     	override bool getAutoCommit() {
     		return autocommit;
@@ -404,10 +412,80 @@ version(USE_PGSQL) {
     		lock();
     		scope(exit) unlock();
 
-            autocommit = true;
-
-            //assert(0, "AUTOCOMMIT is no longer supported.");
+            try {
+                Statement stmt = createStatement();
+                scope(exit) stmt.close();
+                if (autoCommit) {
+                  // If switching on autocommit, commit any ongoing transaction.
+                  stmt.executeUpdate("COMMIT");
+                } else {
+                  // If switching off autocommit, start a transaction.
+                  stmt.executeUpdate("BEGIN");
+                }
+                this.autocommit = autoCommit;
+            } catch (Throwable e) {
+                throw new SQLException(e);
+            }
     	}
+
+        override TransactionIsolation getTransactionIsolation() {
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+
+            try {
+                Statement stmt = createStatement();
+                scope(exit) stmt.close();
+                ddbc.core.ResultSet resultSet = stmt.executeQuery("SHOW TRANSACTION ISOLATION LEVEL");
+                if (resultSet.next()) {
+                    switch (resultSet.getString(0)) {
+                        case "read uncommitted":
+                            return TransactionIsolation.READ_UNCOMMITTED;
+                        case "repeatable read":
+                            return TransactionIsolation.REPEATABLE_READ;
+                        case "serializable":
+                            return TransactionIsolation.SERIALIZABLE;
+                        case "read committed":
+                        default:  // Postgresql default
+                            return TransactionIsolation.READ_COMMITTED;
+                    }
+                } else {
+                    return TransactionIsolation.READ_COMMITTED;  // Postgresql default
+                }
+            } catch (Throwable e) {
+                throw new SQLException(e);
+            }
+        }
+
+        override void setTransactionIsolation(TransactionIsolation level) {
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+
+            try {
+                Statement stmt = createStatement();
+                // See: https://www.postgresql.org/docs/current/sql-set-transaction.html
+                string query = "SET TRANSACTION ISOLATION LEVEL ";
+                switch (level) {
+                    case TransactionIsolation.READ_UNCOMMITTED:
+                        query ~= "READ UNCOMMITTED";
+                        break;
+                    case TransactionIsolation.REPEATABLE_READ:
+                        query ~= "REPEATABLE READ";
+                        break;
+                    case TransactionIsolation.SERIALIZABLE:
+                        query ~= "SERIALIZABLE";
+                        break;
+                    case TransactionIsolation.READ_COMMITTED:
+                    default:
+                        query ~= "READ COMMITTED";
+                        break;
+                }
+                stmt.executeUpdate(query);
+            } catch (Throwable e) {
+                throw new SQLException(e);
+            }
+        }
     }
 
     class PGSQLStatement : Statement {

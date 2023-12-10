@@ -480,6 +480,13 @@ version (USE_ODBC)
                 scope (exit)
                     unlock();
 
+                // Statement stmt = createStatement();
+                // scope(exit) stmt.close();
+                // stmt.executeUpdate("COMMIT");
+                // Statement stmt2 = createStatement();
+                // scope(exit) stmt2.close();
+                // stmt2.executeUpdate("BEGIN TRANSACTION");
+                // TODO: Does not appear to actually work in tests.
                 checkdbc!SQLEndTran(cast(short) SQL_HANDLE_DBC, conn, cast(short) SQL_COMMIT);
             }
         }
@@ -558,7 +565,7 @@ version (USE_ODBC)
         override void setAutoCommit(bool autoCommit)
         {
             checkClosed();
-            if (this.autocommit != autocommit)
+            if (this.autocommit != autoCommit)
             {
                 lock();
                 scope (exit)
@@ -566,10 +573,55 @@ version (USE_ODBC)
 
                 uint ac = autoCommit ? SQL_AUTOCOMMIT_ON : SQL_AUTOCOMMIT_OFF;
 
-                checkdbc!SQLSetConnectAttr(conn, SQL_ATTR_AUTOCOMMIT, &ac, SQL_IS_UINTEGER);
-
-                this.autocommit = autocommit;
+                writeln("Setting connection ac=", ac);
+                checkdbc!SQLSetConnectAttr(conn, SQL_ATTR_AUTOCOMMIT, cast(SQLPOINTER) ac, 0);
+                this.autocommit = autoCommit;
             }
+        }
+
+        override TransactionIsolation getTransactionIsolation() {
+            checkClosed();
+            lock();
+            scope(exit) unlock;
+            // See https://odbc.dpldocs.info/v1.0.0/source/odbc.sql.d.html#L571
+            long level;
+            checkdbc!SQLGetConnectAttr(conn, SQL_ATTR_TXN_ISOLATION, &level, 0, null);
+            switch (level) {
+                case SQL_TXN_READ_UNCOMMITTED:
+                    return TransactionIsolation.READ_UNCOMMITTED;
+                case SQL_TXN_READ_COMMITTED:
+                    return TransactionIsolation.READ_COMMITTED;
+                case SQL_TXN_REPEATABLE_READ:
+                    return TransactionIsolation.REPEATABLE_READ;
+                case SQL_TXN_SERIALIZABLE:
+                    return TransactionIsolation.SERIALIZABLE;
+                default:
+                    return TransactionIsolation.NONE;
+            }
+        }
+
+        override void setTransactionIsolation(TransactionIsolation level) {
+            checkClosed();
+            lock();
+            scope(exit) unlock();
+
+            uint txnLevel;
+            switch (level) {
+                case TransactionIsolation.READ_UNCOMMITTED:
+                    txnLevel = SQL_TXN_READ_UNCOMMITTED;
+                    break;
+                case TransactionIsolation.READ_COMMITTED:
+                default:
+                    txnLevel = SQL_TXN_READ_COMMITTED;
+                    break;
+                case TransactionIsolation.REPEATABLE_READ:
+                    txnLevel = SQL_TXN_REPEATABLE_READ;
+                    break;
+                case TransactionIsolation.SERIALIZABLE:
+                    txnLevel = SQL_TXN_SERIALIZABLE;
+                    break;
+            }
+            checkdbc!SQLSetConnectAttr(conn, SQL_ATTR_TXN_ISOLATION, cast(SQLPOINTER) txnLevel, 0);
         }
     }
 

@@ -98,6 +98,75 @@ version(USE_PGSQL) {
             //assertEquals(2L, id.get!(long));
         }
     }
+
+    class PostgresAutocommitTest : DdbcTestFixture {
+        mixin UnitTest;
+
+        this() {
+            super(
+                "ddbc:postgresql://localhost:%s/testdb?user=testuser,password=passw0rd,ssl=false".format(environment.get("POSTGRES_PORT", "5432")),
+                "CREATE TABLE records (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)",
+                "DROP TABLE IF EXISTS records"
+                );
+        }
+
+        @Test
+        public void testAutocommitOn() {
+            // This is the default state, it is merely made explicit here.
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Bob')`);
+            conn.rollback();
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Jim')`);
+            conn.commit();
+
+            ddbc.core.ResultSet resultSet;
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Bob'`);
+            assert(resultSet.next());
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Jim'`);
+            assert(resultSet.next());
+        }
+
+        @Test
+        public void testAutocommitOff() {
+            // With autocommit set to false, transactions must be explicitly committed.
+            conn.setAutoCommit(false);
+            conn.setAutoCommit(false);  // Duplicate calls should not cause errors.
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Greg')`);
+            conn.rollback();
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Tom')`);
+            conn.commit();
+
+            ddbc.core.ResultSet resultSet;
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Greg'`);
+            assert(!resultSet.next());
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Tom'`);
+            assert(resultSet.next());
+        }
+
+        @Test
+        public void testAutocommitOffOn() {
+            // A test with a user changing autocommit in between statements.
+            conn.setAutoCommit(false);
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Abe')`);
+            conn.setAutoCommit(true);
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Bart')`);
+
+            ddbc.core.ResultSet resultSet;
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Abe'`);
+            assert(resultSet.next());
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Bart'`);
+            assert(resultSet.next());
+        }
+    }
 }
 
 version(USE_ODBC) {
@@ -141,6 +210,106 @@ version(USE_ODBC) {
             assertEquals(1, result2);
             //assertEquals("long", to!string(id.type)); // expected longbut was "odbc.sqltypes.SQL_NUMERIC_STRUCT"
             //assertEquals(2L, id.get!(long));
+        }
+    }
+
+    class SqlServerAutocommitTest : DdbcTestFixture {
+        mixin UnitTest;
+
+        this() {
+            super(
+                "odbc://localhost,%s?user=SA,password=MSbbk4k77JKH88g54,trusted_connection=yes,driver=ODBC Driver 18 for SQL Server".format(environment.get("MSSQL_PORT", "1433")), // don't specify database!
+                "CREATE TABLE records (id INT IDENTITY(1, 1) PRIMARY KEY, name VARCHAR(255) NOT NULL)",
+                "DROP TABLE IF EXISTS records"
+                );
+        }
+
+        @Test
+        public void testAutocommitOn() {
+            writeln("testAutocommitOn 0:");
+            // This is the default state, it is merely made explicit here.
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+            //scope(exit) stmt.close();
+
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Bob')`);
+            stmt.close();
+            conn.rollback();
+            stmt = conn.createStatement();
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Jim')`);
+            conn.commit();
+            stmt.close();
+
+            ddbc.core.ResultSet resultSet;
+            stmt = conn.createStatement();
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Bob'`);
+            assert(resultSet.next());
+            stmt.close();
+            stmt = conn.createStatement();
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Jim'`);
+            assert(resultSet.next());
+            stmt.close();
+            writeln("testAutocommitOn 1:");
+        }
+
+        @Test
+        public void testAutocommitOff() {
+            writeln("testAutocommitOff 0:");
+            // With autocommit set to false, transactions must be explicitly committed.
+            conn.setAutoCommit(false);
+            conn.setAutoCommit(false);  // Duplicate calls should not cause errors.
+            Statement stmt;
+
+            stmt = conn.createStatement();
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Greg')`);
+            stmt.close();
+            conn.rollback();
+            stmt = conn.createStatement();
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Tom')`);
+            stmt.close();
+            conn.commit();
+
+            ddbc.core.ResultSet resultSet;
+            stmt = conn.createStatement();
+            resultSet = stmt.executeQuery(`SELECT COUNT(*) FROM records`);
+            stmt.close();
+
+            stmt = conn.createStatement();
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Greg'`);
+            assert(!resultSet.next());
+            stmt.close();
+            stmt = conn.createStatement();
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Tom'`);
+            assert(resultSet.next());
+            stmt.close();
+            writeln("testAutocommitOff 1:");
+        }
+
+        @Test
+        public void testAutocommitOffOn() {
+            writeln("testAutocommitOffOn 0:");
+            // A test with a user changing autocommit in between statements.
+            conn.setAutoCommit(false);
+            Statement stmt;
+
+            stmt = conn.createStatement();
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Abe')`);
+            stmt.close();
+            conn.setAutoCommit(true);
+            stmt = conn.createStatement();
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Bart')`);
+            stmt.close();
+
+            ddbc.core.ResultSet resultSet;
+            stmt = conn.createStatement();
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Abe'`);
+            assert(resultSet.next());
+            stmt.close();
+            stmt = conn.createStatement();
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Bart'`);
+            assert(resultSet.next());
+            stmt.close();
+            writeln("testAutocommitOffOn 1:");
         }
     }
 
@@ -200,7 +369,7 @@ class SQLiteTest : DdbcTestFixture {
         scope(exit) ps.close();
 
         ps.setString(1, "Orange");
-        
+
         ddbc.core.ResultSet resultSet = ps.executeQuery();
 
         //assertEquals(1, resultSet.getFetchSize()); // getFetchSize() isn't supported by SQLite
@@ -309,7 +478,7 @@ class SQLitePodTest : DdbcTestFixture {
         immutable SysTime now = Clock.currTime();
 
         User u;
-        u.id = 55L; // setting a non-zero value is effectively ignored when performing an insert with a pod 
+        u.id = 55L; // setting a non-zero value is effectively ignored when performing an insert with a pod
         u.name = "Test Person";
         u.flags = 1;
         u.dob = Date(1979, 8, 5);
@@ -355,7 +524,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertTrue(inserted, "Should be able to perform INSERT with pod");
         assertEquals(1, u.id, "Should auto generate an ID");
 
-        immutable User result = stmt.get!User(u.id); 
+        immutable User result = stmt.get!User(u.id);
         assertEquals(u.id, result.id);
         assertEquals(u.name, result.name);
         assertEquals(u.flags, result.flags);
@@ -389,7 +558,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertTrue(inserted, "Should be able to perform INSERT with pod");
         assertEquals(1, u.id, "Should auto generate an ID");
 
-        immutable User result = stmt.get!User(u.id); 
+        immutable User result = stmt.get!User(u.id);
         assertEquals(u.id, result.id);
         assertEquals(u.name, result.name);
         assertEquals(u.flags, result.flags);
@@ -423,7 +592,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertTrue(inserted, "Should be able to perform INSERT with pod");
         assertEquals(1, u.id, "Should auto generate an ID");
 
-        immutable User result = stmt.get!User(u.id); 
+        immutable User result = stmt.get!User(u.id);
         assertEquals(u.id, result.id);
         assertEquals(u.name, result.name);
         assertEquals(u.flags, result.flags);
@@ -457,7 +626,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertTrue(inserted, "Should be able to perform INSERT with pod");
         assertEquals(1, u.id, "Should auto generate an ID");
 
-        immutable User result = stmt.get!User(u.id); 
+        immutable User result = stmt.get!User(u.id);
         assertEquals(u.id, result.id);
         assertEquals(u.name, result.name);
         assertEquals(u.flags, result.flags);
@@ -491,7 +660,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertTrue(inserted, "Should be able to perform INSERT with pod");
         assertEquals(1, u.id, "Should auto generate an ID");
 
-        immutable User result = stmt.get!User(u.id); 
+        immutable User result = stmt.get!User(u.id);
         assertEquals(u.id, result.id);
         assertEquals(u.name, result.name);
         assertEquals(u.flags, result.flags);
@@ -508,7 +677,7 @@ class SQLitePodTest : DdbcTestFixture {
         stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (12, "Jessica", 5, "1985-04-18", "2017-11-23T20:45", "2018-03-11T00:30:59Z")`);
 
         immutable User u = stmt.get!User(12L); // testing this function
-        
+
         //writeln("id: ", u.id, " name: ", u.name, " flags: ", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
         assertEquals(12, u.id);
         assertEquals("immutable(long)", typeof(u.id).stringof);
@@ -725,7 +894,7 @@ class SQLitePodTest : DdbcTestFixture {
     //     //writeln("\nSelect user id=1, change name to 'JB' (:))");
     //     auto results = stmt.select!User.where("id=1");
 
-    //     foreach(ref u; results) { // <--- doesn't work for some reason 
+    //     foreach(ref u; results) { // <--- doesn't work for some reason
     //         u.name = "JB";
     //         assertTrue(stmt.update(u));
     //     }

@@ -114,6 +114,10 @@ class ConnectionWrapper : Connection {
 	override bool getAutoCommit() { return base.getAutoCommit(); }
 	override void setAutoCommit(bool autoCommit) { base.setAutoCommit(autoCommit); }
 	override void setCatalog(string catalog) { base.setCatalog(catalog); }
+    override TransactionIsolation getTransactionIsolation() { return base.getTransactionIsolation(); }
+    override void setTransactionIsolation(TransactionIsolation level) {
+        base.setTransactionIsolation(level);
+    }
 }
 
 // remove array item inplace

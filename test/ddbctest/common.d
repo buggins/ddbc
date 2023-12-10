@@ -53,6 +53,7 @@ class DdbcTestFixture {
 
     @AfterEach
     public void tearDown() {
+        conn.setAutoCommit(true);
         //debug writeln("@AfterEach : tear down data");
         Statement stmt = conn.createStatement();
         //scope(exit) stmt.close();

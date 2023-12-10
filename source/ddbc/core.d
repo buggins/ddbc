@@ -134,6 +134,64 @@ enum SqlType {
 	VARCHAR,
 }
 
+
+/**
+ * The level of isolation between transactions. Various isolation levels provide tradeoffs between
+ * performance, reproducibility, and interactions with other simultaneous transactions.
+ *
+ * The default transaction isolation level depends on the DB driver. For example:
+ * - Postgresql: Defaults to READ_COMMITTED
+ * - MySQL: Defaults to REPEATABLE_READ
+ * - SQLite: Defaults to SERIALIZABLE
+ *
+ * Generally, `SELECT` statements do see the effects of previous `UPDATE` statements within the same
+ * transaction, despite the fact that they are not yet committed.  However, there can be differences
+ * between database implementations depending on the transaction isolation level.
+ */
+enum TransactionIsolation {
+  /**
+   * Transactions are not supported at all, thus there is no isolation.
+   */
+  NONE,
+
+  /**
+   * Statements can read rows that have been modified by other transactions but are not yet
+   * committed. High parallelism, but risks dirty reads, non-repeatable reads, etc.
+   */
+  READ_UNCOMMITTED,
+
+  /**
+   * Statements cannot read data that has been modified by other transactions but not yet
+   * committed. However, data can be changed when other transactions are commited between statements
+   * of a transaction resulting in non-repeatable reads or phantom data.
+   */
+  READ_COMMITTED,
+
+  /**
+   * Shared locks are used to prevent modification of data read by transactions, preventing dirty
+   * reads and non-repeatable reads. However, new data can be inserted, causing transactions to
+   * potentially behave differently if the transaction is retried, i.e. "phantom reads".
+   */
+  REPEATABLE_READ,
+
+  /**
+   * Locks are used to make sure transactions using the same data cannot run simultaneously. This
+   * prevents dirty reads, non-repeatable reads, and phantom reads. However, this transaction
+   * isolation level has the worst performance.
+   */
+  SERIALIZABLE,
+}
+
+/**
+ * A connection represents a session with a specific database. Within the context of a Connection,
+ * SQL statements are executed and results are returned.
+ *
+ * Note: By default the Connection automatically commits changes after executing each statement. If
+ * auto commit has been disabled, an explicit commit must be done or database changes will not be
+ * saved.
+ *
+ * See_Also: https://docs.oracle.com/cd/E13222_01/wls/docs45/classdocs/java.sql.Connection.html
+ */
 interface Connection : DialectAware {
 	/// Releases this Connection object's database and JDBC resources immediately instead of waiting for them to be automatically released.
 	void close();
@@ -156,6 +214,21 @@ interface Connection : DialectAware {
 	Statement createStatement();
 	/// Creates a PreparedStatement object for sending parameterized SQL statements to the database.
 	PreparedStatement prepareStatement(string query);
+
+    /**
+     * Returns the currently active transaction isolation level used by the DB connection.
+     */
+    TransactionIsolation getTransactionIsolation();
+
+    /**
+     * Attempt to change the Transaction Isolation Level used for transactions, which controls how
+     * simultaneous transactions will interact with each other. In general, lower isolation levels
+     * require fewer locks and have better performanc, but also have fewer guarantees for
+     * consistency.
+     *
+     * Note: setTransactionIsolation cannot be called while in the middle of a transaction.
+     */
+    void setTransactionIsolation(TransactionIsolation level);
 }
 
 interface ResultSetMetaData {
