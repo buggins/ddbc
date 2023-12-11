@@ -480,13 +480,6 @@ version (USE_ODBC)
                 scope (exit)
                     unlock();
 
-                // Statement stmt = createStatement();
-                // scope(exit) stmt.close();
-                // stmt.executeUpdate("COMMIT");
-                // Statement stmt2 = createStatement();
-                // scope(exit) stmt2.close();
-                // stmt2.executeUpdate("BEGIN TRANSACTION");
-                // TODO: Does not appear to actually work in tests.
                 checkdbc!SQLEndTran(cast(short) SQL_HANDLE_DBC, conn, cast(short) SQL_COMMIT);
             }
         }
