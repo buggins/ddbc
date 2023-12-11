@@ -10,7 +10,7 @@ import std.stdio;
 
 import dunit;
 import ddbc.test.common : DdbcTestFixture;
-import ddbc.core : Connection, PreparedStatement, Statement, SQLException;
+import ddbc.core : Connection, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
 
 static import ddbc.core;
@@ -56,6 +56,88 @@ version(USE_MYSQL) {
             //assertEquals(2L, id.get!(long));
         }
     }
+
+    // Test parts of the interfaces related to transactions.
+    class MySQLTransactionTest : DdbcTestFixture {
+        mixin UnitTest;
+
+        this() {
+            super(
+                    "ddbc:mysql://localhost:%s/testdb?user=testuser,password=passw0rd".format(environment.get("MYSQL_PORT", "3306")),
+                    "CREATE TABLE records (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)",
+                    "DROP TABLE IF EXISTS records"
+                  );
+        }
+
+        @Test
+        public void testAutocommitOn() {
+            // This is the default state, it is merely made explicit here.
+            conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Bob')`);
+            conn.rollback();
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Jim')`);
+            conn.commit();
+
+            ddbc.core.ResultSet resultSet;
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Bob'`);
+            assert(resultSet.next());
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Jim'`);
+            assert(resultSet.next());
+        }
+
+        @Test
+        public void testAutocommitOff() {
+            // With autocommit set to false, transactions must be explicitly committed.
+            conn.setAutoCommit(false);
+            conn.setAutoCommit(false);  // Duplicate calls should not cause errors.
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Greg')`);
+            conn.rollback();
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Tom')`);
+            conn.commit();
+
+            ddbc.core.ResultSet resultSet;
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Greg'`);
+            assert(!resultSet.next());
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Tom'`);
+            assert(resultSet.next());
+        }
+
+        @Test
+        public void testAutocommitOffOn() {
+            // A test with a user changing autocommit in between statements.
+            conn.setAutoCommit(false);
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Abe')`);
+            conn.setAutoCommit(true);
+            stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Bart')`);
+
+            ddbc.core.ResultSet resultSet;
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Abe'`);
+            assert(resultSet.next());
+            resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Bart'`);
+            assert(resultSet.next());
+        }
+
+        @Test
+        public void testTransactionIsolation() {
+            // Setting isolation level is only effective in transactions.
+            conn.setAutoCommit(false);
+            // In MySQL, REPEATABLE_READ is the default.
+            assert(conn.getTransactionIsolation() == TransactionIsolation.REPEATABLE_READ);
+            conn.setTransactionIsolation(TransactionIsolation.READ_COMMITTED);
+            assert(conn.getTransactionIsolation() == TransactionIsolation.READ_COMMITTED);
+            conn.setTransactionIsolation(TransactionIsolation.SERIALIZABLE);
+            assert(conn.getTransactionIsolation() == TransactionIsolation.SERIALIZABLE);
+        }
+    }
 }
 
 version(USE_PGSQL) {
@@ -99,7 +181,8 @@ version(USE_PGSQL) {
         }
     }
 
-    class PostgresAutocommitTest : DdbcTestFixture {
+    // Test parts of the interfaces related to transactions.
+    class PostgresTransactionTest : DdbcTestFixture {
         mixin UnitTest;
 
         this() {
@@ -166,6 +249,18 @@ version(USE_PGSQL) {
             resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Bart'`);
             assert(resultSet.next());
         }
+
+        @Test
+        public void testTransactionIsolation() {
+            // Setting isolation level is only effective in transactions.
+            conn.setAutoCommit(false);
+            // In PostgreSQL, READ_COMMITTED is the default.
+            assert(conn.getTransactionIsolation() == TransactionIsolation.READ_COMMITTED);
+            conn.setTransactionIsolation(TransactionIsolation.REPEATABLE_READ);
+            assert(conn.getTransactionIsolation() == TransactionIsolation.REPEATABLE_READ);
+            conn.setTransactionIsolation(TransactionIsolation.SERIALIZABLE);
+            assert(conn.getTransactionIsolation() == TransactionIsolation.SERIALIZABLE);
+        }
     }
 }
 
@@ -213,7 +308,7 @@ version(USE_ODBC) {
         }
     }
 
-    class SqlServerAutocommitTest : DdbcTestFixture {
+    class SqlServerTransactionTest : DdbcTestFixture {
         mixin UnitTest;
 
         this() {
@@ -310,6 +405,16 @@ version(USE_ODBC) {
             assert(resultSet.next());
             stmt.close();
             writeln("testAutocommitOffOn 1:");
+        }
+
+        @Test
+        public void testTransactionIsolation() {
+            // Setting isolation level is only effective in transactions.
+            conn.setAutoCommit(false);
+            conn.setTransactionIsolation(TransactionIsolation.REPEATABLE_READ);
+            assert(conn.getTransactionIsolation() == TransactionIsolation.REPEATABLE_READ);
+            conn.setTransactionIsolation(TransactionIsolation.SERIALIZABLE);
+            assert(conn.getTransactionIsolation() == TransactionIsolation.SERIALIZABLE);
         }
     }
 

@@ -312,7 +312,7 @@ public:
             scope(exit) stmt.close();
             ddbc.core.ResultSet resultSet = stmt.executeQuery("SELECT @@transaction_isolation");
             if (resultSet.next()) {
-                switch (resultSet.getString(0)) {
+                switch (resultSet.getString(1)) {
                     case "READ-UNCOMMITTED":
                         return TransactionIsolation.READ_UNCOMMITTED;
                     case "READ-COMMITTED":

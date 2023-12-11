@@ -438,7 +438,7 @@ version(USE_PGSQL) {
                 scope(exit) stmt.close();
                 ddbc.core.ResultSet resultSet = stmt.executeQuery("SHOW TRANSACTION ISOLATION LEVEL");
                 if (resultSet.next()) {
-                    switch (resultSet.getString(0)) {
+                    switch (resultSet.getString(1)) {
                         case "read uncommitted":
                             return TransactionIsolation.READ_UNCOMMITTED;
                         case "repeatable read":
