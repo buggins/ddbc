@@ -566,7 +566,6 @@ version (USE_ODBC)
 
                 uint ac = autoCommit ? SQL_AUTOCOMMIT_ON : SQL_AUTOCOMMIT_OFF;
 
-                writeln("Setting connection ac=", ac);
                 checkdbc!SQLSetConnectAttr(conn, SQL_ATTR_AUTOCOMMIT, cast(SQLPOINTER) ac, 0);
                 this.autocommit = autoCommit;
             }
