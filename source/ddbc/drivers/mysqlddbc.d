@@ -300,6 +300,67 @@ public:
             throw new SQLException(e);
         }
     }
+
+    /// See_Also: https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_transaction_isolation
+    override TransactionIsolation getTransactionIsolation() {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+
+        try {
+            Statement stmt = createStatement();
+            scope(exit) stmt.close();
+            ddbc.core.ResultSet resultSet = stmt.executeQuery("SELECT @@transaction_isolation");
+            if (resultSet.next()) {
+                switch (resultSet.getString(1)) {
+                    case "READ-UNCOMMITTED":
+                        return TransactionIsolation.READ_UNCOMMITTED;
+                    case "READ-COMMITTED":
+                        return TransactionIsolation.READ_COMMITTED;
+                    case "SERIALIZABLE":
+                        return TransactionIsolation.SERIALIZABLE;
+                    case "REPEATABLE-READ":
+                    default:  // MySQL default
+                        return TransactionIsolation.REPEATABLE_READ;
+                }
+            } else {
+                return TransactionIsolation.REPEATABLE_READ;  // MySQL default
+            }
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
+    }
+
+    /// See_Also: https://dev.mysql.com/doc/refman/8.0/en/set-transaction.html
+    override void setTransactionIsolation(TransactionIsolation level) {
+        checkClosed();
+        lock();
+        scope(exit) unlock();
+
+        try {
+            Statement stmt = createStatement();
+            // See: https://dev.mysql.com/doc/refman/8.0/en/set-transaction.html
+            string query = "SET SESSION TRANSACTION ISOLATION LEVEL ";
+            switch (level) {
+                case TransactionIsolation.READ_UNCOMMITTED:
+                    query ~= "READ UNCOMMITTED";
+                    break;
+                case TransactionIsolation.READ_COMMITTED:
+                    query ~= "READ COMMITTED";
+                    break;
+                case TransactionIsolation.SERIALIZABLE:
+                    query ~= "SERIALIZABLE";
+                    break;
+                case TransactionIsolation.REPEATABLE_READ:
+                default:
+                    query ~= "REPEATABLE READ";
+                    break;
+            }
+            stmt.executeUpdate(query);
+        } catch (Throwable e) {
+            throw new SQLException(e);
+        }
+    }
 }
 
 class MySQLStatement : Statement {

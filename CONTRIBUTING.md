@@ -2,11 +2,17 @@ DDBC aims to support a range of compiler versions across from dmd 2.097 and abov
 
 ## Tests
 
-To help with testing there is a *docker-compose.yml* file in the root of the project so that multiple databases can be run locally for testing. 
+To help with testing there is a *docker-compose.yml* file in the root of the project so that multiple databases can be run locally for testing.
 
 When making changes to DDBC please ensure that unit tests (test not requiring a working database) remain in the project source and any integration tests (those running against a local database) are placed the test project (under `./test/ddbctest/`).
 
-unit tests can br run in the usual way with `dub test` and integration tests are run with `dub run --config=test`.
+Unit tests can be run in the usual way with `dub test` and integration tests are run with `dub run --config=test`.
+
+To summarize, testing should be done as follows:
+1. `dub test` - Runs unit tests.
+2. `docker-compose up` - Creates various locally running databases in containers.
+3. `dub run --config=test` - Runs integration tests aganist the local databases.
+4. `docker-compose down` - Destroys the locally created databases.
 
 ## Requirements for developing
 

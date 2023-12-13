@@ -1,17 +1,17 @@
 /**
- * DDBC - D DataBase Connector - abstraction layer for RDBMS access, with interface similar to JDBC. 
- * 
+ * DDBC - D DataBase Connector - abstraction layer for RDBMS access, with interface similar to JDBC.
+ *
  * Source file ddbc/drivers/pgsqlddbc.d.
  *
  * DDBC library attempts to provide implementation independent interface to different databases.
- * 
+ *
  * Set of supported RDBMSs can be extended by writing Drivers for particular DBs.
- * 
+ *
  * JDBC documentation can be found here:
  * $(LINK http://docs.oracle.com/javase/1.5.0/docs/api/java/sql/package-summary.html)$(BR)
  *
  * This module contains implementation of SQLite Driver
- * 
+ *
  * You can find usage examples in unittest{} sections.
  *
  * Copyright: Copyright 2013
@@ -60,7 +60,7 @@ version(USE_SQLITE) {
         pragma (lib, "libsqlite3");
     } else {
         pragma (msg, "You will need to manually link in the SQLite library.");
-    } 
+    }
 
     // version(unittest) {
     //     /*
@@ -201,7 +201,7 @@ version(USE_SQLITE) {
 
         DateTime hmss = fromResultSet("15:18:51.500"); // HH:MM:SS.SSS
         assert(hmss.toISOExtString() == "0001-01-01T15:18:51"); // it'll lose the precision and default to 0001-01-01
-        
+
 
         DateTime ymd = fromResultSet("2019-09-15"); // YYYY-MM-DD
         fromResultSet("2019-Sep-15");
@@ -209,7 +209,7 @@ version(USE_SQLITE) {
         DateTime ymdthm = fromResultSet("2019-09-15T15:18"); // YYYY-MM-DDTHH:MM
 
         DateTime nonstandard = fromResultSet("20190915T151851"); // YYYYMMDDTHHMMSS
-        
+
         DateTime ymdhms = fromResultSet("2019-09-15 15:18:51"); // YYYY-MM-DD HH:MM:SS
 
         DateTime ymdhmss = fromResultSet("2019-09-15 15:18:51.500"); // YYYY-MM-DD HH:MM:SS.SSS
@@ -224,7 +224,7 @@ version(USE_SQLITE) {
         // todo. SQLite DATETIME values can also have timezone : [+-]HH:MM or Z (for UTC)
         // as well as greater preciion than a std.datetime.date : DateTime can handle.
         // we need to add support for std.datetime.systime : SysTime so that we can do:
-        //      SysTime.fromISOExtString("2018-01-01T10:30:00Z"); 
+        //      SysTime.fromISOExtString("2018-01-01T10:30:00Z");
         // see: https://github.com/buggins/ddbc/issues/62
 
         SysTime nonstandardUtc = parseSysTime("20190915T151851Z"); // YYYYMMDDTHHMMSSZ
@@ -252,22 +252,22 @@ version(USE_SQLITE) {
         bool closed;
         bool autocommit;
         Mutex mutex;
-        
-        
+
+
         SQLITEStatement [] activeStatements;
-        
+
         void closeUnclosedStatements() {
             SQLITEStatement [] list = activeStatements.dup;
             foreach(stmt; list) {
                 stmt.close();
             }
         }
-        
+
         void checkClosed() {
             if (closed)
                 throw new SQLException("Connection is already closed");
         }
-        
+
     public:
 
         // db connections are DialectAware
@@ -282,18 +282,18 @@ version(USE_SQLITE) {
         void lock() {
             mutex.lock();
         }
-        
+
         void unlock() {
             mutex.unlock();
         }
-        
+
         sqlite3 * getConnection() { return conn; }
-        
-        
+
+
         void onStatementClosed(SQLITEStatement stmt) {
             myRemove(activeStatements, stmt);
         }
-        
+
         this(string url, string[string] params) {
             mutex = new Mutex();
             extractParamsFromURL(url, params);
@@ -308,73 +308,80 @@ version(USE_SQLITE) {
             closed = false;
             setAutoCommit(true);
         }
-        
+
         override void close() {
             checkClosed();
-            
+
             lock();
             scope(exit) unlock();
-            
+
             closeUnclosedStatements();
             int res = sqlite3_close(conn);
             if (res != SQLITE_OK)
                 throw new SQLException("SQLITE Error " ~ to!string(res) ~ " while trying to close DB " ~ filename ~ " : " ~ getError());
             closed = true;
         }
-        
+
         override void commit() {
             checkClosed();
-            
+
             lock();
             scope(exit) unlock();
-            
+
             Statement stmt = createStatement();
             scope(exit) stmt.close();
             stmt.executeUpdate("COMMIT");
+
+            // Simulate autocommit being off by immediately starting a new transaction.
+            if (!autocommit) {
+                Statement stmt2 = createStatement();
+                scope(exit) stmt2.close();
+                stmt2.executeUpdate("BEGIN");
+            }
         }
-        
+
         override Statement createStatement() {
             checkClosed();
-            
+
             lock();
             scope(exit) unlock();
-            
+
             SQLITEStatement stmt = new SQLITEStatement(this);
             activeStatements ~= stmt;
             return stmt;
         }
-        
+
         PreparedStatement prepareStatement(string sql) {
             checkClosed();
-            
+
             lock();
             scope(exit) unlock();
-            
+
             SQLITEPreparedStatement stmt = new SQLITEPreparedStatement(this, sql);
             activeStatements ~= cast(SQLITEStatement)stmt;
             return stmt;
         }
-        
+
         override string getCatalog() {
             return "default";
         }
-        
+
         /// Sets the given catalog name in order to select a subspace of this Connection object's database in which to work.
         override void setCatalog(string catalog) {
             checkClosed();
             throw new SQLException("Not implemented");
         }
-        
+
         override bool isClosed() {
             return closed;
         }
-        
+
         override void rollback() {
             checkClosed();
-            
+
             lock();
             scope(exit) unlock();
-            
+
             Statement stmt = createStatement();
             scope(exit) stmt.close();
             //TODO:
@@ -389,12 +396,30 @@ version(USE_SQLITE) {
                 return;
             lock();
             scope(exit) unlock();
-            
+
             Statement stmt = createStatement();
             scope(exit) stmt.close();
-            //TODO:
-            //stmt.executeUpdate("SET autocommit = " ~ (autoCommit ? "ON" : "OFF"));
+            // autocommit cannot be generally disabled in Sqlite3, thus disable it
+            // by always starting a transaction with the "BEGIN" command.
+            if (autoCommit == false) {
+                stmt.executeUpdate("BEGIN");
+            }
             this.autocommit = autoCommit;
+        }
+
+        /**
+         * In Sqlite, transaction isolation levels are ALWAYS serializable.
+         * See_Also: https://www.sqlite.org/isolation.html
+         */
+        override TransactionIsolation getTransactionIsolation() {
+            return TransactionIsolation.SERIALIZABLE;
+        }
+
+        /**
+         * This method has no effect, because Sqlite does not support isolation levels.
+         * See_Also: https://www.sqlite.org/isolation.html
+         */
+        override void setTransactionIsolation(TransactionIsolation level) {
         }
     }
 
@@ -404,9 +429,9 @@ version(USE_SQLITE) {
         //  Command * cmd;
         //  ddbc.drivers.mysql.ResultSet rs;
         SQLITEResultSet resultSet;
-        
+
         bool closed;
-        
+
     public:
         // statements are DialectAware
         override DialectType getDialectType() {
@@ -416,19 +441,19 @@ version(USE_SQLITE) {
         void checkClosed() {
             enforce!SQLException(!closed, "Statement is already closed");
         }
-        
+
         void lock() {
             conn.lock();
         }
-        
+
         void unlock() {
             conn.unlock();
         }
-        
+
         this(SQLITEConnection conn) {
             this.conn = conn;
         }
-        
+
     public:
         SQLITEConnection getConnection() {
             checkClosed();
@@ -456,16 +481,16 @@ version(USE_SQLITE) {
             _currentResultSet = _currentStatement.executeQuery();
             return _currentResultSet;
         }
-        
+
     //    string getError() {
     //        return copyCString(PQerrorMessage(conn.getConnection()));
     //    }
-        
+
         override int executeUpdate(string query) {
             Variant dummy;
             return executeUpdate(query, dummy);
         }
-        
+
         override int executeUpdate(string query, out Variant insertId) {
             closePreparedStatement();
             _currentStatement = conn.prepareStatement(query);
@@ -474,7 +499,7 @@ version(USE_SQLITE) {
 
             return _currentStatement.executeUpdate(insertId);
         }
-        
+
         override void close() {
             checkClosed();
             lock();
@@ -483,7 +508,7 @@ version(USE_SQLITE) {
             closed = true;
             conn.onStatementClosed(this);
         }
-        
+
         void closeResultSet() {
         }
     }
@@ -608,7 +633,7 @@ version(USE_SQLITE) {
             conn.onStatementClosed(this);
         }
 
-        
+
         /// Retrieves a ResultSetMetaData object that contains information about the columns of the ResultSet object that will be returned when this PreparedStatement object is executed.
         override ResultSetMetaData getMetaData() {
             checkClosed();
@@ -616,7 +641,7 @@ version(USE_SQLITE) {
             scope(exit) unlock();
             return metadata;
         }
-        
+
         /// Retrieves the number, types and properties of this PreparedStatement object's parameters.
         override ParameterMetaData getParameterMetaData() {
             checkClosed();
@@ -646,12 +671,12 @@ version(USE_SQLITE) {
             }
             return rowsAffected;
         }
-        
+
         override int executeUpdate() {
             Variant insertId;
             return executeUpdate(insertId);
         }
-        
+
         override ddbc.core.ResultSet executeQuery() {
             checkClosed();
             lock();
@@ -661,7 +686,7 @@ version(USE_SQLITE) {
             resultSet = new SQLITEResultSet(this, stmt, getMetaData());
             return resultSet;
         }
-        
+
         override void clearParameters() {
             throw new SQLException("Not implemented");
             //      checkClosed();
@@ -670,7 +695,7 @@ version(USE_SQLITE) {
             //      for (int i = 1; i <= paramCount; i++)
             //          setNull(i);
         }
-        
+
         override void setFloat(int parameterIndex, float x) {
             setDouble(parameterIndex, x);
         }
@@ -826,22 +851,22 @@ version(USE_SQLITE) {
             lastIsNull = (res == SQLITE_NULL);
             return res;
         }
-        
+
         void checkClosed() {
             if (closed)
                 throw new SQLException("Result set is already closed");
         }
-        
+
     public:
-        
+
         void lock() {
             stmt.lock();
         }
-        
+
         void unlock() {
             stmt.unlock();
         }
-        
+
         this(SQLITEStatement stmt, sqlite3_stmt * rs, ResultSetMetaData metadata) {
             this.stmt = stmt;
             this.rs = rs;
@@ -863,7 +888,7 @@ version(USE_SQLITE) {
             currentRowIndex = -1;
             _first = true;
         }
-        
+
         void onStatementClosed() {
             closed = true;
         }
@@ -874,9 +899,9 @@ version(USE_SQLITE) {
             }
             return to!string(res);
         }
-        
+
         // ResultSet interface implementation
-        
+
         //Retrieves the number, types and properties of this ResultSet object's columns
         override ResultSetMetaData getMetaData() {
             checkClosed();
@@ -884,7 +909,7 @@ version(USE_SQLITE) {
             scope(exit) unlock();
             return metadata;
         }
-        
+
         override void close() {
             if (closed)
                 return;
@@ -942,7 +967,7 @@ version(USE_SQLITE) {
                 return false;
             }
         }
-        
+
         override int findColumn(string columnName) {
             checkClosed();
             lock();
@@ -952,7 +977,7 @@ version(USE_SQLITE) {
                 throw new SQLException("Column " ~ columnName ~ " not found");
             return *p + 1;
         }
-        
+
         override bool getBoolean(int columnIndex) {
             return getLong(columnIndex) != 0;
         }
@@ -1085,7 +1110,7 @@ version(USE_SQLITE) {
                 throw new SQLException("Cannot convert string to TimeOfDay - " ~ s);
             }
         }
-        
+
         override Variant getVariant(int columnIndex) {
             checkClosed();
             int type = checkIndex(columnIndex);
@@ -1125,7 +1150,7 @@ version(USE_SQLITE) {
             checkIndex(columnIndex);
             return lastIsNull;
         }
-        
+
         //Retrieves the Statement object that produced this ResultSet object.
         override Statement getStatement() {
             checkClosed();
@@ -1133,7 +1158,7 @@ version(USE_SQLITE) {
             scope(exit) unlock();
             return stmt;
         }
-        
+
         //Retrieves the current row number
         override int getRow() {
             checkClosed();
@@ -1143,7 +1168,7 @@ version(USE_SQLITE) {
                 return 0;
             return currentRowIndex + 1;
         }
-        
+
         //Retrieves the fetch size for this ResultSet object.
         override ulong getFetchSize() {
             return this.rowCount;
@@ -1162,7 +1187,7 @@ version(USE_SQLITE) {
             params["password"] = password;
             return params;
         }
-        
+
 	    override ddbc.core.Connection connect(string url, string[string] params) {
             return new SQLITEConnection(url, params);
         }
@@ -1170,12 +1195,12 @@ version(USE_SQLITE) {
 
     // unittest {
     //     if (SQLITE_TESTS_ENABLED) {
-            
+
     //         import std.conv;
     //         DataSource ds = createUnitTestSQLITEDataSource();
-    //         //writeln("trying to open connection");        
+    //         //writeln("trying to open connection");
     //         auto conn = ds.getConnection();
-    //         //writeln("connection is opened");        
+    //         //writeln("connection is opened");
     //         assert(conn !is null);
     //         scope(exit) conn.close();
     //         {

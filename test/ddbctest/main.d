@@ -10,154 +10,10 @@ import std.stdio;
 
 import dunit;
 import ddbc.test.common : DdbcTestFixture;
-import ddbc.core : Connection, PreparedStatement, Statement, SQLException;
+import ddbc.core : Connection, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
 
 static import ddbc.core;
-
-version(USE_MYSQL) {
-    pragma(msg, "DDBC test will run MySQL tests");
-
-    class MySQLTest : DdbcTestFixture {
-        mixin UnitTest;
-
-        this() {
-            super(
-                "ddbc:mysql://localhost:%s/testdb?user=testuser,password=passw0rd".format(environment.get("MYSQL_PORT", "3306")),
-                "CREATE TABLE `my_first_test` (`id` INTEGER AUTO_INCREMENT PRIMARY KEY, `name` VARCHAR(255) NOT NULL)",
-                "DROP TABLE IF EXISTS `my_first_test`"
-            );
-        }
-
-        @Test
-        public void testVerifyTableExists() {
-            Statement stmt = conn.createStatement();
-            scope(exit) stmt.close();
-
-            //ddbc.core.ResultSet resultSet = stmt.executeQuery("SHOW TABLES");
-            ddbc.core.ResultSet resultSet = stmt.executeQuery("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_NAME = 'my_first_test'");
-
-            assertEquals(1, resultSet.getFetchSize()); // MySQL can support getFetchSize()
-            assertTrue(resultSet.next());
-        }
-
-        @Test
-        public void testExecutingRawSqlInsertStatements() {
-            Statement stmt = conn.createStatement();
-            scope(exit) stmt.close();
-
-            int result1 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`);
-            assertEquals(1, result1);
-
-            Variant id;
-            int result2 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`, id);
-            assertEquals(1, result2);
-            //assertEquals("long", to!string(id.type));
-            //assertEquals(2L, id.get!(long));
-        }
-    }
-}
-
-version(USE_PGSQL) {
-    pragma(msg, "DDBC test will run Postgres tests");
-
-    class PostgresTest : DdbcTestFixture {
-        mixin UnitTest;
-
-        this() {
-            super(
-                "ddbc:postgresql://localhost:%s/testdb?user=testuser,password=passw0rd,ssl=false".format(environment.get("POSTGRES_PORT", "5432")),
-                "CREATE TABLE my_first_test (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)",
-                "DROP TABLE IF EXISTS my_first_test"
-            );
-        }
-
-        @Test
-        public void testVerifyTableExists() {
-            Statement stmt = conn.createStatement();
-            scope(exit) stmt.close();
-
-            ddbc.core.ResultSet resultSet = stmt.executeQuery(`SELECT * FROM pg_catalog.pg_tables WHERE tablename = 'my_first_test'`);
-
-            assertEquals(1, resultSet.getFetchSize()); // Postgres can support getFetchSize()
-            assertTrue(resultSet.next());
-        }
-
-        @Test
-        public void testExecutingRawSqlInsertStatements() {
-            Statement stmt = conn.createStatement();
-            scope(exit) stmt.close();
-
-            int result1 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`);
-            assertEquals(1, result1);
-
-            Variant id;
-            int result2 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`, id);
-            assertEquals(1, result2);
-            //assertEquals("long", to!string(id.type));
-            //assertEquals(2L, id.get!(long));
-        }
-    }
-}
-
-version(USE_ODBC) {
-    pragma(msg, "DDBC test will run SQL Server tests");
-    class SQLServerTest : DdbcTestFixture {
-        mixin UnitTest;
-
-        this() {
-            // Will require MS SQL Server driver to be installed (or FreeTDS)
-            // "ODBC Driver 17 for SQL Server"
-            // "ODBC Driver 18 for SQL Server"
-            // "FreeTDS"
-            super(
-                "odbc://localhost,%s?user=SA,password=MSbbk4k77JKH88g54,trusted_connection=yes,driver=ODBC Driver 18 for SQL Server".format(environment.get("MSSQL_PORT", "1433")), // don't specify database!
-                "DROP TABLE IF EXISTS [my_first_test];CREATE TABLE [my_first_test] ([id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY, [name] VARCHAR(255) NOT NULL)",
-                "DROP TABLE IF EXISTS [my_first_test]"
-            );
-        }
-
-        @Test
-        public void testVerifyTableExists() {
-            Statement stmt = conn.createStatement();
-            scope(exit) stmt.close();
-
-            ddbc.core.ResultSet resultSet = stmt.executeQuery(`SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_NAME = 'my_first_test'`);
-
-            //assertEquals(1, resultSet.getFetchSize()); // getFetchSize() isn't working for ODBC
-            assertTrue(resultSet.next());
-        }
-
-        @Test
-        public void testExecutingRawSqlInsertStatements() {
-            Statement stmt = conn.createStatement();
-            scope(exit) stmt.close();
-
-            int result1 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`);
-            assertEquals(1, result1);
-
-            Variant id;
-            int result2 = stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('MY TEST')`, id);
-            assertEquals(1, result2);
-            //assertEquals("long", to!string(id.type)); // expected longbut was "odbc.sqltypes.SQL_NUMERIC_STRUCT"
-            //assertEquals(2L, id.get!(long));
-        }
-    }
-
-    //pragma(msg, "DDBC test will run Oracle tests");
-    //
-    //class OracleTest : DdbcTestFixture {
-    //    mixin UnitTest;
-    //
-    //    this() {
-    //        super(
-    //            "todo Oracle",
-    //            "CREATE TABLE my_first_test (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL)",
-    //            "DROP TABLE IF EXISTS my_first_test"
-    //        );
-    //    }
-    //}
-}
 
 // tests the use of exec update with raw sql and prepared statements
 pragma(msg, "DDBC test will run SQLite tests (always enabled)");
@@ -200,7 +56,7 @@ class SQLiteTest : DdbcTestFixture {
         scope(exit) ps.close();
 
         ps.setString(1, "Orange");
-        
+
         ddbc.core.ResultSet resultSet = ps.executeQuery();
 
         //assertEquals(1, resultSet.getFetchSize()); // getFetchSize() isn't supported by SQLite
@@ -309,7 +165,7 @@ class SQLitePodTest : DdbcTestFixture {
         immutable SysTime now = Clock.currTime();
 
         User u;
-        u.id = 55L; // setting a non-zero value is effectively ignored when performing an insert with a pod 
+        u.id = 55L; // setting a non-zero value is effectively ignored when performing an insert with a pod
         u.name = "Test Person";
         u.flags = 1;
         u.dob = Date(1979, 8, 5);
@@ -355,7 +211,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertTrue(inserted, "Should be able to perform INSERT with pod");
         assertEquals(1, u.id, "Should auto generate an ID");
 
-        immutable User result = stmt.get!User(u.id); 
+        immutable User result = stmt.get!User(u.id);
         assertEquals(u.id, result.id);
         assertEquals(u.name, result.name);
         assertEquals(u.flags, result.flags);
@@ -389,7 +245,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertTrue(inserted, "Should be able to perform INSERT with pod");
         assertEquals(1, u.id, "Should auto generate an ID");
 
-        immutable User result = stmt.get!User(u.id); 
+        immutable User result = stmt.get!User(u.id);
         assertEquals(u.id, result.id);
         assertEquals(u.name, result.name);
         assertEquals(u.flags, result.flags);
@@ -423,7 +279,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertTrue(inserted, "Should be able to perform INSERT with pod");
         assertEquals(1, u.id, "Should auto generate an ID");
 
-        immutable User result = stmt.get!User(u.id); 
+        immutable User result = stmt.get!User(u.id);
         assertEquals(u.id, result.id);
         assertEquals(u.name, result.name);
         assertEquals(u.flags, result.flags);
@@ -457,7 +313,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertTrue(inserted, "Should be able to perform INSERT with pod");
         assertEquals(1, u.id, "Should auto generate an ID");
 
-        immutable User result = stmt.get!User(u.id); 
+        immutable User result = stmt.get!User(u.id);
         assertEquals(u.id, result.id);
         assertEquals(u.name, result.name);
         assertEquals(u.flags, result.flags);
@@ -491,7 +347,7 @@ class SQLitePodTest : DdbcTestFixture {
         assertTrue(inserted, "Should be able to perform INSERT with pod");
         assertEquals(1, u.id, "Should auto generate an ID");
 
-        immutable User result = stmt.get!User(u.id); 
+        immutable User result = stmt.get!User(u.id);
         assertEquals(u.id, result.id);
         assertEquals(u.name, result.name);
         assertEquals(u.flags, result.flags);
@@ -508,7 +364,7 @@ class SQLitePodTest : DdbcTestFixture {
         stmt.executeUpdate(`INSERT INTO user (id, name, flags, dob, created, updated) VALUES (12, "Jessica", 5, "1985-04-18", "2017-11-23T20:45", "2018-03-11T00:30:59Z")`);
 
         immutable User u = stmt.get!User(12L); // testing this function
-        
+
         //writeln("id: ", u.id, " name: ", u.name, " flags: ", u.flags, ", dob: ", u.dob, ", created: ", u.created, ", updated: ", u.updated);
         assertEquals(12, u.id);
         assertEquals("immutable(long)", typeof(u.id).stringof);
@@ -725,7 +581,7 @@ class SQLitePodTest : DdbcTestFixture {
     //     //writeln("\nSelect user id=1, change name to 'JB' (:))");
     //     auto results = stmt.select!User.where("id=1");
 
-    //     foreach(ref u; results) { // <--- doesn't work for some reason 
+    //     foreach(ref u; results) { // <--- doesn't work for some reason
     //         u.name = "JB";
     //         assertTrue(stmt.update(u));
     //     }
