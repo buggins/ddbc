@@ -113,6 +113,49 @@ jobs:
         if: startsWith(matrix.os, 'windows')
         with: { store: true }
 
+  ## On Ubuntu we can use GDC. The compatibility of gdc is:
+  ##   gcc gdc-10  -> D 2.076 (the default on Ubuntu 20.04 (ubuntu-latest), also available on 22.04)
+  ##   gcc gdc-11  -> D 2.076 (requires Ubuntu 22.04)
+  ##   gcc gdc-12  -> D 2.100 (requires Ubuntu 22.04)
+  gdc:
+    name: ${{ matrix.compiler }} on Ubuntu 22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [ gdc-10, gdc-11, gdc-12 ]
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install DMD (so dub is available)
+        uses: dlang-community/setup-dlang@v1
+        with:
+          compiler: dmd-latest
+
+      - name: Install ${{ matrix.compiler }}
+        run: |
+          sudo apt update
+          sudo apt install ${{ matrix.compiler }} -y
+
+      - name: Show version
+        run: |
+          ${{ matrix.compiler }} --version
+          dub --version
+
+      - name: run unit tests with coverage
+        env:
+          DC: ${{ matrix.compiler }}
+        run: dub test --coverage --compiler=${{ matrix.compiler }}
+
+      - name: release build of library
+        env:
+          DC: ${{ matrix.compiler }}
+        run: dub build --config=library --compiler=${{ matrix.compiler }} --build=release
+
+  ##
+  ## Integration tests are run against various database containers
+  ##
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-20.04
