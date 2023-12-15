@@ -246,11 +246,9 @@ version(USE_SQLITE) {
     class SQLITEConnection : ddbc.core.Connection {
     private:
         string filename;
-
         sqlite3 * conn;
-
         bool closed;
-        bool autocommit;
+        bool autocommit = true;
         Mutex mutex;
 
 
@@ -324,7 +322,8 @@ version(USE_SQLITE) {
 
         override void commit() {
             checkClosed();
-
+            if (autocommit)
+                return;
             lock();
             scope(exit) unlock();
 
@@ -378,14 +377,20 @@ version(USE_SQLITE) {
 
         override void rollback() {
             checkClosed();
-
+            if (autocommit)
+                return;
             lock();
             scope(exit) unlock();
 
             Statement stmt = createStatement();
             scope(exit) stmt.close();
-            //TODO:
-            //stmt.executeUpdate("ROLLBACK");
+
+            stmt.executeUpdate("ROLLBACK");
+            if (!autocommit) {
+                Statement stmt2 = createStatement();
+                scope(exit) stmt2.close();
+                stmt2.executeUpdate("BEGIN");
+            }
         }
         override bool getAutoCommit() {
             return autocommit;
@@ -399,9 +404,11 @@ version(USE_SQLITE) {
 
             Statement stmt = createStatement();
             scope(exit) stmt.close();
-            // autocommit cannot be generally disabled in Sqlite3, thus disable it
-            // by always starting a transaction with the "BEGIN" command.
-            if (autoCommit == false) {
+            if (autoCommit) {
+                // If switching on autocommit, commit any ongoing transaction.
+                stmt.executeUpdate("COMMIT");
+            } else {
+                // If switching off autocommit, start a transaction.
                 stmt.executeUpdate("BEGIN");
             }
             this.autocommit = autoCommit;
