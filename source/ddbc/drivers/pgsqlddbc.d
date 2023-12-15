@@ -223,10 +223,10 @@ version(USE_PGSQL) {
 		bool autocommit = true;
         bool useSsl = true;
     	Mutex mutex;
-    	
-    	
+
+
     	PGSQLStatement [] activeStatements;
-    	
+
     	void closeUnclosedStatements() {
     		PGSQLStatement [] list = activeStatements.dup;
     		foreach(stmt; list) {
@@ -331,15 +331,17 @@ version(USE_PGSQL) {
 
     	override void commit() {
     		checkClosed();
-    		
+
     		lock();
     		scope(exit) unlock();
-    		
+
     		Statement stmt = createStatement();
     		scope(exit) stmt.close();
     		stmt.executeUpdate("COMMIT");
             if (!autocommit) {
-              stmt.executeUpdate("BEGIN");
+                Statement stmt2 = createStatement();
+                scope(exit) stmt2.close();
+                stmt2.executeUpdate("BEGIN");
             }
     	}
 
@@ -388,18 +390,18 @@ version(USE_PGSQL) {
     	override bool isClosed() {
     		return closed;
     	}
-    	
+
     	override void rollback() {
     		checkClosed();
-    		
+
     		lock();
     		scope(exit) unlock();
-    		
+
     		Statement stmt = createStatement();
     		scope(exit) stmt.close();
     		stmt.executeUpdate("ROLLBACK");
             if (!autocommit) {
-              stmt.executeUpdate("BEGIN");
+                stmt.executeUpdate("BEGIN");
             }
     	}
     	override bool getAutoCommit() {

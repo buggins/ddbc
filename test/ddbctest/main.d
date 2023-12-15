@@ -680,7 +680,84 @@ class SQLitePodTest : DdbcTestFixture {
     }
 }
 
+// Test parts of the interfaces related to transactions.
+class SQLiteTransactionTest : DdbcTestFixture {
+    mixin UnitTest;
 
+    this() {
+        super(
+                "sqlite::memory:",
+                "CREATE TABLE records (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)",
+                "DROP TABLE IF EXISTS records");
+    }
+
+    @Test
+    public void testAutocommitOn() {
+        // This is the default state, it is merely made explicit here.
+        conn.setAutoCommit(true);
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Bob')`);
+        conn.rollback();
+        stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Jim')`);
+        conn.commit();
+
+        ddbc.core.ResultSet resultSet;
+        resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Bob'`);
+        assert(resultSet.next());
+        resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Jim'`);
+        assert(resultSet.next());
+    }
+
+    @Test
+    public void testAutocommitOff() {
+        // With autocommit set to false, transactions must be explicitly committed.
+        conn.setAutoCommit(false);
+        conn.setAutoCommit(false);  // Duplicate calls should not cause errors.
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Greg')`);
+        conn.rollback();
+        stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Tom')`);
+        conn.commit();
+
+        ddbc.core.ResultSet resultSet;
+        resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Greg'`);
+        assert(!resultSet.next());
+        resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Tom'`);
+        assert(resultSet.next());
+    }
+
+    @Test
+    public void testAutocommitOffOn() {
+        // A test with a user changing autocommit in between statements.
+        conn.setAutoCommit(false);
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Abe')`);
+        conn.setAutoCommit(true);
+        stmt.executeUpdate(`INSERT INTO records (name) VALUES ('Bart')`);
+
+        ddbc.core.ResultSet resultSet;
+        resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Abe'`);
+        assert(resultSet.next());
+        resultSet = stmt.executeQuery(`SELECT * FROM records WHERE name = 'Bart'`);
+        assert(resultSet.next());
+    }
+
+    @Test
+    public void testTransactionIsolation() {
+        // Setting isolation level is only effective in transactions.
+        conn.setAutoCommit(false);
+        // In SQLite, SERIALIZABLE is the default and not settable.
+        assert(conn.getTransactionIsolation() == TransactionIsolation.SERIALIZABLE);
+        conn.setTransactionIsolation(TransactionIsolation.REPEATABLE_READ);
+        assert(conn.getTransactionIsolation() == TransactionIsolation.SERIALIZABLE);
+    }
+}
 
 // either use the 'Main' mixin or call 'dunit_main(args)'
 mixin Main;
