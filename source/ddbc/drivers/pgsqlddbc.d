@@ -1,18 +1,18 @@
 /**
- * DDBC - D DataBase Connector - abstraction layer for RDBMS access, with interface similar to JDBC. 
- * 
+ * DDBC - D DataBase Connector - abstraction layer for RDBMS access, with interface similar to JDBC.
+ *
  * Source file ddbc/drivers/pgsqlddbc.d.
  *
  * DDBC library attempts to provide implementation independent interface to different databases.
- * 
+ *
  * Set of supported RDBMSs can be extended by writing Drivers for particular DBs.
  * Currently it only includes MySQL driver.
- * 
+ *
  * JDBC documentation can be found here:
  * $(LINK http://docs.oracle.com/javase/1.5.0/docs/api/java/sql/package-summary.html)$(BR)
  *
  * This module contains implementation of PostgreSQL Driver
- * 
+ *
  *
  * You can find usage examples in unittest{} sections.
  *
@@ -42,7 +42,7 @@ version(USE_PGSQL) {
     import std.variant;
     import std.array;
     import core.sync.mutex;
-    
+
     import ddbc.common;
     import ddbc.core;
     import derelict.pq.pq;
@@ -233,7 +233,7 @@ version(USE_PGSQL) {
     			stmt.close();
     		}
     	}
-    	
+
         void onStatementClosed(PGSQLStatement stmt) {
             myRemove(activeStatements, stmt);
         }
@@ -242,7 +242,7 @@ version(USE_PGSQL) {
     		if (closed)
     			throw new SQLException("Connection is already closed");
     	}
-    	
+
     public:
 
     	// db connections are DialectAware
@@ -253,14 +253,14 @@ version(USE_PGSQL) {
     	void lock() {
     		mutex.lock();
     	}
-    	
+
     	void unlock() {
     		mutex.unlock();
     	}
-    	
+
     	PGconn * getConnection() { return conn; }
-    	
-    	
+
+
     	this(string url, string[string] params) {
     		mutex = new Mutex();
     		this.url = url;
@@ -294,7 +294,7 @@ version(USE_PGSQL) {
             if ("ssl" in this.params)
                 useSsl = (this.params["ssl"] == "true");
 
-    		
+
     		//writeln("host " ~ hostname ~ " : " ~ to!string(port) ~ " db=" ~ dbName ~ " user=" ~ username ~ " pass=" ~ password);
             // TODO: support SSL param
 
@@ -319,12 +319,12 @@ version(USE_PGSQL) {
 
     	override void close() {
     		checkClosed();
-    		
+
     		lock();
     		scope(exit) unlock();
-    		
+
     		closeUnclosedStatements();
-    		
+
     		PQfinish(conn);
     		closed = true;
     	}
@@ -347,46 +347,46 @@ version(USE_PGSQL) {
 
     	override Statement createStatement() {
     		checkClosed();
-    		
+
     		lock();
     		scope(exit) unlock();
-    		
+
     		PGSQLStatement stmt = new PGSQLStatement(this);
     		activeStatements ~= stmt;
     		return stmt;
     	}
-    	
+
     	PreparedStatement prepareStatement(string sql) {
     		checkClosed();
-    		
+
     		lock();
     		scope(exit) unlock();
-    		
+
     		PGSQLPreparedStatement stmt = new PGSQLPreparedStatement(this, sql);
     		activeStatements ~= stmt;
     		return stmt;
     	}
-    	
+
     	override string getCatalog() {
     		return dbName;
     	}
-    	
+
     	/// Sets the given catalog name in order to select a subspace of this Connection object's database in which to work.
     	override void setCatalog(string catalog) {
     		checkClosed();
     		if (dbName == catalog)
     			return;
-    		
+
     		lock();
     		scope(exit) unlock();
 
     		//conn.selectDB(catalog);
     		dbName = catalog;
     		// TODO:
-				
+
     		throw new SQLException("Not implemented");
     	}
-    	
+
     	override bool isClosed() {
     		return closed;
     	}
@@ -496,9 +496,9 @@ version(USE_PGSQL) {
     //	Command * cmd;
     //	ddbc.drivers.mysql.ResultSet rs;
     	PGSQLResultSet resultSet;
-    	
+
     	bool closed;
-    	
+
     public:
 
 		// statements are DialectAware
@@ -509,19 +509,19 @@ version(USE_PGSQL) {
     	void checkClosed() {
     		enforce!SQLException(!closed, "Statement is already closed");
     	}
-    	
+
     	void lock() {
     		conn.lock();
     	}
-    	
+
     	void unlock() {
     		conn.unlock();
     	}
-    	
+
     	this(PGSQLConnection conn) {
     		this.conn = conn;
     	}
-    	
+
     	ResultSetMetaData createMetadata(PGresult * res) {
     		int rows = PQntuples(res);
     		int fieldCount = PQnfields(res);
@@ -722,7 +722,7 @@ version(USE_PGSQL) {
     		auto status = PQresultStatus(res);
     		enforce!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, getError());
     		scope(exit) PQclear(res);
-    		
+
     		string rowsAffected = copyCString(PQcmdTuples(res));
 
             readInsertId(res, insertId);
@@ -875,15 +875,6 @@ version(USE_PGSQL) {
             return conn.getDialectType();
         }
 
-        override void close() {
-            checkClosed();
-            lock();
-            scope(exit) unlock();
-            //PQclear(rs);
-            closeResultSet();
-            closed = true;
-        }
-
     	/// Retrieves a ResultSetMetaData object that contains information about the columns of the ResultSet object that will be returned when this PreparedStatement object is executed.
     	override ResultSetMetaData getMetaData() {
     		checkClosed();
@@ -891,7 +882,7 @@ version(USE_PGSQL) {
     		scope(exit) unlock();
     		return metadata;
     	}
-    	
+
     	/// Retrieves the number, types and properties of this PreparedStatement object's parameters.
     	override ParameterMetaData getParameterMetaData() {
     		//throw new SQLException("Not implemented");
@@ -900,12 +891,12 @@ version(USE_PGSQL) {
     		scope(exit) unlock();
     		return paramMetadata;
     	}
-    	
+
     	override int executeUpdate() {
             Variant dummy;
             return executeUpdate(dummy);
     	}
-    	
+
     	override int executeUpdate(out Variant insertId) {
     		checkClosed();
     		lock();
@@ -923,7 +914,7 @@ version(USE_PGSQL) {
             //insertId = Variant(cast(long)lastid);
             return affected;
         }
-    	
+
     	override ddbc.core.ResultSet executeQuery() {
     		checkClosed();
     		lock();
@@ -940,7 +931,7 @@ version(USE_PGSQL) {
             resultSet = new PGSQLResultSet(this, data, metadata);
             return resultSet;
         }
-    	
+
     	override void clearParameters() {
     		throw new SQLException("Not implemented");
     //		checkClosed();
@@ -949,7 +940,7 @@ version(USE_PGSQL) {
     //		for (int i = 1; i <= paramCount; i++)
     //			setNull(i);
     	}
-    	
+
     	override void setFloat(int parameterIndex, float x) {
             checkClosed();
             lock();
@@ -1009,14 +1000,14 @@ version(USE_PGSQL) {
             scope(exit) unlock();
             setParam(parameterIndex, to!string(x));
         }
-  
+
         override void setByte(int parameterIndex, byte x) {
             checkClosed();
             lock();
             scope(exit) unlock();
             setParam(parameterIndex, to!string(x));
         }
- 
+
         override void setUbyte(int parameterIndex, ubyte x) {
             checkClosed();
             lock();
@@ -1024,7 +1015,7 @@ version(USE_PGSQL) {
             checkIndex(parameterIndex);
             setParam(parameterIndex, to!string(x));
         }
-   
+
         override void setBytes(int parameterIndex, byte[] x) {
             setString(parameterIndex, bytesToBytea(x));
         }
@@ -1098,7 +1089,7 @@ version(USE_PGSQL) {
     	private int[string] columnMap;
     	private bool lastIsNull;
     	private int columnCount;
-    	
+
     	Variant getValue(int columnIndex) {
     		checkClosed();
     		enforce!SQLException(columnIndex >= 1 && columnIndex <= columnCount, "Column index out of bounds: " ~ to!string(columnIndex));
@@ -1107,22 +1098,22 @@ version(USE_PGSQL) {
             lastIsNull = (res == null);
     		return res;
     	}
-    	
+
     	void checkClosed() {
     		if (closed)
     			throw new SQLException("Result set is already closed");
     	}
-    	
+
     public:
-    	
+
     	void lock() {
     		stmt.lock();
     	}
-    	
+
     	void unlock() {
     		stmt.unlock();
     	}
-    	
+
     	this(PGSQLStatement stmt, Variant[][] data, ResultSetMetaData metadata) {
     		this.stmt = stmt;
     		this.data = data;
@@ -1136,13 +1127,13 @@ version(USE_PGSQL) {
             }
             //writeln("created result set: " ~ to!string(rowCount) ~ " rows, " ~ to!string(columnCount) ~ " cols");
         }
-    	
+
     	void onStatementClosed() {
     		closed = true;
     	}
 
         // ResultSet interface implementation
-    	
+
     	//Retrieves the number, types and properties of this ResultSet object's columns
     	override ResultSetMetaData getMetaData() {
     		checkClosed();
@@ -1150,7 +1141,7 @@ version(USE_PGSQL) {
     		scope(exit) unlock();
     		return metadata;
     	}
-    	
+
     	override void close() {
     		checkClosed();
     		lock();
@@ -1186,7 +1177,7 @@ version(USE_PGSQL) {
     		currentRowIndex++;
     		return true;
     	}
-    	
+
     	override int findColumn(string columnName) {
     		checkClosed();
     		lock();
@@ -1196,7 +1187,7 @@ version(USE_PGSQL) {
     			throw new SQLException("Column " ~ columnName ~ " not found");
     		return *p + 1;
     	}
-    	
+
     	override bool getBoolean(int columnIndex) {
     		checkClosed();
     		lock();
@@ -1422,7 +1413,7 @@ version(USE_PGSQL) {
     		}
     		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to TimeOfDay. '" ~ v.toString() ~ "'");
     	}
-    	
+
     	override Variant getVariant(int columnIndex) {
     		checkClosed();
     		lock();
@@ -1448,7 +1439,7 @@ version(USE_PGSQL) {
     		enforce!SQLException(currentRowIndex >= 0 && currentRowIndex < rowCount, "No current row in result set");
     		return data[currentRowIndex][columnIndex - 1] == null;
     	}
-    	
+
     	//Retrieves the Statement object that produced this ResultSet object.
     	override Statement getStatement() {
     		checkClosed();
@@ -1456,7 +1447,7 @@ version(USE_PGSQL) {
     		scope(exit) unlock();
     		return stmt;
     	}
-    	
+
     	//Retrieves the current row number
     	override int getRow() {
     		checkClosed();
@@ -1466,7 +1457,7 @@ version(USE_PGSQL) {
     			return 0;
     		return currentRowIndex + 1;
     	}
-    	
+
     	//Retrieves the fetch size for this ResultSet object.
     	override ulong getFetchSize() {
     		checkClosed();
