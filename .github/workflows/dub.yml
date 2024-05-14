@@ -23,6 +23,7 @@ jobs:
         compiler:
           - dmd-latest
           - ldc-latest
+          - dmd-2.107.1 # (released in 2024)
           - dmd-2.106.1 # (released in 2024)
           - dmd-2.105.3 # (released in 2023) 
           - dmd-2.104.2 # (released in 2023)
@@ -38,10 +39,11 @@ jobs:
           - ldc-1.28.1 # eq to dmd v2.098.1
           - ldc-1.27.1 # eq to dmd v2.097.2
         include:
-          - { os: macos-latest, compiler: dmd-latest }
-          - { os: macos-latest, compiler: ldc-latest }
-          - { os: macos-latest, compiler: dmd-2.100.2 }
-          - { os: macos-latest, compiler: ldc-1.32.2 }
+          ## macos-13 is the latest Mac runner with Intel cpu
+          - { os: macos-13, compiler: dmd-latest }
+          - { os: macos-13, compiler: ldc-latest }
+          - { os: macos-13, compiler: dmd-2.100.2 }
+          - { os: macos-13, compiler: ldc-1.32.2 }
         exclude:
           - { os: windows-latest, compiler: dmd-2.098.1 }
           - { os: windows-latest, compiler: dmd-2.097.2 }
