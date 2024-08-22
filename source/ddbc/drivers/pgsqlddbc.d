@@ -863,7 +863,14 @@ version(USE_PGSQL) {
                                  cast(const int *)lengths.ptr,
                                  cast(const int *)formats.ptr,
                                  0);
+            // Executing a statement will return null for serious errors like being out of memory or
+            // being unable to send the query to the server. For other errors, a non-null result is
+            // returned, and the status should be looked up.
+            // See https://www.postgresql.org/docs/current/libpq-exec.html#LIBPQ-PQEXEC
             enforce!SQLException(res !is null, "Error while executing prepared statement " ~ query);
+            enforce!SQLException(
+                    PQresultStatus(res) != PGRES_FATAL_ERROR,
+                    "Fatal error executing prepared statement " ~ query ~ ": " ~ copyCString(PQresultErrorMessage(res)));
             metadata = createMetadata(res);
             return res;
         }
