@@ -930,7 +930,25 @@ version(USE_SQLITE) {
             checkClosed();
             lock();
             scope(exit) unlock();
-            throw new SQLException("Not implemented");
+
+            currentRowIndex = 0;
+            _first = true;
+            // Reset the query, in case other rows have been read already.
+            sqlite3_reset(rs);
+
+            // Actually read the first row.
+            int res = sqlite3_step(rs);
+            if (res == SQLITE_DONE) {
+                _last = true;
+                columnCount = sqlite3_data_count(rs);
+                return columnCount > 0;
+            } else if (res == SQLITE_ROW) {
+                columnCount = sqlite3_data_count(rs);
+                return true;
+            } else {
+                enforce!SQLException(false, "Error #" ~ to!string(res) ~ " while reading query result: " ~ copyCString(sqlite3_errmsg(stmt.conn.getConnection())));
+                return false;
+            }
         }
         override bool isFirst() {
             checkClosed();
