@@ -71,6 +71,28 @@ class SQLiteTest : DdbcTestFixture {
         // assertEquals("long", to!string(id.type));
         // assertEquals(2L, id.get!(long));
     }
+
+    @Test
+    public void testResultSetForEach() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('Goober')`);
+        stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('Goober')`);
+
+        PreparedStatement ps = conn.prepareStatement(`SELECT * FROM my_first_test WHERE name = ?`);
+        scope(exit) ps.close();
+
+        ps.setString(1, "Goober");
+
+        ddbc.core.ResultSet resultSet = ps.executeQuery();
+
+        int count = 0;
+        foreach (result; resultSet) {
+            count++;
+        }
+        assert(count == 2);
+    }
 }
 
 
