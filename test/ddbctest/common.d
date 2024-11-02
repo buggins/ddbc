@@ -3,7 +3,7 @@ module ddbc.test.common;
 import std.stdio : stdout, writeln;
 
 import dunit;
-import ddbc.core : Connection, Statement;
+import ddbc.core : Connection, PreparedStatement, Statement;
 import ddbc.common : createConnection;
 
 class DdbcTestFixture {
@@ -66,5 +66,30 @@ class DdbcTestFixture {
         stmt.close();
         //debug writeln("@AfterEach : closing db connection");
         conn.close();
+    }
+
+    /*
+    * Ensure all supported databases can foreach a resultset
+    */
+    @Test
+    public void testResultSetForEach() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('Goober')`);
+        stmt.executeUpdate(`INSERT INTO my_first_test (name) VALUES ('Goober')`);
+
+        PreparedStatement ps = conn.prepareStatement(`SELECT * FROM my_first_test WHERE name = ?`);
+        scope(exit) ps.close();
+
+        ps.setString(1, "Goober");
+
+        ddbc.core.ResultSet resultSet = ps.executeQuery();
+
+        int count = 0;
+        foreach (result; resultSet) {
+            count++;
+        }
+        assert(count == 2);
     }
 }
