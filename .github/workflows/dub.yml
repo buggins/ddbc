@@ -44,7 +44,7 @@ jobs:
           ## macos-13 is the latest Mac runner with Intel cpu
           - { os: macos-13, compiler: dmd-latest }
           - { os: macos-13, compiler: ldc-latest }
-          - { os: macos-13, compiler: dmd-2.100.2 }
+          - { os: macos-13, compiler: dmd-2.101.1 }
           - { os: macos-13, compiler: ldc-1.32.2 }
         exclude:
           - { os: windows-latest, compiler: dmd-2.098.1 }
