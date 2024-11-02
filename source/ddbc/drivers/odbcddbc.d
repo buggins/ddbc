@@ -1437,14 +1437,21 @@ version (USE_ODBC)
 
             // returns one of SQL_SUCCESS, SQL_SUCCESS_WITH_INFO, SQL_NO_DATA, SQL_STILL_EXECUTING, SQL_ERROR, or SQL_INVALID_HANDLE
             // see: https://learn.microsoft.com/en-us/sql/odbc/reference/syntax/sqlfetchscroll-function
-            SQLRETURN r = SQLFetchScroll(stmt.stmt, SQL_FETCH_FIRST, 0);
+            SQLRETURN retcode = SQLFetchScroll(stmt.stmt, SQL_FETCH_FIRST, 0);
 
-            return r == SQL_SUCCESS;
+            // switch (retcode) {
+            //     case SQL_NO_DATA:
+            //         return false;
+            // }
 
-            /*
-            currentRowIndex = 0;
-            return check(r, stmt.stmt, SQL_HANDLE_STMT) != SQL_NO_DATA;
-            */
+            if(retcode != SQL_NO_DATA) {
+                currentRowIndex = 0;
+                return true;
+
+            } else {
+                // check(retcode, stmt.stmt, SQL_HANDLE_STMT);
+                return false;
+            }
         }
 
         override bool isFirst()
