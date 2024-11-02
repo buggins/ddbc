@@ -103,8 +103,8 @@ class SQLitePodTest : DdbcTestFixture {
     this() {
         super(
             "sqlite::memory:",
-            "CREATE TABLE user (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null, dob DATE, created DATETIME, updated DATETIME)",
-            "DROP TABLE IF EXISTS user"
+            "CREATE TABLE my_first_test (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL);CREATE TABLE user (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL, flags int null, dob DATE, created DATETIME, updated DATETIME)",
+            "DROP TABLE IF EXISTS my_first_test;DROP TABLE IF EXISTS user"
         );
     }
 
@@ -687,8 +687,8 @@ class SQLiteTransactionTest : DdbcTestFixture {
     this() {
         super(
                 "sqlite::memory:",
-                "CREATE TABLE records (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)",
-                "DROP TABLE IF EXISTS records");
+                "CREATE TABLE my_first_test (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL);CREATE TABLE records (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)",
+                "DROP TABLE IF EXISTS my_first_test;DROP TABLE IF EXISTS records");
     }
 
     @Test
