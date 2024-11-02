@@ -1,17 +1,17 @@
 /**
- * DDBC - D DataBase Connector - abstraction layer for RDBMS access, with interface similar to JDBC. 
- * 
+ * DDBC - D DataBase Connector - abstraction layer for RDBMS access, with interface similar to JDBC.
+ *
  * Source file ddbc/drivers/pgsqlddbc.d.
  *
  * DDBC library attempts to provide implementation independent interface to different databases.
- * 
+ *
  * Set of supported RDBMSs can be extended by writing Drivers for particular DBs.
- * 
+ *
  * JDBC documentation can be found here:
  * $(LINK http://docs.oracle.com/javase/1.5.0/docs/api/java/sql/package-summary.html)$(BR)
  *
  * This module contains implementation of SQLite Driver
- * 
+ *
  * You can find usage examples in unittest{} sections.
  *
  * Copyright: Copyright 2013
@@ -279,11 +279,11 @@ version (USE_ODBC)
             return SqlType.FLOAT;
         case SQL_DOUBLE:
             return SqlType.DOUBLE;
-        
+
         case SQL_DECIMAL:
         case SQL_NUMERIC:
             return SqlType.DECIMAL;
-        
+
         case SQL_TYPE_TIMESTAMP:
             return SqlType.DATETIME;
 
@@ -426,7 +426,7 @@ version (USE_ODBC)
             addToConnectionString("database", "Database");
             addToConnectionString("trusted_connection", "TrustServerCertificate");
             string connectionString = connectionProps.join(';');
-            
+
             info(connectionString);
 
             SQLCHAR[1024] outstr;
@@ -672,14 +672,14 @@ version (USE_ODBC)
             lock();
             scope (exit)
                 unlock();
-            
+
             trace(query);
 
             try
             {
                 // the 3rd arg is length of the query string or SQL_NTS if the string is null terminated
                 // will return 1 of:
-                // 
+                //
                 // SQL_SUCCESS
                 // SQL_SUCCESS_WITH_INFO
                 // SQL_ERROR
@@ -728,7 +728,7 @@ version (USE_ODBC)
             lock();
             scope (exit)
                 unlock();
-            
+
             trace(query);
 
             try
@@ -986,7 +986,7 @@ version (USE_ODBC)
                 case SQL_BINARY: return readValue!(byte[]);
                 case SQL_VARBINARY: return readValue!(byte[]);
                 case SQL_LONGVARBINARY: return readValue!(byte[]);
-                
+
                 case SQL_NUMERIC: return readValue!(SQL_NUMERIC_STRUCT);
                 case SQL_TYPE_DATE: return readValue!(Date);
                 case SQL_TYPE_TIME: return readValue!(TimeOfDay);
@@ -1060,7 +1060,7 @@ version (USE_ODBC)
             lock();
             scope (exit)
                 unlock();
-            
+
             trace(stmt);
 
             try
@@ -1084,7 +1084,7 @@ version (USE_ODBC)
             lock();
             scope (exit)
                 unlock();
-            
+
             trace(stmt);
 
             try
@@ -1166,7 +1166,7 @@ version (USE_ODBC)
 
             auto param = &params[parameterIndex - 1];
 
-            static if (is(T == char[])) 
+            static if (is(T == char[]))
             param.data = cast(void[]) (x ~ '\0');
             else static if (isArray!(T))
                 param.data = cast(void[]) x;
@@ -1175,7 +1175,7 @@ version (USE_ODBC)
             param.bindType = TypeToCIdentifier!(T);
             param.dbtype = ctypeToSQLType(TypeToCIdentifier!(T));
 
-            
+
 
             SQLBindParameter(stmt, cast(ushort) parameterIndex, SQL_PARAM_INPUT,
                     param.bindType, param.dbtype, 0, 0, param.data.ptr,
@@ -1372,7 +1372,7 @@ version (USE_ODBC)
 
             ColumnMetadataItem[] items;
             items.length = stmt.cols.length;
-   
+
             foreach (i, col; stmt.cols)
             {
                 colsByName[col.name] = col;
@@ -1430,16 +1430,21 @@ version (USE_ODBC)
 
         override bool first()
         {
-            /*checkClosed();
+            checkClosed();
             lock();
             scope (exit)
                 unlock();
+
+            // returns one of SQL_SUCCESS, SQL_SUCCESS_WITH_INFO, SQL_NO_DATA, SQL_STILL_EXECUTING, SQL_ERROR, or SQL_INVALID_HANDLE
+            // see: https://learn.microsoft.com/en-us/sql/odbc/reference/syntax/sqlfetchscroll-function
+            SQLRETURN r = SQLFetchScroll(stmt.stmt, SQL_FETCH_FIRST, 0);
+
+            return r == SQL_SUCCESS;
+
+            /*
             currentRowIndex = 0;
-
-            return check(SQLFetchScroll(stmt.stmt, SQL_FETCH_FIRST, 0), stmt.stmt, SQL_HANDLE_STMT) != SQL_NO_DATA;*/
-
-            throw new SQLException("Method not implemented");
-
+            return check(r, stmt.stmt, SQL_HANDLE_STMT) != SQL_NO_DATA;
+            */
         }
 
         override bool isFirst()
@@ -1768,7 +1773,7 @@ version (USE_ODBC)
 
     //         assert(stmt.executeUpdate(
     //                 "IF OBJECT_ID('ddbct1', 'U') IS NOT NULL DROP TABLE ddbct1") == -1);
-            
+
     //         // Some Databases has `not null` as default.
     //         assert(stmt.executeUpdate("CREATE TABLE ddbct1 ( " ~ "id int not null primary key, "
     //                 ~ "name varchar(250) null, " ~ "comment varchar(max) null, " ~ "ts datetime null)") == -1);
@@ -1818,7 +1823,7 @@ version (USE_ODBC)
     //             //int rowIndex = rs.getRow();
     //             //writeln("row = ", rs.getRow());
     //             //assert(rowIndex == index);
-                
+
     //             // BUG: the Type is defined as `BIGINT` but is read as double on some platforms insted of long! `INT` works with getLong()!
     //             // long id = rs.getLong(1);
     //             long id = rs.getDouble(1).to!long;

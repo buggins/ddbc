@@ -1,18 +1,18 @@
 /**
- * DDBC - D DataBase Connector - abstraction layer for RDBMS access, with interface similar to JDBC. 
- * 
+ * DDBC - D DataBase Connector - abstraction layer for RDBMS access, with interface similar to JDBC.
+ *
  * Source file ddbc/core.d.
  *
  * DDBC library attempts to provide implementation independent interface to different databases.
- * 
+ *
  * Set of supported RDBMSs can be extended by writing Drivers for particular DBs.
  * Currently it only includes MySQL Driver which uses patched version of MYSQLN (native D implementation of MySQL connector, written by Steve Teale)
- * 
+ *
  * JDBC documentation can be found here:
  * $(LINK http://docs.oracle.com/javase/1.5.0/docs/api/java/sql/package-summary.html)$(BR)
  *
  * Limitations of current version: readonly unidirectional resultset, completely fetched into memory.
- * 
+ *
  * Its primary objects are:
  * $(UL
  *    $(LI Driver: $(UL $(LI Implements interface to particular RDBMS, used to create connections)))
@@ -349,18 +349,19 @@ interface DataSetWriter {
 
 interface ResultSet : DataSetReader {
 	void close();
+    /// Will return true if the ResultSet is pointing at the first row
 	bool first();
 	bool isFirst();
 	bool isLast();
 	bool next();
 
-	//Retrieves the number, types and properties of this ResultSet object's columns
+    /// Retrieves the number, types and properties of this ResultSet object's columns
 	ResultSetMetaData getMetaData();
-	//Retrieves the Statement object that produced this ResultSet object.
+    /// Retrieves the Statement object that produced this ResultSet object.
 	Statement getStatement();
-	//Retrieves the current row number
+    /// Retrieves the current row number
 	int getRow();
-	//Retrieves the fetch size for this ResultSet object.
+    /// Retrieves the fetch size for this ResultSet object.
 	deprecated("Marked for removal as Cannot be used by all supported drivers. See Github issue #85")
 	ulong getFetchSize();
 
@@ -436,7 +437,7 @@ interface Statement : DialectAware {
 	void close();
 }
 
-/// An object that represents a precompiled SQL statement. 
+/// An object that represents a precompiled SQL statement.
 interface PreparedStatement : Statement, DataSetWriter {
 	/// Executes the SQL statement in this PreparedStatement object, which must be an SQL INSERT, UPDATE or DELETE statement; or an SQL statement that returns nothing, such as a DDL statement.
 	int executeUpdate();
@@ -495,7 +496,7 @@ string makeDDBCUrl(string driverName, string[string] params) {
 }
 
 /// Helper function to make url in form driverName://host:port/dbname?param1=value1,param2=value2
-string makeDDBCUrl(string driverName, string host = null, int port = 0, 
+string makeDDBCUrl(string driverName, string host = null, int port = 0,
 							string dbName = null, string[string] params = null) {
 	import std.algorithm.searching : canFind;
 	enforce(canFind(["sqlite", "postgresql", "mysql", "sqlserver", "oracle", "odbc"], driverName), "driver must be one of sqlite|postgresql|mysql|sqlserver|oracle|odbc");
