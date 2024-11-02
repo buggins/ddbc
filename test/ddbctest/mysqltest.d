@@ -24,7 +24,7 @@ version(USE_MYSQL) {
         this() {
             super(
                 "ddbc:mysql://localhost:%s/testdb?user=testuser,password=passw0rd".format(environment.get("MYSQL_PORT", "3306")),
-                "CREATE TABLE `my_first_test` (`id` INTEGER AUTO_INCREMENT PRIMARY KEY, `name` VARCHAR(255) NOT NULL)",
+                "CREATE TABLE IF NOT EXISTS `my_first_test` (`id` INTEGER AUTO_INCREMENT PRIMARY KEY, `name` VARCHAR(255) NOT NULL)",
                 "DROP TABLE IF EXISTS `my_first_test`"
             );
         }
@@ -64,8 +64,8 @@ version(USE_MYSQL) {
         this() {
             super(
                     "ddbc:mysql://localhost:%s/testdb?user=testuser,password=passw0rd".format(environment.get("MYSQL_PORT", "3306")),
-                    "CREATE TABLE my_first_test (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL);CREATE TABLE records (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)",
-                    "DROP TABLE IF EXISTS my_first_test;DROP TABLE IF EXISTS records"
+                    "CREATE TABLE IF NOT EXISTS `my_first_test` (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL);CREATE TABLE IF NOT EXISTS `records` (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)",
+                    "DROP TABLE IF EXISTS `my_first_test`;DROP TABLE IF EXISTS `records`"
                   );
         }
 

@@ -1,5 +1,7 @@
 module ddbc.test.common;
 
+import std.algorithm : each;
+import std.array;
 import std.stdio : stdout, writeln;
 
 import dunit;
@@ -47,9 +49,6 @@ class DdbcTestFixture {
 
         // fill database with test data
         if(this.setupSql !is null) {
-            import std.algorithm : each;
-            import std.array;
-
             // string can contain multiple statements so split them
             this.setupSql.split(";")
                          .each!((s) => stmt.executeUpdate(s));
@@ -65,7 +64,9 @@ class DdbcTestFixture {
 
         // fill database with test data
         if(this.teardownSql !is null) {
-            stmt.executeUpdate(this.teardownSql);
+            // string can contain multiple statements so split them
+            this.teardownSql.split(";")
+                            .each!((s) => stmt.executeUpdate(s));
         }
         //debug writeln("@AfterEach : closing statement");
         stmt.close();
