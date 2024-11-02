@@ -47,7 +47,12 @@ class DdbcTestFixture {
 
         // fill database with test data
         if(this.setupSql !is null) {
-            stmt.executeUpdate(this.setupSql);
+            import std.algorithm : each;
+            import std.array;
+
+            // string can contain multiple statements so split them
+            this.setupSql.split(";")
+                         .each!((s) => stmt.executeUpdate(s));
         }
     }
 
