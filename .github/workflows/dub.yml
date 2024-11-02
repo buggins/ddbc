@@ -46,7 +46,7 @@ jobs:
           ## macos-13 is the latest Mac runner with Intel cpu
           - { os: macos-13, compiler: dmd-latest }
           - { os: macos-13, compiler: ldc-latest }
-          - { os: macos-13, compiler: dmd-2.102.2 }
+          - { os: macos-13, compiler: dmd-2.103.1 }
           - { os: macos-13, compiler: ldc-1.32.2 }
         exclude:
           - { os: windows-latest, compiler: dmd-2.098.1 }
@@ -67,6 +67,14 @@ jobs:
       - name: Install dependencies on Mac OSX
         if: startsWith(matrix.os, 'macos')
         run: brew bundle
+
+      # Seems ODBC is missing on the latest macos runners so install using homebrew
+      - name: Install ODBC on Mac OSX ${{ runner.arch }}
+        if: ${{ startsWith(matrix.os, 'macos') && runner.arch == 'ARM64' }}
+        run: |
+          brew tap microsoft/mssql-release https://github.com/Microsoft/homebrew-mssql-release
+          brew update
+          HOMEBREW_ACCEPT_EULA=Y brew install msodbcsql18 mssql-tools18
 
 #      - name: Upgrade dub dependencies
 #        if: startsWith(matrix.os, 'windows')
@@ -90,7 +98,7 @@ jobs:
         working-directory: example
         run: dub build --config=SQLite --arch=x86 && ./ddbctest --connection=sqlite:ddbc-test.sqlite
 
-      # Use the default arch (either x86_64 or arm64 all platforms)
+      # Use the default arch (either x86_64 or aarch64 all platforms)
       - name: dub test with full config (${{ runner.arch }})
         run: dub test --config=full
         
