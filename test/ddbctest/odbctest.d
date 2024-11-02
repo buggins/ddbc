@@ -65,8 +65,8 @@ version(USE_ODBC) {
         this() {
             super(
                 "odbc://localhost,%s?user=SA,password=MSbbk4k77JKH88g54,trusted_connection=yes,driver=ODBC Driver 18 for SQL Server".format(environment.get("MSSQL_PORT", "1433")), // don't specify database!
-                "CREATE TABLE records (id INT IDENTITY(1, 1) PRIMARY KEY, name VARCHAR(255) NOT NULL)",
-                "DROP TABLE IF EXISTS records"
+                "DROP TABLE IF EXISTS [my_first_test];CREATE TABLE [my_first_test] ([id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY, [name] VARCHAR(255) NOT NULL);CREATE TABLE records (id INT IDENTITY(1, 1) PRIMARY KEY, name VARCHAR(255) NOT NULL)",
+                "DROP TABLE IF EXISTS [my_first_test];DROP TABLE IF EXISTS records"
                 );
         }
 

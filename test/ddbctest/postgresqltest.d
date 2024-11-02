@@ -63,8 +63,8 @@ version(USE_PGSQL) {
         this() {
             super(
                 "ddbc:postgresql://localhost:%s/testdb?user=testuser,password=passw0rd,ssl=false".format(environment.get("POSTGRES_PORT", "5432")),
-                "CREATE TABLE records (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)",
-                "DROP TABLE IF EXISTS records"
+                "CREATE TABLE my_first_test (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL);CREATE TABLE records (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL)",
+                "DROP TABLE IF EXISTS my_first_test;DROP TABLE IF EXISTS records"
                 );
         }
 
