@@ -23,6 +23,7 @@ jobs:
         compiler:
           - dmd-latest
           - ldc-latest
+          - dmd-2.109.1 # (released in 2024)
           - dmd-2.108.1 # (released in 2024)
           - dmd-2.107.1 # (released in 2024)
           - dmd-2.106.1 # (released in 2024)
