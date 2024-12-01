@@ -170,18 +170,40 @@ public:
 		this.waitTimeOut = waitTimeOut;
 	}
 
+    /**
+     * If a previously closed connection is available, test it and return it instead of creating a
+     * new connection. At most, one connection will be tested before creating a new connection, in
+     * order to prevent large delays due to having to test multiple connections.
+     */
 	override Connection getConnection() {
 		Connection conn = null;
-        //writeln("getConnection(): freeConnections.length = " ~ to!string(freeConnections.length));
-        if (freeConnections.length > 0) {
-    				tracef("Retrieving database connection from pool of %s", freeConnections.length);
-            conn = freeConnections[freeConnections.length - 1]; // $ - 1
-            auto oldSize = freeConnections.length;
-            myRemove(freeConnections, freeConnections.length - 1);
+		//writeln("getConnection(): freeConnections.length = " ~ to!string(freeConnections.length));
+		if (freeConnections.length > 0) {
+			tracef("Retrieving database connection from pool of %s", freeConnections.length);
+			conn = freeConnections[freeConnections.length - 1]; // $ - 1
+			auto oldSize = freeConnections.length;
+			myRemove(freeConnections, freeConnections.length - 1);
             //freeConnections.length = oldSize - 1; // some bug in remove? length is not decreased...
             auto newSize = freeConnections.length;
             assert(newSize == oldSize - 1);
-        } else {
+
+            // Test the connection to make sure it is still alive.
+            Statement testStatement = conn.createStatement();
+            scope (exit) testStatement.close();
+            try {
+                ResultSet testResultSet = testStatement.executeQuery("SELECT 1;");
+                scope (exit) testResultSet.close();
+            } catch (Exception e) {
+                // This connection is not usable, do not add it to active connections,
+                // and do not cycle through the rest of the freeConnections to prevent
+                // excess delays.
+                trace("Exception trying to use freeConnection.", e);
+                conn = null;
+            }
+        }
+
+        // Either there were no free connections, or the one that was picked out was invalid.
+        if (conn is null) {
             tracef("Creating new database connection (%s) %s %s", driver, url, params);
 
             try {
