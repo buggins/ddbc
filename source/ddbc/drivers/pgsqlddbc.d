@@ -615,6 +615,7 @@ version(USE_PGSQL) {
                                     v[col] = parse!double(s);
                                     break;
                                 case VARCHAROID:
+                                case BPCHAROID:
                                 case TEXTOID:
                                 case NAMEOID:
                                     v[col] = s;
