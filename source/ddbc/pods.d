@@ -1126,9 +1126,11 @@ string addFieldValue(T)(string m) {
   tmp ~= `	if(o.`~m~`.isNull) {`;
   tmp ~= `		values ~= "NULL";`;
   tmp ~= `	} else {`;
-  tmp ~= `		values ~= "'" ~ to!string(o.` ~ m ~ `) ~ "'";`;
+  //tmp ~= `		values ~= "'" ~ to!string(o.` ~ m ~ `) ~ "'";`;
+  tmp ~= `		values ~= "'" ~ ` ~ stringifyOMember!(T)(m) ~ ` ~ "'";`;
   tmp ~= `}} else {`;
-  tmp ~= `		values ~= "'" ~ to!string(o.` ~ m ~ `) ~ "'";`;
+  //tmp ~= `		values ~= "'" ~ to!string(o.` ~ m ~ `) ~ "'";`;
+  tmp ~= `		values ~= "'" ~ ` ~ stringifyOMember!(T)(m) ~ ` ~ "'";`;
   tmp ~= `}}`;
   return tmp;
   // return `values ~= "'" ~ to!string(o.` ~ m ~ `) ~ "'";`;
@@ -1189,8 +1191,24 @@ string generateUpdateSQL(T)() {
   return res;
 }
 
+string stringifyOMember(T)(string member) {
+    // MySQL won't accept '0001-Jan-01 00:00:00'
+    foreach(m; FieldNameTuple!T) {
+        // static if (__traits(compiles, (typeof(__traits(getMember, T, m))))){
+	    if (m != member) continue;
+
+	    alias typeof(__traits(getMember, T, m)) ti;
+	    static if (is(ti == DateTime) || is(ti == Date)) {
+		return `o.` ~ member ~ `.toISOExtString`;
+	    }
+	//}
+    }
+    return `to!string(o.` ~ member ~ `)`;
+}
+
 string addUpdateValue(T)(string m) {
-  return `values ~= "` ~ m ~ `=\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+  //return `values ~= "` ~ m ~ `=\"" ~ to!string(o.` ~ m ~ `) ~ "\"";`;
+  return `values ~= "` ~ m ~ `=\"" ~ ` ~ stringifyOMember!(T)(m) ~ ` ~ "\"";`;
 }
 
 bool update(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
