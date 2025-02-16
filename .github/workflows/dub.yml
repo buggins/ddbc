@@ -223,4 +223,4 @@ jobs:
         env:
           PORT: ${{ job.services.mssql.ports[1433] }}
         run: |
-          ./ddbctest --connection=odbc://127.0.0.1:$PORT --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 18 for SQL Server" --trusted_connection=yes
+          ./ddbctest --connection=odbc://127.0.0.1:$PORT --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 18 for SQL Server" --trust_server_certificate=yes

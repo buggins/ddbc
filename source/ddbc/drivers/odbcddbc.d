@@ -424,7 +424,23 @@ version (USE_ODBC)
             addToConnectionString("username", "Uid");
             addToConnectionString("password", "Pwd");
             addToConnectionString("database", "Database");
-            addToConnectionString("trusted_connection", "TrustServerCertificate");
+            addToConnectionString("encrypt", "Encrypt"); // defaults to no
+            addToConnectionString("trusted_connection", "Trusted_Connection");
+            addToConnectionString("trust_server_certificate", "TrustServerCertificate"); // Yes|No
+
+            // other potential params:
+            // addToConnectionString("", "Provider"); // SQLNCLI10 or SQLNCLI11
+            // addToConnectionString("", "Data Source");
+            // addToConnectionString("", "Network Library"); // DBMSSOCN
+            // addToConnectionString("", "Initial Catalog");
+            // addToConnectionString("", "Integrated Security"); // true|false|SSPI
+            // addToConnectionString("", "Asynchronous Processing"); // True|False
+            // addToConnectionString("", "AttachDbFilename");
+            // addToConnectionString("", "Failover Partner");
+            // addToConnectionString("", "Column Encryption Setting"); // enabled;
+            // addToConnectionString("", "Enclave Attestation Url");
+            // addToConnectionString("", "MultipleActiveResultSets"); // true;
+            // addToConnectionString("", "Packet Size"); // 4096; (default is 8192)
             string connectionString = connectionProps.join(';');
             
             info(connectionString);

@@ -82,7 +82,7 @@ struct ConnectionParams
 	string host;
 	ushort port;
 	string database;
-	string trusted_connection; // for MS-SQL can be setto 'yes'
+	string trust_server_certificate; // for MS-SQL can be set to 'yes'
 }
 int main(string[] args)
 {
@@ -102,7 +102,7 @@ int main(string[] args)
 	{
 		getopt(args, "user",&par.user, "password",&par.password, "ssl",&par.ssl, 
 				"connection",&URI, "database",&par.database, "driver",&par.odbcdriver,
-				"trusted_connection",&par.trusted_connection);
+				"trust_server_certificate",&par.trust_server_certificate);
 	}
 	catch (GetOptException)
 	{
@@ -207,7 +207,7 @@ int main(string[] args)
 						// ./ddbctest --connection=ddbc:odbc://localhost --user=SA --password=bbk4k77JKH88g54 --driver=FreeTDS
 						params = ODBCDriver.setUserAndPassword(par.user, par.password);
 						params["driver"] = par.odbcdriver;
-						params["trusted_connection"] = par.trusted_connection;
+						params["trust_server_certificate"] = par.trust_server_certificate;
 						url = ODBCDriver.generateUrl(par.host, par.port, params);
 					}
 				}
