@@ -62,7 +62,7 @@ jobs:
 
       - name: Install dependencies on Ubuntu
         if: startsWith(matrix.os, 'ubuntu')
-        run: sudo apt-get update && sudo apt-get install libev-dev libpq-dev libevent-dev libsqlite3-dev -y
+        run: sudo apt-get update && sudo apt-get install libev-dev libpq-dev libevent-dev libsqlite3-dev unixodbc-dev -y
 
       - name: Install dependencies on Mac OSX
         if: startsWith(matrix.os, 'macos')
