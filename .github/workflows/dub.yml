@@ -54,6 +54,7 @@ jobs:
           - { os: macos-13, compiler: dmd-2.108.1 }
           - { os: macos-13, compiler: ldc-1.32.2 }
         exclude:
+          - { os: ubuntu-latest, compiler: dmd-2.107.1 }
           - { os: windows-latest, compiler: dmd-2.098.1 }
           - { os: windows-latest, compiler: dmd-2.097.2 }
 
@@ -189,6 +190,9 @@ jobs:
         uses: dlang-community/setup-dlang@v1
         with:
           compiler: dmd-latest
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install libev-dev libpq-dev libevent-dev libsqlite3-dev unixodbc-dev -y
 
       - name: Install Microsoft ODBC
         run: sudo ACCEPT_EULA=Y apt-get install msodbcsql18 -y
