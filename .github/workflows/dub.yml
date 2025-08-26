@@ -23,6 +23,7 @@ jobs:
         compiler:
           - dmd-latest
           - ldc-latest
+          - dmd-2.110.0 # (released in 2025)
           - dmd-2.109.1 # (released in 2024)
           - dmd-2.108.1 # (released in 2024)
           - dmd-2.107.1 # (released in 2024)
@@ -36,6 +37,10 @@ jobs:
           - dmd-2.099.1 # (released in 2022)
           - dmd-2.098.1 # (released in 2021) ## Has issue re: phobos/std/variant.d
           - dmd-2.097.2 # (released in 2021)
+          - ldc-1.41.0
+          - ldc-1.40.1 # eq to dmd v2.110.0
+          - ldc-1.39.0 # eq to dmd v2.109.1
+          - ldc-1.38.0 # eq to dmd v2.108.1
           - ldc-1.33.0 # eq to dmd v2.103.1
           - ldc-1.32.2 # eq to dmd v2.102.2
           - ldc-1.28.1 # eq to dmd v2.098.1
@@ -53,7 +58,7 @@ jobs:
           - { os: windows-latest, compiler: dmd-2.097.2 }
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install D ${{ matrix.compiler }}
         uses: dlang-community/setup-dlang@v1
@@ -130,7 +135,7 @@ jobs:
 
   integration-tests:
     name: Integration Tests
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     services:
       mysql:
@@ -178,7 +183,7 @@ jobs:
 #          --health-retries 3
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install latest DMD
         uses: dlang-community/setup-dlang@v1
