@@ -826,18 +826,29 @@ version (USE_ODBC)
 
         bool fetch()
         {
-            bool hasData = checkstmt!SQLFetch(stmt) != SQL_NO_DATA;
-
-            if (hasData)
+            // Check if there is any data before calling SQLFetch
+            if(cols.length > 0)
             {
-                this.cols.each!(c => c.read());
+                bool hasData = checkstmt!SQLFetch(stmt) != SQL_NO_DATA;
+
+                if (hasData)
+                {
+                    this.cols.each!(c => c.read());
+                }
+                else
+                {
+                    SQLFreeStmt(stmt, SQL_CLOSE);
+                }
+
+                return hasData;
             }
             else
             {
+                // Error: No data
                 SQLFreeStmt(stmt, SQL_CLOSE);
+                stmt = null;
+                return false;
             }
-
-            return hasData;
         }
 
         class ColumnInfo
