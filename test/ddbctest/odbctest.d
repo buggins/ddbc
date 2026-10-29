@@ -59,6 +59,58 @@ version(USE_ODBC) {
         }
     }
 
+    // Column types that used to be unreadable: BIT (#116), DECIMAL (#82), NCHAR/NVARCHAR (#73, #115)
+    class SqlServerTypesTest : DdbcTestFixture {
+        mixin UnitTest;
+
+        this() {
+            super(
+                "odbc://localhost,%s?user=SA,password=MSbbk4k77JKH88g54,trust_server_certificate=yes,driver=ODBC Driver 18 for SQL Server".format(environment.get("MSSQL_PORT", "1433")), // don't specify database!
+                "CREATE TABLE typed_values (id INT PRIMARY KEY, flag BIT NULL, amount DECIMAL(12, 2) NULL, "
+                    ~ "title NVARCHAR(100) NULL, code NCHAR(4) NULL, label VARCHAR(50) NULL)",
+                "DROP TABLE IF EXISTS typed_values"
+            );
+        }
+
+        @Test
+        public void testReadingBitDecimalAndUnicodeColumns() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            // The SQL text goes through the driver's ANSI functions, which may not treat it as UTF-8,
+            // so the non-ASCII characters are built on the server: "Grüße, мир".
+            stmt.executeUpdate("INSERT INTO typed_values VALUES "
+                ~ "(1, 1, 1234567890.25, N'Gr' + NCHAR(252) + NCHAR(223) + N'e, ' + NCHAR(1084) + NCHAR(1080) + NCHAR(1088), "
+                ~ "N'ab', 'plain'), "
+                ~ "(2, 0, -0.5, N'', N'wxyz', ''), "
+                ~ "(3, NULL, NULL, NULL, NULL, NULL)");
+
+            // columns read out of table order, as in #115
+            ddbc.core.ResultSet rs = stmt.executeQuery(
+                "SELECT id, title, flag, amount, code, label FROM typed_values ORDER BY id");
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertEquals("Grüße, мир", rs.getString(2));
+            assertTrue(rs.getBoolean(3));
+            assertEquals("1234567890.25", rs.getString(4));
+            assertEquals("ab  ", rs.getString(5)); // NCHAR is padded
+            assertEquals("plain", rs.getString(6));
+
+            assertTrue(rs.next());
+            assertEquals("", rs.getString(2));
+            assertFalse(rs.getBoolean(3));
+            assertEquals(-0.5, to!double(rs.getString(4))); // the driver may omit the leading zero
+            assertEquals("wxyz", rs.getString(5));
+            assertEquals("", rs.getString(6));
+
+            assertTrue(rs.next());
+            assertTrue(rs.isNull(2));
+            assertTrue(rs.isNull(3));
+            assertTrue(rs.isNull(4));
+            assertFalse(rs.next());
+        }
+    }
+
     class SqlServerTransactionTest : DdbcTestFixture {
         mixin UnitTest;
 

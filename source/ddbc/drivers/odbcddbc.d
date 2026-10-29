@@ -296,8 +296,10 @@ version (USE_ODBC)
             return SqlType.TIME;
 
         case SQL_CHAR:
+        case SQL_WCHAR:
             return SqlType.CHAR;
 
+        case SQL_LONGVARCHAR:
         case SQL_WLONGVARCHAR:
         case SQL_WVARCHAR:
         case SQL_VARCHAR:
@@ -906,22 +908,37 @@ version (USE_ODBC)
                     return Variant();
 
 
-                // A char-array contains a null-termination.
+                // len is the data size in bytes; character data also needs room for a terminating zero.
                 static if (is(T == char[]))
-                    len += 1;
+                    val.length = len + 1;
+                else static if (is(T == wchar[]))
+                    val.length = len / wchar.sizeof + 1;
+                else
+                    val.length = len;
 
-                val.length = len;
+                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), val.ptr, cast(int)(val.length * typeof(val[0]).sizeof), null);
 
-                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), val.ptr, len, null);
-
-                // A char-array contains a null-termination.
                 static if (is(T == char[]))
-                    val = val[0 .. ($ - 1)];
-
-                static if(is(T == char[]))
-                    return Variant(val.idup);
+                    return Variant(val[0 .. len].idup);
+                else static if (is(T == wchar[]))
+                    return Variant(to!string(val[0 .. len / wchar.sizeof])); // NCHAR/NVARCHAR as UTF-8 string
                 else
                     return Variant(val);
+            }
+
+            // DECIMAL as text. Probing the length with an empty buffer fails for numeric data
+            // (22003 "Numeric value out of range"), so read into a buffer that fits any DECIMAL:
+            // up to 38 digits, a sign and a decimal point.
+            Variant readDecimalAsString()
+            {
+                char[64] buf;
+                int len = 0;
+
+                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(char[]), buf.ptr, cast(int) buf.length, &len);
+
+                if (len == SQL_NULL_DATA)
+                    return Variant();
+                return Variant(buf[0 .. len].idup);
             }
 
             Variant readValue(T)() if (is(T == SysTime))
@@ -1004,6 +1021,8 @@ version (USE_ODBC)
                 case SQL_LONGVARBINARY: return readValue!(byte[]);
                 
                 case SQL_NUMERIC: return readValue!(SQL_NUMERIC_STRUCT);
+                case SQL_DECIMAL: return readDecimalAsString(); // as text, which keeps the full precision
+                case SQL_BIT: return readValue!(bool);
                 case SQL_TYPE_DATE: return readValue!(Date);
                 case SQL_TYPE_TIME: return readValue!(TimeOfDay);
                 case SQL_TYPE_TIMESTAMP: return readValue!(DateTime);
