@@ -1120,17 +1120,36 @@ string generateInsertSQL(T)() {
     return res;
 }
 
+/// Returns `value` as an SQL string literal: in single quotes, with quotes (and for MySQL, backslashes) escaped.
+string quoteSqlString(Statement stmt, string value) {
+    string res = value.replace("'", "''");
+    switch (stmt.getDialectType()) {
+        case DialectType.MYSQL5:
+        case DialectType.MYSQL8:
+            res = res.replace("\\", "\\\\"); // MySQL treats backslash as an escape character by default
+            break;
+        default:
+            break;
+    }
+    return "'" ~ res ~ "'";
+}
+
+/// SQL literal for a POD member value: NULL for a null `Nullable`, otherwise `text` as a quoted string.
+string podSqlLiteral(V)(Statement stmt, ref V value, lazy string text) {
+    static if (__traits(compiles, value.isNull)) {
+        if (value.isNull)
+            return "NULL";
+    }
+    return quoteSqlString(stmt, text);
+}
+
+/// Code for the SQL literal of member `m` of `o`.
+string podValueSQL(T)(string m) {
+  return `podSqlLiteral(stmt, o.` ~ m ~ `, ` ~ stringifyOMember!(T)(m) ~ `)`;
+}
+
 string addFieldValue(T)(string m) {
-  string tmp = `{Variant v = o.`~m~`;`;
-  tmp ~=  `static if (isColumnTypeNullableByDefault!(T, "`~m~`")()) {`;
-  tmp ~= `	if(o.`~m~`.isNull) {`;
-  tmp ~= `		values ~= "NULL";`;
-  tmp ~= `	} else {`;
-  tmp ~= `		values ~= "'" ~ ` ~ stringifyOMember!(T)(m) ~ ` ~ "'";`;
-  tmp ~= `}} else {`;
-  tmp ~= `		values ~= "'" ~ ` ~ stringifyOMember!(T)(m) ~ ` ~ "'";`;
-  tmp ~= `}}`;
-  return tmp;
+  return `values ~= ` ~ podValueSQL!(T)(m) ~ `;`;
 }
 
 bool insert(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
@@ -1148,8 +1167,14 @@ bool insert(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
       }
     }
     insertSQL ~= "(" ~ join(values, ",") ~ ")";
+    if (stmt.getDialectType() == DialectType.PGSQL)
+        insertSQL ~= " RETURNING id"; // Postgres reports generated keys only when asked for them
     Variant insertId;
     stmt.executeUpdate(insertSQL, insertId);
+    if (!insertId.hasValue) {
+        warningf("The database did not return the generated id for %s", T.stringof);
+        return true;
+    }
     
     // Get the Variant using the correct type. See: https://github.com/buggins/ddbc/issues/89
     // Due to phobos bug that was not fixed until 2.097, the convertsTo function call could
@@ -1202,7 +1227,7 @@ string stringifyOMember(T)(string member) {
 }
 
 string addUpdateValue(T)(string m) {
-  return `values ~= "` ~ m ~ `=\"" ~ ` ~ stringifyOMember!(T)(m) ~ ` ~ "\"";`;
+  return `values ~= "` ~ m ~ `=" ~ ` ~ podValueSQL!(T)(m) ~ `;`;
 }
 
 bool update(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {

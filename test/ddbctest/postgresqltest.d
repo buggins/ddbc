@@ -7,6 +7,7 @@ import std.format;
 import std.process: environment;
 import std.variant;
 import std.stdio;
+import std.typecons : Nullable;
 
 import dunit;
 import ddbc.test.common : DdbcTestFixture;
@@ -53,6 +54,67 @@ version(USE_PGSQL) {
             assertEquals(1, result2);
             //assertEquals("long", to!string(id.type));
             //assertEquals(2L, id.get!(long));
+        }
+    }
+
+    // POD insert and update with values that need quoting: https://github.com/buggins/ddbc/issues/88
+    class PostgresPodTest : DdbcTestFixture {
+        mixin UnitTest;
+
+        private struct PodNote {
+            long id;
+            string name;
+            Nullable!int score;
+        }
+
+        this() {
+            super(
+                "ddbc:postgresql://localhost:%s/testdb?user=testuser,password=passw0rd,ssl=false".format(environment.get("POSTGRES_PORT", "5432")),
+                "CREATE TABLE pod_note (id SERIAL PRIMARY KEY, name VARCHAR(255) NOT NULL, score INTEGER NULL)",
+                "DROP TABLE IF EXISTS pod_note"
+            );
+        }
+
+        @Test
+        public void testInsertAndUpdatePodWithQuotesInValues() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            PodNote n;
+            n.name = "O'Brien";
+            n.score = 5;
+            assertTrue(stmt.insert!PodNote(n));
+            n.name = `It's "quoted" \ text`;
+            n.score.nullify();
+            assertTrue(stmt.insert!PodNote(n));
+
+            ddbc.core.ResultSet rs = stmt.executeQuery("SELECT name, score FROM pod_note ORDER BY id");
+            assertTrue(rs.next());
+            assertEquals("O'Brien", rs.getString(1));
+            assertEquals(5, rs.getInt(2));
+            assertTrue(rs.next());
+            assertEquals(`It's "quoted" \ text`, rs.getString(1));
+            rs.getInt(2);
+            assertTrue(rs.wasNull());
+            rs.close();
+
+            stmt.executeUpdate("INSERT INTO pod_note (id, name, score) VALUES (100, 'Walter', 1)");
+            PodNote w = stmt.get!PodNote(100L);
+            assertEquals("Walter", w.name);
+            // a double-quoted value that matches a column name used to be read as that column
+            w.name = "name";
+            w.score.nullify();
+            assertTrue(stmt.update(w));
+            w = stmt.get!PodNote(100L);
+            assertEquals("name", w.name);
+            assertTrue(w.score.isNull);
+
+            w.name = `D'Artagnan \ "the" musketeer`;
+            w.score = 42;
+            assertTrue(stmt.update(w));
+            w = stmt.get!PodNote(100L);
+            assertEquals(`D'Artagnan \ "the" musketeer`, w.name);
+            assertEquals(42, w.score.get);
         }
     }
 
