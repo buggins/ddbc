@@ -926,6 +926,21 @@ version (USE_ODBC)
                     return Variant(val);
             }
 
+            // DECIMAL as text. Probing the length with an empty buffer fails for numeric data
+            // (22003 "Numeric value out of range"), so read into a buffer that fits any DECIMAL:
+            // up to 38 digits, a sign and a decimal point.
+            Variant readDecimalAsString()
+            {
+                char[64] buf;
+                int len = 0;
+
+                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(char[]), buf.ptr, cast(int) buf.length, &len);
+
+                if (len == SQL_NULL_DATA)
+                    return Variant();
+                return Variant(buf[0 .. len].idup);
+            }
+
             Variant readValue(T)() if (is(T == SysTime))
             {
                 auto val = readValue!(SQL_TIMESTAMP_STRUCT);
@@ -1006,7 +1021,7 @@ version (USE_ODBC)
                 case SQL_LONGVARBINARY: return readValue!(byte[]);
                 
                 case SQL_NUMERIC: return readValue!(SQL_NUMERIC_STRUCT);
-                case SQL_DECIMAL: return readValue!(char[]); // as text, which keeps the full precision
+                case SQL_DECIMAL: return readDecimalAsString(); // as text, which keeps the full precision
                 case SQL_BIT: return readValue!(bool);
                 case SQL_TYPE_DATE: return readValue!(Date);
                 case SQL_TYPE_TIME: return readValue!(TimeOfDay);
