@@ -1,6 +1,6 @@
 {
     "name": "ddbc",
-    "description": "DB Connector for D language, similar to JDBC (mysql, sqlite, postgresql, odbc)",
+    "description": "DB Connector for D language, similar to JDBC (mysql, sqlite, postgresql, odbc, clickhouse)",
     "authors": ["Vadim Lopatin"],
     "homepage": "https://github.com/buggins/ddbc",
     "license": "BSL-1.0",
@@ -94,6 +94,13 @@
             }
         },
         {
+            "name": "ClickHouse",
+            "versions": ["USE_CLICKHOUSE"],
+            "dependencies": {
+                "clickhoused": "~>0.1.1"
+            }
+        },
+        {
             "name": "API"
         },
         {
@@ -120,6 +127,22 @@
             "sourceFiles-windows-x86-ldc" : [ "libs/win32-mscoff/sqlite3.lib" ],
             "sourceFiles-windows-x86_omf-dmd" : [ "libs/win32/sqlite3.lib" ],
             "sourceFiles-windows-x86_mscoff-dmd" : [ "libs/win32-mscoff/sqlite3.lib" ]
+        },
+        {
+            "name": "test-clickhouse",
+            "sourcePaths" : ["test/ddbctest"],
+            "mainSourceFile": "test/ddbctest/main.d",
+            "targetName": "ddbc-tests-clickhouse",
+            "targetPath": "test",
+            "targetType": "executable",
+            "versions": ["USE_SQLITE", "USE_CLICKHOUSE"],
+            "dependencies": {
+                "d-unit": "~>0.10.2",
+                "clickhoused": "~>0.1.1"
+            },
+            "libs-posix": ["sqlite3"],
+            "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],
+            "lflags-osx-aarch64": ["-L/opt/homebrew/opt/sqlite3/lib/"]
         },
         {
             "name": "test-omf",
