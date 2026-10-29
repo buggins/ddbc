@@ -229,3 +229,36 @@ jobs:
           PORT: ${{ job.services.mssql.ports[1433] }}
         run: |
           ./ddbctest --connection=odbc://127.0.0.1:$PORT --user=SA --password=MSbbk4k77JKH88g54 --driver="ODBC Driver 18 for SQL Server" --trust_server_certificate=yes
+
+  postgres-windows:
+    name: Postgres on Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install latest DMD
+        uses: dlang-community/setup-dlang@v1
+        with:
+          compiler: dmd-latest
+
+      # The runner image has PostgreSQL installed but stopped; its tools are in PGBIN
+      - name: Start PostgreSQL
+        env:
+          PGUSER: postgres
+          PGPASSWORD: root
+        run: |
+          $pgService = Get-Service -Name postgresql*
+          Set-Service -InputObject $pgService -Status running -StartupType automatic
+          Start-Service -InputObject $pgService
+          & "$env:PGBIN\psql" --command="CREATE USER testuser PASSWORD 'passw0rd'"
+          & "$env:PGBIN\createdb" --owner=testuser testdb
+
+      - name: Build ddbctest
+        run: dub build --config=test
+
+      # TEMPORARY: what the full and PGSQL configurations do today (copyFiles), to reproduce #37 / #65
+      - name: Copy the bundled libpq.dll next to the executable
+        run: Copy-Item libs\win64\libpq.dll test\
+
+      - name: Run ddbctest (Postgres)
+        run: ./test/ddbc-tests.exe --filter Postgres
