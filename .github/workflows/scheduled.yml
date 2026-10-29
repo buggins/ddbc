@@ -1,0 +1,12 @@
+name: Scheduled CI
+
+# Runs the full CI once a month. Kept apart from dub.yml because GitHub disables
+# workflows with a schedule after 60 days without commits; when that happens, only
+# this monthly run stops, and push and pull request runs keep working.
+on:
+  schedule:
+    - cron: '30 7 1 * *'
+
+jobs:
+  ci:
+    uses: ./.github/workflows/dub.yml
