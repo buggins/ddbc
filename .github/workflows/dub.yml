@@ -52,11 +52,11 @@ jobs:
           ## LDC supports Apple silicon
           - { os: macos-latest, compiler: ldc-latest }
           ## macos-15-intel is the Mac runner with an Intel cpu (macos-13 was retired);
-          ## dmd only targets x86_64 on macOS
+          ## dmd only targets x86_64 on macOS. Older compilers do not run on macOS 15
+          ## (dmd 2.108 does not start, ldc 1.32 binaries crash) and are tested on
+          ## Windows/Linux only, as stated at the top of this file.
           - { os: macos-15-intel, compiler: dmd-latest }
           - { os: macos-15-intel, compiler: ldc-latest }
-          - { os: macos-15-intel, compiler: dmd-2.108.1 }
-          - { os: macos-15-intel, compiler: ldc-1.32.2 }
         exclude:
           - { os: ubuntu-latest, compiler: dmd-2.107.1 }
           - { os: windows-latest, compiler: dmd-2.098.1 }
