@@ -77,8 +77,11 @@ version(USE_ODBC) {
             Statement stmt = conn.createStatement();
             scope(exit) stmt.close();
 
+            // The SQL text goes through the driver's ANSI functions, which may not treat it as UTF-8,
+            // so the non-ASCII characters are built on the server: "Grüße, мир".
             stmt.executeUpdate("INSERT INTO typed_values VALUES "
-                ~ "(1, 1, 1234567890.25, N'Grüße, мир', N'ab', 'plain'), "
+                ~ "(1, 1, 1234567890.25, N'Gr' + NCHAR(252) + NCHAR(223) + N'e, ' + NCHAR(1084) + NCHAR(1080) + NCHAR(1088), "
+                ~ "N'ab', 'plain'), "
                 ~ "(2, 0, -0.5, N'', N'wxyz', ''), "
                 ~ "(3, NULL, NULL, NULL, NULL, NULL)");
 
