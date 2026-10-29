@@ -109,6 +109,41 @@ version(USE_ODBC) {
             assertTrue(rs.isNull(4));
             assertFalse(rs.next());
         }
+
+        @Test
+        public void testReadingLongValuesInParts() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            // longer than the first read buffer, so the driver returns them in several parts (#115)
+            ddbc.core.ResultSet rs = stmt.executeQuery("SELECT "
+                ~ "REPLICATE(CAST('abc' AS VARCHAR(MAX)), 4000), "
+                ~ "REPLICATE(CAST(N'x' AS NVARCHAR(MAX)) + NCHAR(1084), 3000), "
+                ~ "CAST(REPLICATE(CAST('xyz' AS VARCHAR(MAX)), 1000) AS VARBINARY(MAX)), "
+                ~ "CAST(N'' AS NVARCHAR(MAX)), "
+                ~ "CAST(NULL AS NVARCHAR(MAX))");
+            assertTrue(rs.next());
+
+            string text = rs.getString(1);
+            assertEquals(12000, text.length);
+            assertEquals("abcabc", text[0 .. 6]);
+            assertEquals("abcabc", text[$ - 6 .. $]);
+
+            string wide = rs.getString(2);
+            dstring chars = to!dstring(wide);
+            assertEquals(6000, chars.length);
+            assertEquals("xмxм"d, chars[0 .. 4]);
+            assertEquals("xмxм"d, chars[$ - 4 .. $]);
+
+            byte[] bytes = rs.getBytes(3);
+            assertEquals(3000, bytes.length);
+            assertEquals(cast(byte) 'x', bytes[0]);
+            assertEquals(cast(byte) 'z', bytes[$ - 1]);
+
+            assertEquals("", rs.getString(4));
+            assertTrue(rs.isNull(5));
+            assertFalse(rs.next());
+        }
     }
 
     class SqlServerTransactionTest : DdbcTestFixture {
