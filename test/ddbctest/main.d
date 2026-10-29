@@ -629,6 +629,29 @@ class SQLitePodTest : DdbcTestFixture {
         assertEquals("Walter Bright", u.name);
     }
 
+    @Test // Test for: https://github.com/buggins/ddbc/issues/88
+    public void testInsertAndUpdatePodWithQuotesInValues() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+
+        User u;
+        u.name = "O'Brien";
+        u.dob = Date(1979, 8, 5);
+        u.created = DateTime(2017, 11, 23, 20, 45, 0);
+        u.updated = Clock.currTime();
+        assertTrue(stmt.insert!User(u));
+        assertEquals("O'Brien", stmt.get!User(u.id).name);
+
+        // a double-quoted value that matches a column name used to be read as that column
+        u.name = "name";
+        assertTrue(stmt.update(u));
+        assertEquals("name", stmt.get!User(u.id).name);
+
+        u.name = `It's "quoted" \ text`;
+        assertTrue(stmt.update(u));
+        assertEquals(`It's "quoted" \ text`, stmt.get!User(u.id).name);
+    }
+
     @Test
     public void testGetNonExistingRowShouldThrowException() {
         Statement stmt = conn.createStatement();
