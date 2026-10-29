@@ -896,49 +896,46 @@ version (USE_ODBC)
                 return Variant(val);
             }
 
+            // Character and binary data, read in parts: a first part into a buffer on the stack, then
+            // the rest. Lengths are in bytes, and character data is zero-terminated in each part.
+            // (Probing the length with an empty buffer first is unreliable: SQL Server rejects it for
+            // numeric data, and the Windows driver manager may write into the "empty" buffer, #115.)
             Variant readValue(T)()
                     if (isArray!(T) && !is(TypeToCIdentifier!(T) == void))
             {
-                T val;
-                int len = 0;
+                alias E = typeof(T.init[0]);
+                enum size_t terminator = is(T == char[]) || is(T == wchar[]) ? 1 : 0;
 
-                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), &val, 0, &len);
+                E[256] first;
+                E[] buf = first[];
+                T data;
+                while (true)
+                {
+                    int len = 0;
+                    if (checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), buf.ptr,
+                            cast(int)(buf.length * E.sizeof), &len) == SQL_NO_DATA)
+                        break; // all parts read
+                    if (len == SQL_NULL_DATA)
+                        return Variant();
 
-                if (len == SQL_NULL_DATA)
-                    return Variant();
+                    const size_t capacity = buf.length - terminator;
+                    if (len != cast(int) SQL_NO_TOTAL && len / E.sizeof <= capacity)
+                    {
+                        data ~= buf[0 .. len / E.sizeof]; // the last part
+                        break;
+                    }
+                    data ~= buf[0 .. capacity];
+                    // len is what remained before this part, when the driver knows it
+                    const size_t rest = len == cast(int) SQL_NO_TOTAL ? buf.length * 2 : len / E.sizeof - capacity;
+                    buf = new E[rest + terminator];
+                }
 
-
-                // len is the data size in bytes; character data also needs room for a terminating zero.
                 static if (is(T == char[]))
-                    val.length = len + 1;
+                    return Variant(data.idup);
                 else static if (is(T == wchar[]))
-                    val.length = len / wchar.sizeof + 1;
+                    return Variant(to!string(data)); // NCHAR/NVARCHAR as UTF-8 string
                 else
-                    val.length = len;
-
-                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), val.ptr, cast(int)(val.length * typeof(val[0]).sizeof), null);
-
-                static if (is(T == char[]))
-                    return Variant(val[0 .. len].idup);
-                else static if (is(T == wchar[]))
-                    return Variant(to!string(val[0 .. len / wchar.sizeof])); // NCHAR/NVARCHAR as UTF-8 string
-                else
-                    return Variant(val);
-            }
-
-            // DECIMAL as text. Probing the length with an empty buffer fails for numeric data
-            // (22003 "Numeric value out of range"), so read into a buffer that fits any DECIMAL:
-            // up to 38 digits, a sign and a decimal point.
-            Variant readDecimalAsString()
-            {
-                char[64] buf;
-                int len = 0;
-
-                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(char[]), buf.ptr, cast(int) buf.length, &len);
-
-                if (len == SQL_NULL_DATA)
-                    return Variant();
-                return Variant(buf[0 .. len].idup);
+                    return Variant(data);
             }
 
             Variant readValue(T)() if (is(T == SysTime))
@@ -1021,7 +1018,7 @@ version (USE_ODBC)
                 case SQL_LONGVARBINARY: return readValue!(byte[]);
                 
                 case SQL_NUMERIC: return readValue!(SQL_NUMERIC_STRUCT);
-                case SQL_DECIMAL: return readDecimalAsString(); // as text, which keeps the full precision
+                case SQL_DECIMAL: return readValue!(char[]); // as text, which keeps the full precision
                 case SQL_BIT: return readValue!(bool);
                 case SQL_TYPE_DATE: return readValue!(Date);
                 case SQL_TYPE_TIME: return readValue!(TimeOfDay);
