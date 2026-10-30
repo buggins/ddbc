@@ -149,6 +149,11 @@ or
 ddbc:postgresql://hostname:5432/dbname
 ```
 
+The PostgreSQL driver loads the client library (libpq) at run time. On Linux and macOS, install the PostgreSQL client
+package (e.g. `libpq-dev` or `postgresql-libs`). On Windows, install PostgreSQL (or just its command line tools) and add
+its `bin` directory, e.g. `C:\Program Files\PostgreSQL\17\bin`, to `PATH`: `libpq.dll` needs the other DLLs in that
+directory (OpenSSL, libintl, ...). ddbc no longer ships its own `libpq.dll`.
+
 ### Microsoft SQL Server (via ODBC)
 
 ```
