@@ -296,8 +296,10 @@ version (USE_ODBC)
             return SqlType.TIME;
 
         case SQL_CHAR:
+        case SQL_WCHAR:
             return SqlType.CHAR;
 
+        case SQL_LONGVARCHAR:
         case SQL_WLONGVARCHAR:
         case SQL_WVARCHAR:
         case SQL_VARCHAR:
@@ -894,34 +896,46 @@ version (USE_ODBC)
                 return Variant(val);
             }
 
+            // Character and binary data, read in parts: a first part into a buffer on the stack, then
+            // the rest. Lengths are in bytes, and character data is zero-terminated in each part.
+            // (Probing the length with an empty buffer first is unreliable: SQL Server rejects it for
+            // numeric data, and the Windows driver manager may write into the "empty" buffer, #115.)
             Variant readValue(T)()
                     if (isArray!(T) && !is(TypeToCIdentifier!(T) == void))
             {
-                T val;
-                int len = 0;
+                alias E = typeof(T.init[0]);
+                enum size_t terminator = is(T == char[]) || is(T == wchar[]) ? 1 : 0;
 
-                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), &val, 0, &len);
+                E[256] first;
+                E[] buf = first[];
+                T data;
+                while (true)
+                {
+                    int len = 0;
+                    if (checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), buf.ptr,
+                            cast(int)(buf.length * E.sizeof), &len) == SQL_NO_DATA)
+                        break; // all parts read
+                    if (len == SQL_NULL_DATA)
+                        return Variant();
 
-                if (len == SQL_NULL_DATA)
-                    return Variant();
+                    const size_t capacity = buf.length - terminator;
+                    if (len != cast(int) SQL_NO_TOTAL && len / E.sizeof <= capacity)
+                    {
+                        data ~= buf[0 .. len / E.sizeof]; // the last part
+                        break;
+                    }
+                    data ~= buf[0 .. capacity];
+                    // len is what remained before this part, when the driver knows it
+                    const size_t rest = len == cast(int) SQL_NO_TOTAL ? buf.length * 2 : len / E.sizeof - capacity;
+                    buf = new E[rest + terminator];
+                }
 
-
-                // A char-array contains a null-termination.
                 static if (is(T == char[]))
-                    len += 1;
-
-                val.length = len;
-
-                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), val.ptr, len, null);
-
-                // A char-array contains a null-termination.
-                static if (is(T == char[]))
-                    val = val[0 .. ($ - 1)];
-
-                static if(is(T == char[]))
-                    return Variant(val.idup);
+                    return Variant(data.idup);
+                else static if (is(T == wchar[]))
+                    return Variant(to!string(data)); // NCHAR/NVARCHAR as UTF-8 string
                 else
-                    return Variant(val);
+                    return Variant(data);
             }
 
             Variant readValue(T)() if (is(T == SysTime))
@@ -1004,6 +1018,8 @@ version (USE_ODBC)
                 case SQL_LONGVARBINARY: return readValue!(byte[]);
                 
                 case SQL_NUMERIC: return readValue!(SQL_NUMERIC_STRUCT);
+                case SQL_DECIMAL: return readValue!(char[]); // as text, which keeps the full precision
+                case SQL_BIT: return readValue!(bool);
                 case SQL_TYPE_DATE: return readValue!(Date);
                 case SQL_TYPE_TIME: return readValue!(TimeOfDay);
                 case SQL_TYPE_TIMESTAMP: return readValue!(DateTime);
