@@ -16,6 +16,12 @@ services:
       - MYSQL_DATABASE=testdb
       - MYSQL_USER=testuser
       - MYSQL_PASSWORD=passw0rd
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    restart: always
+    ports: ['9000:9000', '8123:8123']
+    environment:
+      - CLICKHOUSE_SKIP_USER_SETUP=1
   postgres:
     image: postgres:latest
     restart: always

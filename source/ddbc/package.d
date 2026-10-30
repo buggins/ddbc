@@ -22,6 +22,7 @@ MySQL                       USE_MYSQL                          mysql
 SQLite                      USE_SQLITE                         sqlite
 PGSQL                       USE_PGSQL                          postgresql
 ODBC                        USE_ODBC                           odbc
+ClickHouse                  USE_CLICKHOUSE                     clickhouse (needs D frontend 2.105+; not in full)
 API                         (none)                             (no drivers, API only)
 
 
@@ -105,6 +106,15 @@ For MySQL, use following form of URL:
 Optionally you can put user name and password as url parameters:
 
     mysql://host:port/dbname?user=username,password=userpassword
+
+
+For ClickHouse (configuration ClickHouse), use following form of URL:
+
+    clickhouse://host:port/dbname
+
+Optionally you can put user name, password and connection options (e.g. compress=lz4) as url parameters:
+
+    clickhouse://host:port/dbname?user=username,password=userpassword,compress=lz4
 
 
 For SQLite, use following form of URL:
@@ -193,6 +203,11 @@ version(USE_MYSQL)
 {
     // register MySQL driver
     private import ddbc.drivers.mysqlddbc;
+}
+version(USE_CLICKHOUSE)
+{
+    // register ClickHouse driver
+    private import ddbc.drivers.clickhouseddbc;
 }
 version(USE_ODBC)
 {

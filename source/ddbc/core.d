@@ -421,7 +421,8 @@ enum DialectType : string {
 	MYSQL8 = "MySQL 8", // todo: add support for MySQL 8
 	PGSQL = "PL/pgSQL", // PL/pgSQL (Procedural Language/PostgreSQL) used by PostgreSQL
 	TSQL = "T-SQL", // T-SQL (Transact-SQL) is Microsoft’s extension of SQL
-	PLSQL = "PL/SQL" // Oracle (PL/SQL)
+	PLSQL = "PL/SQL", // Oracle (PL/SQL)
+	CLICKHOUSE = "ClickHouse" // ClickHouse SQL dialect
 }
 
 interface DialectAware {
@@ -498,7 +499,7 @@ string makeDDBCUrl(string driverName, string[string] params) {
 string makeDDBCUrl(string driverName, string host = null, int port = 0, 
 							string dbName = null, string[string] params = null) {
 	import std.algorithm.searching : canFind;
-	enforce(canFind(["sqlite", "postgresql", "mysql", "sqlserver", "oracle", "odbc"], driverName), "driver must be one of sqlite|postgresql|mysql|sqlserver|oracle|odbc");
+	enforce(canFind(["sqlite", "postgresql", "mysql", "sqlserver", "oracle", "odbc", "clickhouse"], driverName), "driver must be one of sqlite|postgresql|mysql|sqlserver|oracle|odbc|clickhouse");
     import std.conv : to;
     char[] res;
     res.assumeSafeAppend;

@@ -5,7 +5,7 @@ DDBC
 
 DDBC is DB Connector for D language (similar to JDBC)
 
-Currently supports MySQL, PostgreSQL, SQLite and SQL Server (via ODBC).
+Currently supports MySQL, PostgreSQL, SQLite, SQL Server (via ODBC) and ClickHouse (opt-in `ClickHouse` configuration, via the pure D [clickhoused](https://code.dlang.org/packages/clickhoused) client).
 
 The project is hosted on [github](https://github.com/buggins/ddbc) with documentation available on the [wiki](https://github.com/buggins/ddbc/wiki).
 
@@ -154,6 +154,20 @@ package (e.g. `libpq-dev` or `postgresql-libs`). On Windows, install PostgreSQL 
 its `bin` directory, e.g. `C:\Program Files\PostgreSQL\17\bin`, to `PATH`: `libpq.dll` needs the other DLLs in that
 directory (OpenSSL, libintl, ...). ddbc no longer ships its own `libpq.dll`.
 
+### ClickHouse
+
+Use the `ClickHouse` configuration (`"subConfigurations": { "ddbc": "ClickHouse" }`). The default port is 9000 (the native protocol):
+
+```
+ddbc:clickhouse://127.0.0.1:9000/default?user=default,password=secret
+
+or, with network compression and a ClickHouse setting:
+
+ddbc:clickhouse://host1:9000,host2:9000/dbname?user=default,compress=lz4,max_threads=4
+```
+
+ClickHouse has no transactions (auto-commit only) and no auto-increment keys. Result sets are forward-only and streamed; prepared statement parameters are sent as typed server-side query parameters.
+
 ### Microsoft SQL Server (via ODBC)
 
 ```
@@ -181,7 +195,7 @@ the DSN name will be used.
 
 ## Contributing
 
-pull requests are welcome. Please ensure your local branch is up to date and all tests are passing locally before making a pull request. A docker-compose file is included to help with local development. Use `docker-compose up -d` then run `dub test --config=MySQL`, `dub test --config=PGSQL` and `dub test --config=ODBC`. See the `.travis.yml` file and individual driver code for details on creating the relevant databases for local testing.
+pull requests are welcome. Please ensure your local branch is up to date and all tests are passing locally before making a pull request. A docker-compose file is included to help with local development. Use `docker-compose up -d` then run `dub test --config=MySQL`, `dub test --config=PGSQL` and `dub test --config=ODBC`. ClickHouse tests run with `dub run --config=test-clickhouse`. See the `.travis.yml` file and individual driver code for details on creating the relevant databases for local testing.
 
 The examples should also run, make sure to change to the _example_ directory and run `dub build` then make sure that the compiled executable will run with each supported database (you'll need to install relevant libs and create databases and users with relevant permissions):
 
