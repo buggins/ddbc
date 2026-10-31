@@ -174,6 +174,8 @@ TLS uses the system's OpenSSL library, loaded at run time only when a secure con
 
 ClickHouse has no transactions (auto-commit only) and no auto-increment keys. Result sets are forward-only and streamed; prepared statement parameters are sent as typed server-side query parameters.
 
+All column types of clickhoused 0.3 can be read: besides numbers, strings, dates and UUIDs also `Decimal` (reported as `DECIMAL`, with precision and scale), 128/256-bit integers (`NUMERIC`), `LowCardinality`, `IPv4`/`IPv6`, and `Array`, `Tuple` and `Map` (as text, e.g. `[1,2]`, `{'k':1}`). For typed access to composite values, use `getNativeConnection()` and clickhoused's struct mapping.
+
 ### Microsoft SQL Server (via ODBC)
 
 ```

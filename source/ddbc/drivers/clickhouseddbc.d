@@ -50,21 +50,39 @@ version (USE_CLICKHOUSE)
     import std.datetime : Date, DateTime, TimeOfDay;
     import std.datetime.systime : SysTime;
     import std.exception : enforce;
+    import std.meta : AliasSeq;
     import std.variant : Variant;
 
     import CH = clickhoused;
     import clickhoused.io.backend : PoolSync, backendFor;
+
+    /// The type without `Nullable(...)` and `LowCardinality(...)` wrappers, in any order.
+    private string baseClickHouseType(string typeName)
+    {
+        import std.algorithm.searching : startsWith;
+
+        string t = typeName;
+        for (;;)
+        {
+            if (t.startsWith("Nullable(") && t.length > 10)
+                t = t[9 .. $ - 1];
+            else if (t.startsWith("LowCardinality(") && t.length > 16)
+                t = t[15 .. $ - 1];
+            else
+                return t;
+        }
+    }
 
     /// Maps a ClickHouse type name to the closest `SqlType`.
     SqlType fromClickHouseType(string typeName)
     {
         import std.algorithm.searching : startsWith;
 
-        string t = typeName;
-        if (t.startsWith("Nullable(") && t.length > 10)
-            t = t[9 .. $ - 1];
-        if (t.startsWith("LowCardinality(") && t.length > 16)
-            t = t[15 .. $ - 1];
+        const t = baseClickHouseType(typeName);
+        if (t == "Int128" || t == "UInt128" || t == "Int256" || t == "UInt256")
+            return SqlType.NUMERIC;
+        if (t.startsWith("Decimal"))
+            return SqlType.DECIMAL;
         if (t.startsWith("UInt8") || t.startsWith("Int8"))
             return SqlType.TINYINT;
         if (t.startsWith("UInt16") || t.startsWith("Int16"))
@@ -98,6 +116,10 @@ version (USE_CLICKHOUSE)
         assert(fromClickHouseType("Nullable(Int32)") == SqlType.INTEGER);
         assert(fromClickHouseType("DateTime64(3, 'UTC')") == SqlType.DATETIME);
         assert(fromClickHouseType("LowCardinality(String)") == SqlType.VARCHAR);
+        assert(fromClickHouseType("LowCardinality(Nullable(String))") == SqlType.VARCHAR);
+        assert(fromClickHouseType("Nullable(Decimal(18, 4))") == SqlType.DECIMAL);
+        assert(fromClickHouseType("Int256") == SqlType.NUMERIC);
+        assert(fromClickHouseType("Array(UInt8)") == SqlType.OTHER);
         assert(fromClickHouseType("UUID") == SqlType.OTHER);
     }
 
@@ -367,12 +389,25 @@ version (USE_CLICKHOUSE)
                 item.typeName = c.typeName;
                 item.type = fromClickHouseType(c.typeName);
                 item.isNullable = c.isNullable ? 1 : 0;
-                const t = c.typeName.startsWith("Nullable(") ? c.typeName[9 .. $] : c.typeName;
-                item.isSigned = t.startsWith("Int") || t.startsWith("Float");
-                if (auto fixed = cast(CH.FixedStringColumn) c)
+                const t = baseClickHouseType(c.typeName);
+                item.isSigned = t.startsWith("Int") || t.startsWith("Float") || t.startsWith("Decimal");
+                // The column of the values, without LowCardinality and Nullable wrappers
+                CH.Column plain = c;
+                if (auto lc = cast(CH.LowCardinalityColumn) plain)
+                    plain = lc.values;
+                if (auto n = cast(CH.NullableColumn) plain)
+                    plain = n.nested;
+                if (auto fixed = cast(CH.FixedStringColumn) plain)
                     item.displaySize = cast(int) fixed.width;
-                if (auto t64 = cast(CH.DateTime64Column) c)
+                if (auto t64 = cast(CH.DateTime64Column) plain)
                     item.scale = t64.precision;
+                static foreach (D; AliasSeq!(CH.Decimal32Column, CH.Decimal64Column, CH.Decimal128Column,
+                        CH.Decimal256Column))
+                    if (auto d = cast(D) plain)
+                    {
+                        item.precision = d.precision;
+                        item.scale = d.scale;
+                    }
                 item.isReadOnly = true;
                 items ~= item;
             }
