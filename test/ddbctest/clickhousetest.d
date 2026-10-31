@@ -18,9 +18,11 @@ version(USE_CLICKHOUSE) {
 
     pragma(msg, "DDBC test will run ClickHouse tests");
 
-    /// Connection string for the test server; CLICKHOUSE_PORT selects the native port (default 9000).
+    /// Connection string for the test server; CLICKHOUSE_PORT selects the native port (default 9000),
+    /// and CLICKHOUSE_PARAMS adds parameters, e.g. ",secure=true,tls_ca_file=/path/ca.pem" for TLS.
     string clickHouseUrl() {
-        return "ddbc:clickhouse://localhost:%s/default?user=default".format(environment.get("CLICKHOUSE_PORT", "9000"));
+        return "ddbc:clickhouse://localhost:%s/default?user=default%s".format(environment.get("CLICKHOUSE_PORT", "9000"),
+                environment.get("CLICKHOUSE_PARAMS", ""));
     }
 
     class ClickHouseTest : DdbcTestFixture {

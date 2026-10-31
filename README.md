@@ -156,7 +156,7 @@ directory (OpenSSL, libintl, ...). ddbc no longer ships its own `libpq.dll`.
 
 ### ClickHouse
 
-Use the `ClickHouse` configuration (`"subConfigurations": { "ddbc": "ClickHouse" }`). The default port is 9000 (the native protocol):
+Use the `ClickHouse` configuration (`"subConfigurations": { "ddbc": "ClickHouse" }`). The default port is 9000 (the native protocol), or 9440 with TLS:
 
 ```
 ddbc:clickhouse://127.0.0.1:9000/default?user=default,password=secret
@@ -164,7 +164,13 @@ ddbc:clickhouse://127.0.0.1:9000/default?user=default,password=secret
 or, with network compression and a ClickHouse setting:
 
 ddbc:clickhouse://host1:9000,host2:9000/dbname?user=default,compress=lz4,max_threads=4
+
+or over TLS (e.g. ClickHouse Cloud):
+
+ddbc:clickhouse://abc123.eu-west-1.aws.clickhouse.cloud/default?user=default,password=secret,secure=true
 ```
+
+TLS uses the system's OpenSSL library, loaded at run time only when a secure connection is made; see the [clickhoused README](https://github.com/buggins/clickhoused#tls) for the TLS options (`tls_ca_file`, client certificates, ...) and where to get OpenSSL on each OS.
 
 ClickHouse has no transactions (auto-commit only) and no auto-increment keys. Result sets are forward-only and streamed; prepared statement parameters are sent as typed server-side query parameters.
 
