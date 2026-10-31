@@ -5,15 +5,19 @@
  *
  * DDBC driver for ClickHouse, built on the pure-D native client clickhoused
  * (https://code.dlang.org/packages/clickhoused). Enabled by the `ClickHouse`
- * configuration (version `USE_CLICKHOUSE`); needs a D frontend 2.105 or newer.
+ * configuration (version `USE_CLICKHOUSE`).
  *
  * URL format:
  * ---
  * clickhouse://host[:port][,host2[:port2]...]/database?user=name,password=secret,compress=lz4
  * ---
- * The port defaults to 9000. Parameters are the options of clickhoused connection strings
- * (`compress`, `connect_timeout`, `receive_timeout`, `io`, ...); any other parameter is sent
- * to the server as a setting, e.g. `max_threads=4`.
+ * The port defaults to 9000, or 9440 with `secure=true`. Parameters are the options of
+ * clickhoused connection strings (`compress`, `connect_timeout`, `receive_timeout`, `io`, ...);
+ * any other parameter is sent to the server as a setting, e.g. `max_threads=4`.
+ *
+ * TLS: `secure=true`, plus optionally `tls_ca_file`, `tls_cert_file`, `tls_key_file`,
+ * `tls_server_name` and `skip_verify`. clickhoused loads the system's OpenSSL library at run
+ * time when the first secure connection is made; see its documentation.
  *
  * ClickHouse specifics:
  * $(UL
