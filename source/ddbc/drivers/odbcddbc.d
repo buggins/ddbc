@@ -1720,7 +1720,7 @@ version (USE_ODBC)
         /++
         The value of a column as `T`, for the numeric and boolean getters: converted between
         integer widths with range checks, and parsed from text (DECIMAL and NUMERIC are read as
-        text). NULL gives `T.init`.
+        text). NULL gives 0 (`false`), as in the other drivers.
         +/
         private T valueAs(T)(int columnIndex)
         {
@@ -1729,7 +1729,7 @@ version (USE_ODBC)
             auto v = stmt.getColumn(columnIndex).value;
             lastIsNull = !v.hasValue;
             if (lastIsNull)
-                return T.init;
+                return cast(T) 0; // not T.init, which is NaN for floating-point types
             if (v.convertsTo!(T))
                 return v.get!(T);
             try
