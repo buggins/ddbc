@@ -160,6 +160,36 @@ version(USE_CLICKHOUSE) {
         }
 
         @Test
+        public void testExtendedTypes() {
+            // Types added in clickhoused 0.3: values as text, and their metadata
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            ResultSet rs = stmt.executeQuery("SELECT toDecimal64('-1.50', 3) AS d, "
+                ~ "CAST('x' AS LowCardinality(Nullable(String))) AS s, toInt128(-2) AS i, [1, 2] AS a, "
+                ~ "map('k', 1) AS m, tuple(1, 'a') AS t, toIPv4('1.2.3.4') AS ip");
+            scope(exit) rs.close();
+            ResultSetMetaData meta = rs.getMetaData();
+            assertEquals(cast(int) SqlType.DECIMAL, meta.getColumnType(1));
+            assertEquals(18, meta.getPrecision(1));
+            assertEquals(3, meta.getScale(1));
+            assertEquals(cast(int) SqlType.VARCHAR, meta.getColumnType(2));
+            assertEquals(1, meta.isNullable(2));
+            assertEquals(cast(int) SqlType.NUMERIC, meta.getColumnType(3));
+            assertEquals(cast(int) SqlType.OTHER, meta.getColumnType(4));
+
+            assertTrue(rs.next());
+            assertEquals("-1.5", rs.getString(1));
+            assertEquals(-1.5, rs.getDouble(1));
+            assertEquals("x", rs.getString(2));
+            assertEquals(-2L, rs.getLong(3));
+            assertEquals("[1,2]", rs.getString(4));
+            assertEquals("{'k':1}", rs.getString(5));
+            assertEquals("(1,'a')", rs.getString(6));
+            assertEquals("1.2.3.4", rs.getString(7));
+            assertFalse(rs.next());
+        }
+
+        @Test
         public void testTransactionsAreNotSupported() {
             assertTrue(conn.getAutoCommit());
             conn.setAutoCommit(true);
