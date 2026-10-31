@@ -10,6 +10,7 @@ import std.stdio;
 import std.typecons : Nullable;
 
 import dunit;
+import std.exception : assertThrown;
 import ddbc.test.common : DdbcTestFixture;
 import ddbc.core : Connection, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
@@ -54,6 +55,55 @@ version(USE_PGSQL) {
             assertEquals(1, result2);
             //assertEquals("long", to!string(id.type));
             //assertEquals(2L, id.get!(long));
+        }
+    }
+
+    // Types the driver used to reject with "Unsupported column type": https://github.com/buggins/ddbc/issues/149
+    class PostgresTypesTest : DdbcTestFixture {
+        mixin UnitTest;
+
+        this() {
+            super(
+                "ddbc:postgresql://localhost:%s/testdb?user=testuser,password=passw0rd,ssl=false".format(environment.get("POSTGRES_PORT", "5432")),
+                "CREATE TYPE ddbc_mood AS ENUM ('sad', 'happy')",
+                "DROP TYPE IF EXISTS ddbc_mood"
+            );
+        }
+
+        @Test
+        public void testNumericArraysAndOtherTypes() {
+            import ddbc.core : ResultSetMetaData, SqlType;
+
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            auto rs = stmt.executeQuery(`SELECT 1.25::numeric(10,2) AS n, 12.00::numeric AS whole, ARRAY[1,2,3] AS a,
+                ARRAY['x','y z'] AS t, '192.168.0.1'::inet AS ip, interval '1 day' AS i, ROW(1, 'a') AS r,
+                '12:00+02'::timetz AS tz, B'101'::bit(3) AS b, 'v'::varchar(20) AS v, 'happy'::ddbc_mood AS mood`);
+            scope(exit) rs.close();
+
+            ResultSetMetaData meta = rs.getMetaData();
+            assertEquals("numeric", meta.getColumnTypeName(1));
+            assertEquals(cast(int) SqlType.NUMERIC, meta.getColumnType(1));
+            assertEquals(10, meta.getPrecision(1));
+            assertEquals(2, meta.getScale(1));
+            assertEquals("_int4", meta.getColumnTypeName(3));
+            assertEquals(cast(int) SqlType.OTHER, meta.getColumnType(3));
+            assertEquals("varchar", meta.getColumnTypeName(10));
+            assertEquals(20, meta.getPrecision(10));
+
+            assertTrue(rs.next());
+            assertEquals("1.25", rs.getString(1));
+            assertEquals(1.25, rs.getDouble(1));
+            assertEquals(12L, rs.getLong(2));
+            assertThrown!SQLException(rs.getLong(1)); // not a whole number
+            assertEquals("{1,2,3}", rs.getString(3));
+            assertEquals(`{x,"y z"}`, rs.getString(4));
+            assertEquals("192.168.0.1", rs.getString(5));
+            assertEquals("1 day", rs.getString(6));
+            assertEquals("(1,a)", rs.getString(7));
+            assertEquals("12:00:00+02", rs.getString(8));
+            assertEquals("101", rs.getString(9));
+            assertEquals("happy", rs.getString(11)); // user-defined enum: https://github.com/buggins/ddbc/issues/61
         }
     }
 

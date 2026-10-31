@@ -118,6 +118,118 @@ version(USE_PGSQL) {
     const int REGDICTIONARYOID = 3769;
     const int INT4RANGEOID = 3904;
     const int RECORDOID = 2249;
+
+    /// The PostgreSQL name (`pg_type.typname`) of a built-in type, or "" for others.
+    string pgTypeName(int oid) {
+        switch (oid) {
+            case BOOLOID: return "bool";
+            case BYTEAOID: return "bytea";
+            case CHAROID: return "char";
+            case NAMEOID: return "name";
+            case INT8OID: return "int8";
+            case INT2OID: return "int2";
+            case INT4OID: return "int4";
+            case TEXTOID: return "text";
+            case OIDOID: return "oid";
+            case JSONOID: return "json";
+            case XMLOID: return "xml";
+            case FLOAT4OID: return "float4";
+            case FLOAT8OID: return "float8";
+            case CASHOID: return "money";
+            case MACADDROID: return "macaddr";
+            case INETOID: return "inet";
+            case CIDROID: return "cidr";
+            case BPCHAROID: return "bpchar";
+            case VARCHAROID: return "varchar";
+            case DATEOID: return "date";
+            case TIMEOID: return "time";
+            case TIMESTAMPOID: return "timestamp";
+            case TIMESTAMPTZOID: return "timestamptz";
+            case INTERVALOID: return "interval";
+            case TIMETZOID: return "timetz";
+            case BITOID: return "bit";
+            case VARBITOID: return "varbit";
+            case NUMERICOID: return "numeric";
+            case UUIDOID: return "uuid";
+            case JSONBOID: return "jsonb";
+            case RECORDOID: return "record";
+            case 1000: return "_bool";
+            case 1005: return "_int2";
+            case 1007: return "_int4";
+            case 1009: return "_text";
+            case 1014: return "_bpchar";
+            case 1015: return "_varchar";
+            case 1016: return "_int8";
+            case 1021: return "_float4";
+            case 1022: return "_float8";
+            case 1231: return "_numeric";
+            case 2951: return "_uuid";
+            default: return "";
+        }
+    }
+
+    /// The closest `SqlType` of a PostgreSQL type.
+    SqlType pgSqlType(int oid) {
+        switch (oid) {
+            case BOOLOID: return SqlType.BOOLEAN;
+            case INT2OID: return SqlType.SMALLINT;
+            case INT4OID: case OIDOID: return SqlType.INTEGER;
+            case INT8OID: return SqlType.BIGINT;
+            case FLOAT4OID: return SqlType.FLOAT;
+            case FLOAT8OID: return SqlType.DOUBLE;
+            case NUMERICOID: return SqlType.NUMERIC;
+            case CHAROID: case BPCHAROID: return SqlType.CHAR;
+            case VARCHAROID: case TEXTOID: case NAMEOID: return SqlType.VARCHAR;
+            case BYTEAOID: return SqlType.VARBINARY;
+            case DATEOID: return SqlType.DATE;
+            case TIMEOID: case TIMETZOID: return SqlType.TIME;
+            case TIMESTAMPOID: case TIMESTAMPTZOID: return SqlType.DATETIME;
+            case BITOID: case VARBITOID: return SqlType.BIT;
+            default: return SqlType.OTHER;
+        }
+    }
+
+    /// Whether a PostgreSQL type is a signed number.
+    bool pgIsSigned(int oid) {
+        return oid == INT2OID || oid == INT4OID || oid == INT8OID || oid == FLOAT4OID || oid == FLOAT8OID
+            || oid == NUMERICOID || oid == CASHOID;
+    }
+
+    /// Parses a value the server sent as text, e.g. a numeric, for a numeric getter.
+    /// Integer targets accept a fractional part of zeros ("12.00").
+    T parseText(T)(string s, int columnIndex) {
+        import std.algorithm.searching : all;
+        import std.string : indexOf;
+        import std.traits : isFloatingPoint;
+
+        try {
+            static if (isFloatingPoint!T)
+                return to!T(s);
+            else {
+                string whole = s;
+                const dot = s.indexOf('.');
+                if (dot >= 0) {
+                    if (!s[dot + 1 .. $].all!(c => c == '0'))
+                        throw new ConvException("fractional");
+                    whole = s[0 .. dot];
+                }
+                return to!T(whole);
+            }
+        } catch (ConvException) {
+            throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " value '" ~ s ~ "' to "
+                ~ T.stringof);
+        }
+    }
+
+    unittest {
+        assert(pgTypeName(NUMERICOID) == "numeric" && pgTypeName(1007) == "_int4" && pgTypeName(16451) == "");
+        assert(pgSqlType(NUMERICOID) == SqlType.NUMERIC && pgSqlType(INETOID) == SqlType.OTHER);
+        assert(parseText!double("1.25", 1) == 1.25 && parseText!long("-12.00", 1) == -12);
+        assert(parseText!ulong("18446744073709551615", 1) == ulong.max);
+        import std.exception : assertThrown;
+        assertThrown!SQLException(parseText!long("1.5", 1));
+        assertThrown!SQLException(parseText!int("$12.50", 1));
+    }
     const int RECORDARRAYOID = 2287;
     const int CSTRINGOID = 2275;
     const int ANYOID = 2276;
@@ -532,14 +644,20 @@ version(USE_PGSQL) {
     			item.name = copyCString(PQfname(res, i));
                 //item.tableName = copyCString(PQftable(res, i));
     			int fmt = PQfformat(res, i);
-    			ulong t = PQftype(res, i);
+    			const t = cast(int) PQftype(res, i);
     			item.label = copyCString(PQfname(res, i));
-    			//item.precision = field.length;
-    			//item.scale = field.scale;
-    			//item.isNullable = !field.notNull;
-    			//item.isSigned = !field.unsigned;
-    			//item.type = fromPGSQLType(field.type);
-    //			// TODO: fill more params
+    			item.typeName = pgTypeName(t);
+    			item.type = pgSqlType(t);
+    			item.isSigned = pgIsSigned(t);
+    			// The type modifier holds numeric(precision, scale) and varchar(length), plus 4
+    			const mod = PQfmod(res, i);
+    			if (mod >= 4 && t == NUMERICOID) {
+    				item.precision = ((mod - 4) >> 16) & 0xFFFF;
+    				item.scale = (mod - 4) & 0xFFFF;
+    			} else if (mod >= 4 && (t == VARCHAROID || t == BPCHAROID)) {
+    				item.precision = mod - 4;
+    				item.displaySize = mod - 4;
+    			}
     			list[i] = item;
     		}
     		return new ResultSetMetaDataImpl(list);
@@ -648,8 +766,13 @@ version(USE_PGSQL) {
                                 case JSONBOID:
                                     v[col] = s;
                                     break;
+                                case NUMERICOID:
+                                    v[col] = s; // exact; the numeric getters parse it
+                                    break;
                                 default:
-                                    throw new SQLException("Unsupported column type " ~ to!string(t));
+                                    // Arrays, inet, interval, enums, composite types, ...: the server's text
+                                    v[col] = s;
+                                    break;
                             }
                         } else {
                             // binary
@@ -1222,6 +1345,8 @@ version(USE_PGSQL) {
     			return v.get!(ubyte);
     		if (v.convertsTo!(long))
     			return to!ubyte(v.get!(long));
+    		if (v.type == typeid(string))
+    			return parseText!ubyte(v.get!string, columnIndex);
     		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ubyte");
     	}
     	override byte getByte(int columnIndex) {
@@ -1235,6 +1360,8 @@ version(USE_PGSQL) {
     			return v.get!(byte);
     		if (v.convertsTo!(long))
     			return to!byte(v.get!(long));
+    		if (v.type == typeid(string))
+    			return parseText!byte(v.get!string, columnIndex);
     		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to byte");
     	}
     	override short getShort(int columnIndex) {
@@ -1248,6 +1375,8 @@ version(USE_PGSQL) {
     			return v.get!(short);
     		if (v.convertsTo!(long))
     			return to!short(v.get!(long));
+    		if (v.type == typeid(string))
+    			return parseText!short(v.get!string, columnIndex);
     		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to short");
     	}
     	override ushort getUshort(int columnIndex) {
@@ -1261,6 +1390,8 @@ version(USE_PGSQL) {
     			return v.get!(ushort);
     		if (v.convertsTo!(long))
     			return to!ushort(v.get!(long));
+    		if (v.type == typeid(string))
+    			return parseText!ushort(v.get!string, columnIndex);
     		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ushort");
     	}
     	override int getInt(int columnIndex) {
@@ -1274,6 +1405,8 @@ version(USE_PGSQL) {
     			return v.get!(int);
     		if (v.convertsTo!(long))
     			return to!int(v.get!(long));
+    		if (v.type == typeid(string))
+    			return parseText!int(v.get!string, columnIndex);
     		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to int");
     	}
     	override uint getUint(int columnIndex) {
@@ -1287,6 +1420,8 @@ version(USE_PGSQL) {
     			return v.get!(uint);
     		if (v.convertsTo!(ulong))
     			return to!uint(v.get!(ulong));
+    		if (v.type == typeid(string))
+    			return parseText!uint(v.get!string, columnIndex);
     		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to uint");
     	}
     	override long getLong(int columnIndex) {
@@ -1298,6 +1433,8 @@ version(USE_PGSQL) {
     			return 0;
     		if (v.convertsTo!(long))
     			return v.get!(long);
+    		if (v.type == typeid(string))
+    			return parseText!long(v.get!string, columnIndex);
     		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to long");
     	}
     	override ulong getUlong(int columnIndex) {
@@ -1309,6 +1446,8 @@ version(USE_PGSQL) {
     			return 0;
     		if (v.convertsTo!(ulong))
     			return v.get!(ulong);
+    		if (v.type == typeid(string))
+    			return parseText!ulong(v.get!string, columnIndex);
     		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to ulong");
     	}
     	override double getDouble(int columnIndex) {
@@ -1320,6 +1459,8 @@ version(USE_PGSQL) {
     			return 0;
     		if (v.convertsTo!(double))
     			return v.get!(double);
+    		if (v.type == typeid(string))
+    			return parseText!double(v.get!string, columnIndex);
     		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to double");
     	}
     	override float getFloat(int columnIndex) {
@@ -1331,6 +1472,8 @@ version(USE_PGSQL) {
     			return 0;
     		if (v.convertsTo!(float))
     			return v.get!(float);
+    		if (v.type == typeid(string))
+    			return parseText!float(v.get!string, columnIndex);
     		throw new SQLException("Cannot convert field " ~ to!string(columnIndex) ~ " to float");
     	}
     	override byte[] getBytes(int columnIndex) {
