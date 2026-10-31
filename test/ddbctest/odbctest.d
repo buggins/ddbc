@@ -9,6 +9,8 @@ import std.variant;
 import std.stdio;
 
 import dunit;
+import std.uni : toUpper;
+import std.exception : assertThrown;
 import ddbc.test.common : DdbcTestFixture;
 import ddbc.core : Connection, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
@@ -107,6 +109,30 @@ version(USE_ODBC) {
             assertTrue(rs.isNull(2));
             assertTrue(rs.isNull(3));
             assertTrue(rs.isNull(4));
+            assertFalse(rs.next());
+        }
+
+        // NUMERIC, UNIQUEIDENTIFIER, XML and getters that convert (#150)
+        @Test
+        public void testNumericGuidXmlAndConversions() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+
+            ddbc.core.ResultSet rs = stmt.executeQuery("SELECT CAST(1234.500 AS NUMERIC(12, 3)), "
+                ~ "CAST('6F9619FF-8B86-D011-B42D-00C04FC964FF' AS UNIQUEIDENTIFIER), CAST('<a>1</a>' AS XML), "
+                ~ "CAST(42 AS BIGINT), CAST(12.00 AS DECIMAL(5, 2)), CAST(NULL AS NUMERIC(5, 1))");
+            assertTrue(rs.next());
+            assertEquals(1234.5, rs.getDouble(1));
+            assertEquals(1234.5, to!double(rs.getString(1)));
+            assertThrown!SQLException(rs.getLong(1)); // not a whole number
+            assertEquals("6F9619FF-8B86-D011-B42D-00C04FC964FF", toUpper(rs.getString(2)));
+            assertEquals("<a>1</a>", rs.getString(3));
+            assertEquals(42, rs.getInt(4)); // BIGINT read as int
+            assertEquals("42", rs.getString(4));
+            assertEquals(12L, rs.getLong(5)); // a whole decimal
+            assertEquals(0.0, rs.getDouble(6));
+            assertTrue(rs.wasNull());
+            assertTrue(rs.isNull(6));
             assertFalse(rs.next());
         }
 
