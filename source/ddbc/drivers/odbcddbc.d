@@ -265,6 +265,54 @@ version (USE_ODBC)
         return mymap[sqltype];
     }
 
+    /++
+    Parses a value read as text (DECIMAL, NUMERIC) for a numeric getter. Integer targets
+    accept a fractional part of zeros ("12.00"); `bool` accepts 1/0/true/false.
+
+    Throws: `ConvException` if the text does not fit `T`.
+    +/
+    T parseText(T)(string s)
+    {
+        import std.algorithm.searching : all;
+        import std.string : indexOf, strip;
+        import std.traits : isFloatingPoint;
+
+        s = s.strip;
+        static if (is(T == bool))
+        {
+            if (s == "1" || s == "true")
+                return true;
+            if (s == "0" || s == "false")
+                return false;
+            throw new ConvException("not a boolean: " ~ s);
+        }
+        else static if (isFloatingPoint!T)
+            return to!T(s);
+        else
+        {
+            const dot = s.indexOf('.');
+            if (dot >= 0)
+            {
+                if (!s[dot + 1 .. $].all!(c => c == '0'))
+                    throw new ConvException("not a whole number: " ~ s);
+                s = s[0 .. dot];
+            }
+            if (s.length == 0 || s == "-")
+                s ~= "0"; // ".00" and "-.00"
+            return to!T(s);
+        }
+    }
+
+    unittest
+    {
+        import std.exception : assertThrown;
+
+        assert(parseText!double("-.5") == -0.5 && parseText!long(" 12.00 ") == 12 && parseText!int(".00") == 0);
+        assert(parseText!ulong("18446744073709551615") == ulong.max && parseText!bool("1"));
+        assertThrown!ConvException(parseText!long("1.5"));
+        assertThrown!ConvException(parseText!ubyte("300"));
+    }
+
     SqlType fromODBCType(int t)
     {
         switch (t)
@@ -1017,17 +1065,18 @@ version (USE_ODBC)
                 case SQL_VARBINARY: return readValue!(byte[]);
                 case SQL_LONGVARBINARY: return readValue!(byte[]);
                 
-                case SQL_NUMERIC: return readValue!(SQL_NUMERIC_STRUCT);
-                case SQL_DECIMAL: return readValue!(char[]); // as text, which keeps the full precision
+                case SQL_NUMERIC: return readValue!(char[]); // as text, which keeps the full precision
+                case SQL_DECIMAL: return readValue!(char[]);
                 case SQL_BIT: return readValue!(bool);
                 case SQL_TYPE_DATE: return readValue!(Date);
                 case SQL_TYPE_TIME: return readValue!(TimeOfDay);
                 case SQL_TYPE_TIMESTAMP: return readValue!(DateTime);
                 case -155: return readValue!(SysTime); // DATETIMEOFFSET
-                //case SQL_GUID: return Variant(readValue!(SQLGUID));
+                case SQL_GUID: return readValue!(char[]); // the driver formats it as a UUID string
 
                 default:
-                    throw new Exception(text("TYPE ", this.dataType, " is currently not supported!"));
+                    // xml, sql_variant and other types the driver can convert to text
+                    return readValue!(char[]);
                 }
                 // dfmt on
             }
@@ -1525,7 +1574,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(bool);
+            return valueAs!(bool)(columnIndex);
         }
 
         override ubyte getUbyte(int columnIndex)
@@ -1535,7 +1584,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(ubyte);
+            return valueAs!(ubyte)(columnIndex);
         }
 
         override byte getByte(int columnIndex)
@@ -1545,7 +1594,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(byte);
+            return valueAs!(byte)(columnIndex);
         }
 
         override short getShort(int columnIndex)
@@ -1555,7 +1604,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(short);
+            return valueAs!(short)(columnIndex);
         }
 
         override ushort getUshort(int columnIndex)
@@ -1565,7 +1614,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(ushort);
+            return valueAs!(ushort)(columnIndex);
         }
 
         override int getInt(int columnIndex)
@@ -1575,7 +1624,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(int);
+            return valueAs!(int)(columnIndex);
         }
 
         override uint getUint(int columnIndex)
@@ -1585,7 +1634,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(uint);
+            return valueAs!(uint)(columnIndex);
         }
 
         override long getLong(int columnIndex)
@@ -1595,7 +1644,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(long);
+            return valueAs!(long)(columnIndex);
         }
 
         override ulong getUlong(int columnIndex)
@@ -1605,7 +1654,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(ulong);
+            return valueAs!(ulong)(columnIndex);
         }
 
         override double getDouble(int columnIndex)
@@ -1615,7 +1664,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(double);
+            return valueAs!(double)(columnIndex);
         }
 
         override float getFloat(int columnIndex)
@@ -1625,7 +1674,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(float);
+            return valueAs!(float)(columnIndex);
         }
 
         private Type getArray(Type)(int columnIndex)
@@ -1656,7 +1705,60 @@ version (USE_ODBC)
 
         override string getString(int columnIndex)
         {
-            return stmt.getColumn(columnIndex).value.get!(string);
+            checkClosed();
+            lock();
+            scope (exit)
+                unlock();
+
+            auto v = stmt.getColumn(columnIndex).value;
+            lastIsNull = !v.hasValue;
+            if (lastIsNull)
+                return null;
+            return v.convertsTo!(string) ? v.get!(string) : v.toString();
+        }
+
+        /++
+        The value of a column as `T`, for the numeric and boolean getters: converted between
+        integer widths with range checks, and parsed from text (DECIMAL and NUMERIC are read as
+        text). NULL gives `T.init`.
+        +/
+        private T valueAs(T)(int columnIndex)
+        {
+            import std.traits : isFloatingPoint;
+
+            auto v = stmt.getColumn(columnIndex).value;
+            lastIsNull = !v.hasValue;
+            if (lastIsNull)
+                return T.init;
+            if (v.convertsTo!(T))
+                return v.get!(T);
+            try
+            {
+                if (v.convertsTo!(string))
+                    return parseText!(T)(v.get!(string));
+                static if (is(T == bool))
+                {
+                    if (v.convertsTo!(long))
+                        return v.get!(long) != 0;
+                }
+                else static if (isFloatingPoint!T)
+                {
+                    if (v.convertsTo!(double))
+                        return cast(T) v.get!(double);
+                }
+                else
+                {
+                    if (v.convertsTo!(long))
+                        return to!T(v.get!(long));
+                    if (v.convertsTo!(ulong))
+                        return to!T(v.get!(ulong));
+                }
+            }
+            catch (ConvException)
+            {
+                // reported below
+            }
+            throw new SQLException("Cannot convert column " ~ to!string(columnIndex) ~ " to " ~ T.stringof);
         }
 
         override SysTime getSysTime(int columnIndex)
