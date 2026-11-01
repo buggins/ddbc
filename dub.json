@@ -95,7 +95,7 @@
             "name": "ClickHouse",
             "versions": ["USE_CLICKHOUSE"],
             "dependencies": {
-                "clickhoused": "~>0.4.0"
+                "clickhoused": "~>0.5.0"
             }
         },
         {
@@ -136,7 +136,7 @@
             "versions": ["USE_SQLITE", "USE_CLICKHOUSE"],
             "dependencies": {
                 "d-unit": "~>0.10.2",
-                "clickhoused": "~>0.4.0"
+                "clickhoused": "~>0.5.0"
             },
             "libs-posix": ["sqlite3"],
             "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],

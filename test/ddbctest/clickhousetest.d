@@ -239,6 +239,56 @@ version(USE_CLICKHOUSE) {
             }
         }
 
+        /// Whether the server knows the setting `name` (JSON as text needs ClickHouse 24.10).
+        private bool hasSetting(string name) {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            ResultSet rs = stmt.executeQuery("SELECT count() FROM system.settings WHERE name = '" ~ name ~ "'");
+            scope(exit) rs.close();
+            return rs.next() && rs.getLong(1) > 0;
+        }
+
+        @Test
+        public void testTypesOfClickhoused05() {
+            // Types added in clickhoused 0.5: Variant, Dynamic and JSON, reported as OTHER and read as text
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            if (hasType("Variant")) {
+                stmt.executeUpdate("SET allow_experimental_variant_type = 1"); // needed before ClickHouse 25.3
+                ResultSet rs = stmt.executeQuery("SELECT arrayJoin([42::UInt64::Variant(String, UInt64), "
+                    ~ "'x'::Variant(String, UInt64), NULL::Variant(String, UInt64)]) AS v");
+                scope(exit) rs.close();
+                assertEquals(cast(int) SqlType.OTHER, rs.getMetaData().getColumnType(1));
+                assertEquals(1, rs.getMetaData().isNullable(1));
+                assertTrue(rs.next());
+                assertEquals("42", rs.getString(1));
+                assertEquals(42L, rs.getLong(1));
+                assertEquals(42UL, rs.getVariant(1).get!ulong);
+                assertTrue(rs.next());
+                assertEquals("x", rs.getString(1));
+                assertTrue(rs.next());
+                assertEquals(null, rs.getString(1));
+                assertTrue(rs.wasNull());
+            }
+            if (hasType("Dynamic")) {
+                stmt.executeUpdate("SET allow_experimental_dynamic_type = 1");
+                ResultSet rs = stmt.executeQuery("SELECT [1, 2]::Array(Int64)::Dynamic AS d, 2.5::Dynamic AS f");
+                scope(exit) rs.close();
+                assertEquals(cast(int) SqlType.OTHER, rs.getMetaData().getColumnType(1));
+                assertTrue(rs.next());
+                assertEquals("[1,2]", rs.getString(1));
+                assertEquals(2.5, rs.getDouble(2));
+            }
+            if (hasType("JSON") && hasSetting("output_format_native_write_json_as_string")) {
+                stmt.executeUpdate("SET allow_experimental_json_type = 1");
+                ResultSet rs = stmt.executeQuery(`SELECT '{"b":[1,2],"a":"x"}'::JSON AS j`);
+                scope(exit) rs.close();
+                assertEquals(cast(int) SqlType.OTHER, rs.getMetaData().getColumnType(1));
+                assertTrue(rs.next());
+                assertEquals(`{"a":"x","b":[1,2]}`, rs.getString(1));
+            }
+        }
+
         @Test
         public void testTransactionsAreNotSupported() {
             assertTrue(conn.getAutoCommit());
