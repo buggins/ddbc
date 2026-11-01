@@ -91,7 +91,7 @@ version (USE_CLICKHOUSE)
             return SqlType.INTEGER;
         if (t.startsWith("UInt64") || t.startsWith("Int64"))
             return SqlType.BIGINT;
-        if (t == "Float32")
+        if (t == "Float32" || t == "BFloat16")
             return SqlType.FLOAT;
         if (t == "Float64")
             return SqlType.DOUBLE;
@@ -105,6 +105,8 @@ version (USE_CLICKHOUSE)
             return SqlType.DATE;
         if (t.startsWith("DateTime"))
             return SqlType.DATETIME;
+        if (t == "Time" || t.startsWith("Time64"))
+            return SqlType.TIME;
         if (t == "Nothing")
             return SqlType.NULL;
         return SqlType.OTHER;
@@ -121,6 +123,10 @@ version (USE_CLICKHOUSE)
         assert(fromClickHouseType("Int256") == SqlType.NUMERIC);
         assert(fromClickHouseType("Array(UInt8)") == SqlType.OTHER);
         assert(fromClickHouseType("UUID") == SqlType.OTHER);
+        assert(fromClickHouseType("BFloat16") == SqlType.FLOAT);
+        assert(fromClickHouseType("Nullable(Time)") == SqlType.TIME);
+        assert(fromClickHouseType("Time64(3)") == SqlType.TIME);
+        assert(fromClickHouseType("Point") == SqlType.OTHER);
     }
 
     /// The ClickHouse type used for `NULL` parameters of the given `SqlType`.
@@ -390,7 +396,8 @@ version (USE_CLICKHOUSE)
                 item.type = fromClickHouseType(c.typeName);
                 item.isNullable = c.isNullable ? 1 : 0;
                 const t = baseClickHouseType(c.typeName);
-                item.isSigned = t.startsWith("Int") || t.startsWith("Float") || t.startsWith("Decimal");
+                item.isSigned = t.startsWith("Int") || t.startsWith("Float") || t.startsWith("Decimal")
+                    || t == "BFloat16" || t == "Time" || t.startsWith("Time64");
                 // The column of the values, without LowCardinality and Nullable wrappers
                 CH.Column plain = c;
                 if (auto lc = cast(CH.LowCardinalityColumn) plain)
@@ -401,6 +408,8 @@ version (USE_CLICKHOUSE)
                     item.displaySize = cast(int) fixed.width;
                 if (auto t64 = cast(CH.DateTime64Column) plain)
                     item.scale = t64.precision;
+                if (auto time64 = cast(CH.Time64Column) plain)
+                    item.scale = time64.precision;
                 static foreach (D; AliasSeq!(CH.Decimal32Column, CH.Decimal64Column, CH.Decimal128Column,
                         CH.Decimal256Column))
                     if (auto d = cast(D) plain)
@@ -1193,10 +1202,24 @@ version (USE_CLICKHOUSE)
             return lastIsNull ? Date.init : translate(c.getDate(rowInBlock));
         }
 
+        /// The time of day of a `DateTime` value, or a `Time`/`Time64` value from 00:00:00 to 23:59:59
+        /// (fractional seconds are dropped).
         override TimeOfDay getTime(int columnIndex)
         {
+            import std.algorithm.searching : startsWith;
+
             auto c = column(columnIndex);
-            return lastIsNull ? TimeOfDay.init : cast(TimeOfDay) translate(c.getSysTime(rowInBlock));
+            if (lastIsNull)
+                return TimeOfDay.init;
+            if (baseClickHouseType(c.typeName).startsWith("Time"))
+            {
+                const span = translate(c.getDuration(rowInBlock));
+                if (span < Duration.zero || span >= 24.hours)
+                    throw new SQLException("Value " ~ c.getString(rowInBlock) ~ " of column '" ~ c.name
+                            ~ "' is not a time of day");
+                return TimeOfDay(0, 0, 0) + span;
+            }
+            return cast(TimeOfDay) translate(c.getSysTime(rowInBlock));
         }
 
         override Variant getVariant(int columnIndex)

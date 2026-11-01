@@ -189,6 +189,56 @@ version(USE_CLICKHOUSE) {
             assertFalse(rs.next());
         }
 
+        /// Whether the server knows the data type `name` (BFloat16 and Time are newer than some supported servers).
+        private bool hasType(string name) {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            ResultSet rs = stmt.executeQuery("SELECT count() FROM system.data_type_families WHERE name = '" ~ name ~ "'");
+            scope(exit) rs.close();
+            return rs.next() && rs.getLong(1) > 0;
+        }
+
+        @Test
+        public void testTypesOfClickhoused04() {
+            // Types added in clickhoused 0.4: geo types, BFloat16, Time and Time64
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            {
+                ResultSet rs = stmt.executeQuery("SELECT CAST((1.5, -2) AS Point) AS p, toFloat32(9999220736) AS f");
+                scope(exit) rs.close();
+                assertEquals(cast(int) SqlType.OTHER, rs.getMetaData().getColumnType(1));
+                assertTrue(rs.next());
+                assertEquals("(1.5,-2)", rs.getString(1));
+                assertEquals("9999221000", rs.getString(2)); // exact float text
+            }
+            if (hasType("BFloat16")) {
+                ResultSet rs = stmt.executeQuery("SELECT toBFloat16(0.1) AS b");
+                scope(exit) rs.close();
+                assertEquals(cast(int) SqlType.FLOAT, rs.getMetaData().getColumnType(1));
+                assertTrue(rs.next());
+                assertEquals("0.099609375", rs.getString(1));
+                assertEquals(0.099609375, rs.getDouble(1));
+            }
+            if (hasType("Time")) {
+                stmt.executeUpdate("SET enable_time_time64_type = 1"); // off by default before ClickHouse 25.12
+                ResultSet rs = stmt.executeQuery("SELECT CAST('09:30:00' AS Time) AS t, "
+                    ~ "CAST('-01:00:00.5' AS Time64(3)) AS t3, CAST(NULL AS Nullable(Time)) AS n");
+                scope(exit) rs.close();
+                ResultSetMetaData meta = rs.getMetaData();
+                assertEquals(cast(int) SqlType.TIME, meta.getColumnType(1));
+                assertEquals(cast(int) SqlType.TIME, meta.getColumnType(2));
+                assertEquals(3, meta.getScale(2));
+                assertTrue(rs.next());
+                assertEquals(TimeOfDay(9, 30, 0), rs.getTime(1));
+                assertEquals("09:30:00", rs.getString(1));
+                assertEquals(34_200L, rs.getLong(1));
+                assertEquals("-01:00:00.500", rs.getString(2));
+                assertThrown!SQLException(rs.getTime(2)); // negative: not a time of day
+                assertEquals(TimeOfDay.init, rs.getTime(3));
+                assertTrue(rs.wasNull());
+            }
+        }
+
         @Test
         public void testTransactionsAreNotSupported() {
             assertTrue(conn.getAutoCommit());
