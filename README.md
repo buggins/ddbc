@@ -5,7 +5,7 @@ DDBC
 
 DDBC is DB Connector for D language (similar to JDBC)
 
-Currently supports MySQL, PostgreSQL, SQLite, SQL Server (via ODBC) and ClickHouse (opt-in `ClickHouse` configuration, via the pure D [clickhoused](https://code.dlang.org/packages/clickhoused) client).
+Currently supports MySQL, PostgreSQL, SQLite, SQL Server (via ODBC, or natively with the opt-in `MSSQL` configuration and the pure D [mssql-native](https://code.dlang.org/packages/mssql-native) client) and ClickHouse (opt-in `ClickHouse` configuration, via the pure D [clickhoused](https://code.dlang.org/packages/clickhoused) client).
 
 The project is hosted on [github](https://github.com/buggins/ddbc) with documentation available on the [wiki](https://github.com/buggins/ddbc/wiki).
 
@@ -198,6 +198,29 @@ ClickHouse has no transactions (auto-commit only) and no auto-increment keys. Re
 
 All column types of clickhoused 0.6 can be read: besides numbers, strings, dates and UUIDs also `Decimal` (reported as `DECIMAL`, with precision and scale), 128/256-bit integers (`NUMERIC`), `BFloat16` (`FLOAT`), `Time`/`Time64` (`TIME`; `getTime` for values from 00:00:00 to 23:59:59), `LowCardinality`, `IPv4`/`IPv6`, and `Array`, `Tuple`, `Map`, the geo types, `Variant`, `Dynamic` and `JSON` (`OTHER`, as text, e.g. `[1,2]`, `{'k':1}`, `(1.5,-2)`, `{"a":1}`; `getVariant` gives a Variant/Dynamic cell's value). JSON needs ClickHouse 24.10 or newer. For typed access to composite values, use `getNativeConnection()` and clickhoused's struct mapping. clickhoused 0.6 decodes strings, `Bool`/`UUID`/`Nullable` columns and LZ4-compressed results several times faster, and `getString` of floating-point values about 10–20 times faster.
 
+### Microsoft SQL Server (native)
+
+Use the `MSSQL` configuration (`"subConfigurations": { "ddbc": "MSSQL" }`): the TDS protocol in pure D through
+[mssql-native](https://code.dlang.org/packages/mssql-native), no ODBC driver or other C library at build time.
+
+```
+ddbc:mssql://127.0.0.1:1433/dbname?user=sa,password=secret,trust_server_certificate=true
+```
+
+With this configuration, `sqlserver://` URLs use the native driver too, including the ODBC form
+(`ddbc:sqlserver://localhost,1433?user=sa,password=secret,encrypt=yes,trust_server_certificate=yes`; `driver` is
+ignored). Encryption is on by default with certificate verification; `trust_server_certificate=true` accepts the
+self-signed certificate of a development server. TLS uses the system's OpenSSL library, loaded at run time. Other
+parameters are the options of mssql-native connection strings (`app_name`, `connect_timeout`, `receive_timeout`,
+`packet_size`, `tls_ca_file`, ...).
+
+All common column types are read exactly: `decimal`/`numeric`/`money` with `getDecimal`, `datetimeoffset` with its
+offset through `getSysTime` (`datetime2`, `datetime` and `smalldatetime` as UTC), `varchar` in the collation's code
+page (also Japanese, Chinese, Korean), `nvarchar`, the `(max)` types, `xml`, `uniqueidentifier`, `sql_variant`.
+Prepared statements use `sp_prepexec`/`sp_execute`; `executeUpdate(sql, insertId)` gives `SCOPE_IDENTITY()`;
+auto-commit off is `SET IMPLICIT_TRANSACTIONS ON`. Result sets are forward-only and streamed. For bulk inserts and
+other features, use `getNativeConnection()`.
+
 ### Microsoft SQL Server (via ODBC)
 
 ```
@@ -225,7 +248,7 @@ the DSN name will be used.
 
 ## Contributing
 
-pull requests are welcome. Please ensure your local branch is up to date and all tests are passing locally before making a pull request. A docker-compose file is included to help with local development. Use `docker-compose up -d` then run `dub test --config=MySQL`, `dub test --config=PGSQL` and `dub test --config=ODBC`. ClickHouse tests run with `dub run --config=test-clickhouse`. See the `.travis.yml` file and individual driver code for details on creating the relevant databases for local testing.
+pull requests are welcome. Please ensure your local branch is up to date and all tests are passing locally before making a pull request. A docker-compose file is included to help with local development. Use `docker-compose up -d` then run `dub test --config=MySQL`, `dub test --config=PGSQL` and `dub test --config=ODBC`. ClickHouse tests run with `dub run --config=test-clickhouse`, the native SQL Server tests with `MSSQL_PORT=1433 dub run --config=test-mssql`. See the `.travis.yml` file and individual driver code for details on creating the relevant databases for local testing.
 
 The examples should also run, make sure to change to the _example_ directory and run `dub build` then make sure that the compiled executable will run with each supported database (you'll need to install relevant libs and create databases and users with relevant permissions):
 

@@ -510,7 +510,7 @@ string makeDDBCUrl(string driverName, string[string] params) {
 string makeDDBCUrl(string driverName, string host = null, int port = 0, 
 							string dbName = null, string[string] params = null) {
 	import std.algorithm.searching : canFind;
-	enforce(canFind(["sqlite", "postgresql", "mysql", "sqlserver", "oracle", "odbc", "clickhouse"], driverName), "driver must be one of sqlite|postgresql|mysql|sqlserver|oracle|odbc|clickhouse");
+	enforce(canFind(["sqlite", "postgresql", "mysql", "sqlserver", "mssql", "oracle", "odbc", "clickhouse"], driverName), "driver must be one of sqlite|postgresql|mysql|sqlserver|mssql|oracle|odbc|clickhouse");
     import std.conv : to;
     char[] res;
     res.assumeSafeAppend;

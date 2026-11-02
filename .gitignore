@@ -39,6 +39,7 @@ Unittest/*
 dub.selections.json
 test/ddbc-tests
 test/ddbc-tests-clickhouse
+test/ddbc-tests-mssql
 test/ddbc*-test
 lib/
 *.sqlite
