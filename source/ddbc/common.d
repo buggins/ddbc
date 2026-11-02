@@ -69,6 +69,12 @@ class DriverFactory {
     }
     /// Factory method to create driver by registered name, e.g. "mysql", "postgresql", "sqlite"
     /// List of available drivers depend on configuration
+    /// Whether a driver is registered under `name` (it depends on the configuration).
+    static bool isRegistered(string name) {
+        return (name in _factoryMap) !is null;
+    }
+    /// Factory method to create driver by registered name, e.g. "mysql", "postgresql", "sqlite"
+    /// List of available drivers depend on configuration
     static Driver createDriver(string driverName) {
         if (auto p = (driverName in _factoryMap)) {
             // found: call delegate to create driver
@@ -646,7 +652,10 @@ string extractDriverNameFromURL(string url) {
     int colonPos = cast(int)url.indexOf(":");
     
 	string dbName = colonPos < 0 ? url : url[0 .. colonPos];
-	return dbName == "sqlserver" || dbName == "oracle" ? "odbc" : dbName;
+	// sqlserver: the native driver (configuration MSSQL) when it is compiled in, else ODBC
+	if (dbName == "sqlserver")
+		return DriverFactory.isRegistered("sqlserver") ? "sqlserver" : "odbc";
+	return dbName == "oracle" ? "odbc" : dbName;
 }
 
 private unittest {
@@ -654,7 +663,12 @@ private unittest {
 	assert(extractDriverNameFromURL("ddbc:sqlite:ddbc-test.sqlite") == "sqlite");
 	assert(extractDriverNameFromURL("ddbc:mysql://127.0.0.1:3306/mydb") == "mysql");
 	assert(extractDriverNameFromURL("ddbc:postgresql://127.0.0.1:5432/mydb") == "postgresql");
-	assert(extractDriverNameFromURL("ddbc:sqlserver://127.0.0.1:1433/mydb") == "odbc");
+	version (USE_MSSQL)
+		enum sqlServerDriver = "sqlserver";
+	else
+		enum sqlServerDriver = "odbc";
+	assert(extractDriverNameFromURL("ddbc:sqlserver://127.0.0.1:1433/mydb") == sqlServerDriver);
+	assert(extractDriverNameFromURL("ddbc:mssql://127.0.0.1:1433/mydb") == "mssql");
 	assert(extractDriverNameFromURL("ddbc:oracle://127.0.0.1:1521/mydb") == "odbc");
 	assert(extractDriverNameFromURL("ddbc:odbc://127.0.0.1:3306/mydb") == "odbc");
 
@@ -663,7 +677,7 @@ private unittest {
 	assert(extractDriverNameFromURL("sqlite:ddbc-test.sqlite") == "sqlite");
 	assert(extractDriverNameFromURL("mysql://127.0.0.1:3306/mydb") == "mysql");
 	assert(extractDriverNameFromURL("postgresql://127.0.0.1:5432/mydb") == "postgresql");
-	assert(extractDriverNameFromURL("sqlserver://127.0.0.1:1433/mydb") == "odbc");
+	assert(extractDriverNameFromURL("sqlserver://127.0.0.1:1433/mydb") == sqlServerDriver);
 	assert(extractDriverNameFromURL("oracle://127.0.0.1:1521/mydb") == "odbc");
 	assert(extractDriverNameFromURL("odbc://127.0.0.1:3306/mydb") == "odbc");
 }

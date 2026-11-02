@@ -90,6 +90,10 @@ jobs:
       - name: dub build (ClickHouse) ${{ runner.arch }}
         run: dub build --config=ClickHouse
 
+      # native SQL Server driver (pure D, no system libraries)
+      - name: dub build (MSSQL) ${{ runner.arch }}
+        run: dub build --config=MSSQL
+
       # x86 (Windows Only)
       - name: dub test with full config (x86)
         if: ${{ startsWith(matrix.os, 'windows') }}
@@ -219,6 +223,11 @@ jobs:
         env:
           CLICKHOUSE_PORT: ${{ job.services.clickhouse.ports[9000] }}
         run: dub run --config=test-clickhouse
+
+      - name: Run ddbctest (SQL Server, native driver)
+        env:
+          MSSQL_PORT: ${{ job.services.mssql.ports[1433] }}
+        run: dub run --config=test-mssql
 
       - name: Build The Example Project
         working-directory: ./example

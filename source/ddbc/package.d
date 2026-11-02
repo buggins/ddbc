@@ -23,6 +23,7 @@ SQLite                      USE_SQLITE                         sqlite
 PGSQL                       USE_PGSQL                          postgresql
 ODBC                        USE_ODBC                           odbc
 ClickHouse                  USE_CLICKHOUSE                     clickhouse (needs D frontend 2.105+; not in full)
+MSSQL                       USE_MSSQL                          mssql, sqlserver: native SQL Server driver (mssql-native; not in full)
 API                         (none)                             (no drivers, API only)
 
 
@@ -117,6 +118,14 @@ Optionally you can put user name, password and connection options (e.g. compress
     clickhouse://host:port/dbname?user=username,password=userpassword,compress=lz4
 
 
+For SQL Server with the native driver (configuration MSSQL), use following form of URL:
+
+    mssql://host:port/dbname?user=username,password=userpassword,trust_server_certificate=true
+
+`sqlserver://` URLs use the native driver too when it is compiled in, and the ODBC driver otherwise;
+the ODBC form `sqlserver://host,port?user=...,password=...,encrypt=yes` works with both.
+
+
 For SQLite, use following form of URL:
 
     sqlite:db_file_path_name
@@ -208,6 +217,11 @@ version(USE_CLICKHOUSE)
 {
     // register ClickHouse driver
     private import ddbc.drivers.clickhouseddbc;
+}
+version(USE_MSSQL)
+{
+    // register the native SQL Server driver
+    private import ddbc.drivers.mssqlddbc;
 }
 version(USE_ODBC)
 {
