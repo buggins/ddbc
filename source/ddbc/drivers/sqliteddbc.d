@@ -770,6 +770,10 @@ version(USE_SQLITE) {
             sqlite3_bind_blob(stmt, parameterIndex, cast(const char *)x.ptr, cast(int)x.length, SQLITE_TRANSIENT);
             paramIsSet[parameterIndex - 1] = true;
         }
+        /// Sent as text (`Decimal.toFixedString`); the server converts it to the column type.
+        override void setDecimal(int parameterIndex, Decimal x) {
+            setString(parameterIndex, x.toFixedString());
+        }
         override void setString(int parameterIndex, string x) {
             checkClosed();
             lock();
@@ -799,6 +803,10 @@ version(USE_SQLITE) {
             setString(parameterIndex, x.toISOString());
         }
         override void setVariant(int parameterIndex, Variant x) {
+            if (auto d = x.peek!Decimal) {
+                setDecimal(parameterIndex, *d);
+                return;
+            }
             if (x == null)
                 setNull(parameterIndex);
             else if (x.convertsTo!long)

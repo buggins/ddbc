@@ -11,7 +11,7 @@ import std.stdio;
 import dunit;
 import std.uni : toUpper;
 import std.exception : assertThrown;
-import ddbc.test.common : DdbcTestFixture;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
 import ddbc.core : Connection, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
 
@@ -62,6 +62,24 @@ version(USE_ODBC) {
     }
 
     // Column types that used to be unreadable: BIT (#116), DECIMAL (#82), NCHAR/NVARCHAR (#73, #115)
+    // Exact decimals: https://github.com/buggins/ddbc/issues/158
+    class SqlServerDecimalTest : DdbcTestFixture {
+        mixin UnitTest;
+
+        this() {
+            super(
+                "odbc://localhost,%s?user=SA,password=MSbbk4k77JKH88g54,trust_server_certificate=yes,driver=ODBC Driver 18 for SQL Server".format(environment.get("MSSQL_PORT", "1433")), // don't specify database!
+                "DROP TABLE IF EXISTS [ddbc_decimal];CREATE TABLE [ddbc_decimal] ([id] INT NOT NULL PRIMARY KEY, [amount] DECIMAL(30,4) NULL, [missing] DECIMAL(30,4) NULL)",
+                "DROP TABLE IF EXISTS [ddbc_decimal]"
+            );
+        }
+
+        @Test
+        public void testDecimalRoundTrip() {
+            checkDecimalRoundTrip(conn, "ddbc_decimal", true, ["12.3400", "-0.0005", "123456789012345678901234.5678", "0.0000"]);
+        }
+    }
+
     class SqlServerTypesTest : DdbcTestFixture {
         mixin UnitTest;
 

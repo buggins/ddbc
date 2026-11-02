@@ -934,9 +934,11 @@ version (USE_ODBC)
             {
                 T val;
 
-                int nullCheck = 0;
+                // An SQLLEN (pointer-sized), although the bindings declare the pointer as SQLINTEGER*:
+                // a 64-bit driver writes 8 bytes here
+                ptrdiff_t nullCheck = 0;
 
-                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), &val, 0, &nullCheck);
+                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), &val, 0, cast(SQLINTEGER*) &nullCheck);
 
                 if (nullCheck == SQL_NULL_DATA)
                     return Variant();
@@ -959,9 +961,9 @@ version (USE_ODBC)
                 T data;
                 while (true)
                 {
-                    int len = 0;
+                    ptrdiff_t len = 0; // an SQLLEN (pointer-sized), see above
                     if (checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), buf.ptr,
-                            cast(int)(buf.length * E.sizeof), &len) == SQL_NO_DATA)
+                            cast(int)(buf.length * E.sizeof), cast(SQLINTEGER*) &len) == SQL_NO_DATA)
                         break; // all parts read
                     if (len == SQL_NULL_DATA)
                         return Variant();
@@ -1234,6 +1236,10 @@ version (USE_ODBC)
             SQLSMALLINT dbtype;
 
             void[] data;
+            /// Length/indicator for SQLBindParameter: SQL_NULL_DATA for a NULL. It must stay
+            /// valid until the statement is executed; `params` is not reallocated after prepare.
+            /// An SQLLEN (pointer-sized), although the bindings declare the pointer as `SQLINTEGER*`.
+            ptrdiff_t indicator;
         }
 
         void bindParam(T)(int parameterIndex, T x)
@@ -1328,6 +1334,12 @@ version (USE_ODBC)
             bindParam(parameterIndex, cast(byte[]) cast(void[]) x);
         }
 
+        /// Sent as text (`Decimal.toFixedString`); the server converts it to the column type.
+        override void setDecimal(int parameterIndex, Decimal x)
+        {
+            setString(parameterIndex, x.toFixedString());
+        }
+
         override void setString(int parameterIndex, string x)
         {
             bindParam(parameterIndex, x.dup);
@@ -1357,6 +1369,11 @@ version (USE_ODBC)
 
         override void setVariant(int parameterIndex, Variant x)
         {
+            if (auto d = x.peek!Decimal)
+            {
+                setDecimal(parameterIndex, *d);
+                return;
+            }
             if (x.type == typeid(float))
                 setFloat(parameterIndex, x.get!(float));
             else if (x.type == typeid(double))
@@ -1398,12 +1415,26 @@ version (USE_ODBC)
 
         override void setNull(int parameterIndex)
         {
-            throw new SQLException("Method not implemented");
+            setNull(parameterIndex, SqlType.VARCHAR);
         }
 
+        /// Binds a NULL, as a VARCHAR whatever `sqlType` is: the server converts it to
+        /// the column type (SQL Server converts a NULL of any type implicitly).
         override void setNull(int parameterIndex, int sqlType)
         {
-            throw new SQLException("Method not implemented");
+            checkClosed();
+            lock();
+            scope (exit)
+                unlock();
+            checkIndex(parameterIndex);
+
+            auto param = &params[parameterIndex - 1];
+            param.data = null;
+            param.bindType = SQL_C_CHAR;
+            param.dbtype = SQL_VARCHAR;
+            param.indicator = SQL_NULL_DATA;
+            SQLBindParameter(stmt, cast(ushort) parameterIndex, SQL_PARAM_INPUT, param.bindType, param.dbtype, 1, 0,
+                    null, 0, cast(SQLINTEGER*) &param.indicator);
         }
 
         override string toString() {

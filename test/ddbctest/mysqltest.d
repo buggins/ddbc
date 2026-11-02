@@ -10,7 +10,7 @@ import std.stdio;
 import std.typecons : Nullable;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
 import ddbc.core : Connection, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
 
@@ -59,6 +59,24 @@ version(USE_MYSQL) {
     }
 
     // POD insert and update with values that need quoting: https://github.com/buggins/ddbc/issues/88
+    // Exact decimals: https://github.com/buggins/ddbc/issues/158
+    class MySQLDecimalTest : DdbcTestFixture {
+        mixin UnitTest;
+
+        this() {
+            super(
+                "ddbc:mysql://localhost:%s/testdb?user=testuser,password=passw0rd".format(environment.get("MYSQL_PORT", "3306")),
+                "CREATE TABLE `ddbc_decimal` (`id` INTEGER PRIMARY KEY, `amount` DECIMAL(30,4) NULL, `missing` DECIMAL(30,4) NULL)",
+                "DROP TABLE IF EXISTS `ddbc_decimal`"
+            );
+        }
+
+        @Test
+        public void testDecimalRoundTrip() {
+            checkDecimalRoundTrip(conn, "ddbc_decimal", true, ["12.3400", "-0.0005", "123456789012345678901234.5678", "0.0000"]);
+        }
+    }
+
     class MySQLPodTest : DdbcTestFixture {
         mixin UnitTest;
 

@@ -43,6 +43,9 @@ import std.exception;
 import std.variant;
 import std.datetime;
 
+/// Exact decimal numbers for `getDecimal`/`setDecimal`, from `dbwire:types`.
+public import dbwire.types.decimal : Decimal, RoundingMode;
+
 class SQLException : Exception {
     protected string _stateString;
     this(string msg, string stateString, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); _stateString = stateString; }
@@ -312,6 +315,8 @@ interface DataSetReader {
 	ulong getUlong(int columnIndex);
 	double getDouble(int columnIndex);
 	float getFloat(int columnIndex);
+	/// The value as an exact decimal; a NULL reads as `Decimal.init` (zero), with `wasNull()` true.
+	Decimal getDecimal(int columnIndex);
 	string getString(int columnIndex);
 	SysTime getSysTime(int columnIndex);
 	DateTime getDateTime(int columnIndex);
@@ -336,6 +341,8 @@ interface DataSetWriter {
 	void setUshort(int parameterIndex, ushort x);
 	void setUbyte(int parameterIndex, ubyte x);
 	void setUbytes(int parameterIndex, ubyte[] x);
+	/// Sets an exact decimal value.
+	void setDecimal(int parameterIndex, Decimal x);
 	void setString(int parameterIndex, string x);
 	void setSysTime(int parameterIndex, SysTime x);
 	void setDateTime(int parameterIndex, DateTime x);
@@ -378,6 +385,7 @@ interface ResultSet : DataSetReader {
 	ulong getUlong(int columnIndex);
 	double getDouble(int columnIndex);
 	float getFloat(int columnIndex);
+	Decimal getDecimal(int columnIndex);
 	string getString(int columnIndex);
     Variant getVariant(int columnIndex);
 	SysTime getSysTime(int columnIndex);
@@ -403,6 +411,7 @@ interface ResultSet : DataSetReader {
 	ulong getUlong(string columnName);
 	double getDouble(string columnName);
 	float getFloat(string columnName);
+	Decimal getDecimal(string columnName);
     string getString(string columnName);
 	SysTime getSysTime(string columnName);
 	DateTime getDateTime(string columnName);
@@ -467,6 +476,8 @@ interface PreparedStatement : Statement, DataSetWriter {
 	void setUshort(int parameterIndex, ushort x);
 	void setUbyte(int parameterIndex, ubyte x);
 	void setUbytes(int parameterIndex, ubyte[] x);
+	/// Sets an exact decimal value.
+	void setDecimal(int parameterIndex, Decimal x);
 	void setString(int parameterIndex, string x);
 	void setSysTime(int parameterIndex, SysTime x);
 	void setDateTime(int parameterIndex, DateTime x);

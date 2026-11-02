@@ -9,8 +9,10 @@ import std.variant;
 import std.stdio;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture;
-import ddbc.core : Connection, PreparedStatement, Statement, SQLException, TransactionIsolation;
+import std.exception : assertThrown;
+import std.typecons : Nullable;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
+import ddbc.core : Connection, Decimal, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
 
 static import ddbc.core;
@@ -97,6 +99,65 @@ class SQLiteTest : DdbcTestFixture {
 
 
 // tests the use of POD
+// Exact decimals: https://github.com/buggins/ddbc/issues/158
+class SQLiteDecimalTest : DdbcTestFixture {
+    mixin UnitTest;
+
+    private struct Payment {
+        long id;
+        Decimal amount;
+        Nullable!Decimal bonus;
+    }
+
+    this() {
+        super(
+            "sqlite::memory:",
+            "CREATE TABLE ddbc_decimal (id INTEGER PRIMARY KEY, amount DECIMAL(20,4), missing DECIMAL(20,4))",
+            "DROP TABLE IF EXISTS ddbc_decimal"
+        );
+    }
+
+    @Test
+    public void testDecimalRoundTrip() {
+        // SQLite stores DECIMAL columns as REAL: values within double precision
+        checkDecimalRoundTrip(conn, "ddbc_decimal", false, ["12.34", "-0.0005", "1234567.5", "0"]);
+    }
+
+    @Test
+    public void testDecimalFromText() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+        auto rs = stmt.executeQuery("SELECT '123456789012345678901234567890.1234567' AS t, 1.5e-7 AS r, 'x' AS bad");
+        scope(exit) rs.close();
+        assertTrue(rs.next());
+        assertEquals("123456789012345678901234567890.1234567", rs.getDecimal(1).toFixedString()); // exact text
+        assertEquals("0.00000015", rs.getDecimal(2).toString()); // SQLite prints 1.5e-07
+        assertThrown!SQLException(rs.getDecimal(3));
+    }
+
+    @Test
+    public void testPodWithDecimalFields() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+        stmt.executeUpdate("CREATE TABLE payment (id INTEGER PRIMARY KEY, amount DECIMAL(20,4), bonus DECIMAL(20,4) NULL)");
+
+        Payment p;
+        p.amount = Decimal.fromString("19.99");
+        assertTrue(stmt.insert!Payment(p));
+        Payment q;
+        q.amount = Decimal.fromString("-5.5");
+        q.bonus = Decimal.fromString("0.25");
+        assertTrue(stmt.insert!Payment(q));
+
+        const Payment first = stmt.get!Payment(p.id);
+        assertTrue(first.amount == Decimal.fromString("19.99"));
+        assertTrue(first.bonus.isNull);
+        const Payment second = stmt.get!Payment(q.id);
+        assertTrue(second.amount == Decimal.fromString("-5.5"));
+        assertTrue(!second.bonus.isNull && second.bonus.get == Decimal.fromString("0.25"));
+    }
+}
+
 class SQLitePodTest : DdbcTestFixture {
     mixin UnitTest;
 

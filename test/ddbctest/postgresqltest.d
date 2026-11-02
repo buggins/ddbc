@@ -11,7 +11,7 @@ import std.typecons : Nullable;
 
 import dunit;
 import std.exception : assertThrown;
-import ddbc.test.common : DdbcTestFixture;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
 import ddbc.core : Connection, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
 
@@ -104,6 +104,24 @@ version(USE_PGSQL) {
             assertEquals("12:00:00+02", rs.getString(8));
             assertEquals("101", rs.getString(9));
             assertEquals("happy", rs.getString(11)); // user-defined enum: https://github.com/buggins/ddbc/issues/61
+        }
+    }
+
+    // Exact decimals: https://github.com/buggins/ddbc/issues/158
+    class PostgresDecimalTest : DdbcTestFixture {
+        mixin UnitTest;
+
+        this() {
+            super(
+                "ddbc:postgresql://localhost:%s/testdb?user=testuser,password=passw0rd,ssl=false".format(environment.get("POSTGRES_PORT", "5432")),
+                "CREATE TABLE ddbc_decimal (id INTEGER PRIMARY KEY, amount NUMERIC(30,4), missing NUMERIC(30,4))",
+                "DROP TABLE IF EXISTS ddbc_decimal"
+            );
+        }
+
+        @Test
+        public void testDecimalRoundTrip() {
+            checkDecimalRoundTrip(conn, "ddbc_decimal", true, ["12.3400", "-0.0005", "123456789012345678901234.5678", "0.0000"]);
         }
     }
 

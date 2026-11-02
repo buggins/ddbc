@@ -13,6 +13,9 @@
         "dub": ">=1.14.0",
         "frontend": ">=2.097"
     },
+    "dependencies": {
+        "dbwire:types": "~>0.1.1"
+    },
     "systemDependencies": "Depending on configuration: PostgreSQL client library (libpq; on Windows, libpq.dll from a PostgreSQL installation in PATH), SQLite v3, ODBC",
     "configurations": [
         {

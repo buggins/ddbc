@@ -59,6 +59,28 @@ int main(string[] args) {
 }
 ```
 
+### Exact decimals
+
+`getDecimal` and `setDecimal` read and write `DECIMAL`/`NUMERIC` values exactly, as a `Decimal`
+(re-exported by `ddbc.core`; it comes from [dbwire](https://github.com/buggins/dbwire)'s `dbwire:types`,
+a small pure-D package that ddbc depends on): up to 76 digits, with the column's scale, convertible to
+and from text, `double`, `long` and `BigInt`. A NULL reads as zero, with `wasNull()` true.
+
+```d
+auto ps = conn.prepareStatement("INSERT INTO payment (id, amount) VALUES (?, ?)");
+ps.setLong(1, 1);
+ps.setDecimal(2, Decimal.fromString("19.90"));
+ps.executeUpdate();
+
+auto rs = stmt.executeQuery("SELECT amount FROM payment");
+while (rs.next())
+    writeln(rs.getDecimal(1).toFixedString()); // 19.90 (for a DECIMAL(10,2) column)
+```
+
+Every driver supports them: values are read from the database's own decimal type where the driver has
+one (ClickHouse), else parsed from the text the database returns; parameters are sent as text (typed
+`Decimal(P, S)` for ClickHouse). POD structs may have `Decimal` and `Nullable!Decimal` fields.
+
 Module ddbc.pods implement SELECT support for POD structs (plain old data).
 
 Instead of manual reading fields one by one, it's possible to put result set value to struct fields, 

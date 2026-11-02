@@ -144,6 +144,8 @@ enum PropertyMemberType : int {
     NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
     BYTE_ARRAY_TYPE, // byte[]
     UBYTE_ARRAY_TYPE, // ubyte[]
+    DECIMAL_TYPE, // Decimal (dbwire.types.decimal)
+    NULLABLE_DECIMAL_TYPE, // Nullable!Decimal
 }
 
 /// converts camel case MyEntityName to my_entity_name
@@ -244,6 +246,10 @@ template isSupportedSimpleType(T, string m) {
             enum bool isSupportedSimpleType = true;
         } else static if (is(ReturnType!(ti) == ubyte[])) {
             enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Decimal)) {
+            enum bool isSupportedSimpleType = true;
+        } else static if (is(ReturnType!(ti) == Nullable!Decimal)) {
+            enum bool isSupportedSimpleType = true;
         } else static if (true) {
             enum bool isSupportedSimpleType = false;
         }
@@ -312,6 +318,10 @@ template isSupportedSimpleType(T, string m) {
     } else static if (is(ti == byte[])) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == ubyte[])) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Decimal)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!Decimal)) {
         enum bool isSupportedSimpleType = true;
     } else static if (true) {
         enum bool isSupportedSimpleType = false;
@@ -387,6 +397,10 @@ PropertyMemberType getPropertyType(ti)() {
         return PropertyMemberType.BYTE_ARRAY_TYPE;
     } else static if (is(ti == ubyte[])) {
         return PropertyMemberType.UBYTE_ARRAY_TYPE;
+    } else static if (is(ti == Decimal)) {
+        return PropertyMemberType.DECIMAL_TYPE;
+    } else static if (is(ti == Nullable!Decimal)) {
+        return PropertyMemberType.NULLABLE_DECIMAL_TYPE;
     } else static if (true) {
         static assert (false, "has unsupported type " ~ ti.stringof);
     }
@@ -460,6 +474,10 @@ PropertyMemberType getPropertyMemberType(T, string m)() {
         return PropertyMemberType.BYTE_ARRAY_TYPE;
     } else static if (is(ti == ubyte[])) {
         return PropertyMemberType.UBYTE_ARRAY_TYPE;
+    } else static if (is(ti == Decimal)) {
+        return PropertyMemberType.DECIMAL_TYPE;
+    } else static if (is(ti == Nullable!Decimal)) {
+        return PropertyMemberType.NULLABLE_DECIMAL_TYPE;
     } else static if (true) {
         static assert (false, "Member " ~ m ~ " of class " ~ T.stringof ~ " has unsupported type " ~ ti.stringof);
     }
@@ -508,6 +526,8 @@ static immutable bool[] ColumnTypeCanHoldNulls =
     true, //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
     true, //BYTE_ARRAY_TYPE, // byte[]
     true, //UBYTE_ARRAY_TYPE, // ubyte[]
+    false, //DECIMAL_TYPE
+    true, //NULLABLE_DECIMAL_TYPE
 ];
 
 bool isColumnTypeNullableByDefault(T, string m)() {
@@ -549,6 +569,8 @@ static immutable string[] ColumnTypeKeyIsSetCode =
     "(!%s.isNull)", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
     "(%s !is null)", //BYTE_ARRAY_TYPE, // byte[]
     "(%s !is null)", //UBYTE_ARRAY_TYPE, // ubyte[]
+    "(%s != Decimal.init)", //DECIMAL_TYPE
+    "(!%s.isNull)", //NULLABLE_DECIMAL_TYPE
 ];
 
 string getColumnTypeKeyIsSetCode(T, string m)() {
@@ -590,6 +612,8 @@ static immutable string[] ColumnTypeIsNullCode =
     "(%s.isNull)", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
     "(%s is null)", //BYTE_ARRAY_TYPE, // byte[]
     "(%s is null)", //UBYTE_ARRAY_TYPE, // ubyte[]
+    "(false)", //DECIMAL_TYPE
+    "(%s.isNull)", //NULLABLE_DECIMAL_TYPE
 ];
 
 string getColumnTypeIsNullCode(T, string m)() {
@@ -631,6 +655,8 @@ static immutable string[] ColumnTypeSetNullCode =
     "Nullable!TimeOfDay nv;", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
     "byte[] nv = null;", //BYTE_ARRAY_TYPE, // byte[]
     "ubyte[] nv = null;", //UBYTE_ARRAY_TYPE, // ubyte[]
+    "Decimal nv;", //DECIMAL_TYPE
+    "Nullable!Decimal nv;", //NULLABLE_DECIMAL_TYPE
 ];
 
 static immutable string[] ColumnTypePropertyToVariant = 
@@ -668,6 +694,8 @@ static immutable string[] ColumnTypePropertyToVariant =
     "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
     "Variant(%s)", //BYTE_ARRAY_TYPE, // byte[]
     "Variant(%s)", //UBYTE_ARRAY_TYPE, // ubyte[]
+    "Variant(%s)", //DECIMAL_TYPE
+    "(%s.isNull ? Variant(null) : Variant(%s.get()))", //NULLABLE_DECIMAL_TYPE
 ];
 
 static immutable string[] ColumnTypeDatasetReaderCode = 
@@ -705,6 +733,8 @@ static immutable string[] ColumnTypeDatasetReaderCode =
     "Nullable!TimeOfDay(r.getTime(index))", //NULLABLE_TIME_TYPE, // Nullable!std.datetime.TimeOfDay
     "r.getBytes(index)", //BYTE_ARRAY_TYPE, // byte[]
     "r.getUbytes(index)", //UBYTE_ARRAY_TYPE, // ubyte[]
+    "r.getDecimal(index)", //DECIMAL_TYPE
+    "Nullable!Decimal(r.getDecimal(index))", //NULLABLE_DECIMAL_TYPE
 ];
 
 string getColumnTypeDatasetReadCode(T, string m)() {
@@ -951,6 +981,10 @@ string getColumnTypeDatasetReadCodeByName(T, string m)() {
             return `Nullable!SysTime(r.getSysTime("` ~ m ~ `"))`;
         case NULLABLE_DATETIME_TYPE:
             return `Nullable!DateTime(r.getDateTime("` ~ m ~ `"))`;
+        case DECIMAL_TYPE:
+            return `r.getDecimal("` ~ m ~ `")`;
+        case NULLABLE_DECIMAL_TYPE:
+            return `Nullable!Decimal(r.getDecimal("` ~ m ~ `"))`;
     }
 }
 
@@ -1352,6 +1386,10 @@ template isSupportedSimpleTypeRef(M) {
     } else static if (is(ti == byte[])) {
         enum bool isSupportedSimpleType = true;
     } else static if (is(ti == ubyte[])) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Decimal)) {
+        enum bool isSupportedSimpleType = true;
+    } else static if (is(ti == Nullable!Decimal)) {
         enum bool isSupportedSimpleType = true;
     } else static if (true) {
         enum bool isSupportedSimpleType = false;

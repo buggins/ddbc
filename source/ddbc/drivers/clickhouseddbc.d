@@ -703,6 +703,25 @@ version (USE_CLICKHOUSE)
             setParam(parameterIndex, "String", cast(string) x.idup);
         }
 
+        /// Sent as `Decimal(P, S)` with the smallest precision that holds the value
+        /// (a negative scale becomes 0; ClickHouse scales are 0 to 76).
+        override void setDecimal(int parameterIndex, Decimal x)
+        {
+            import std.algorithm.comparison : max;
+            import dbwire.exception : DbException;
+
+            Decimal v;
+            try
+                v = x.scale < 0 ? x.rescaled(0) : x;
+            catch (DbException e)
+                throw new SQLException(e.msg, e);
+            enforce!SQLException(v.scale <= 76, "Decimal scale above ClickHouse's limit of 76: " ~ x.toString());
+            const needed = max(v.precision, cast(uint) v.scale, 1u);
+            const precision = needed <= 9 ? 9 : needed <= 18 ? 18 : needed <= 38 ? 38 : 76;
+            setParam(parameterIndex, "Decimal(" ~ to!string(precision) ~ ", " ~ to!string(v.scale) ~ ")",
+                    v.toFixedString());
+        }
+
         override void setString(int parameterIndex, string x)
         {
             if (x is null)
@@ -782,6 +801,8 @@ version (USE_CLICKHOUSE)
                 setUbytes(parameterIndex, *v);
             else if (auto v = x.peek!(byte[]))
                 setBytes(parameterIndex, *v);
+            else if (auto v = x.peek!Decimal)
+                setDecimal(parameterIndex, *v);
             else
                 throw new SQLException("Unsupported parameter type " ~ x.type.toString());
         }
@@ -1181,6 +1202,30 @@ version (USE_CLICKHOUSE)
         {
             auto c = column(columnIndex);
             return lastIsNull ? null : translate(c.getString(rowInBlock));
+        }
+
+        /// Exact for `Decimal(P, S)` columns (keeping their scale); integer, float
+        /// and string columns convert as clickhoused's `readValue` does.
+        override Decimal getDecimal(int columnIndex)
+        {
+            import dbwire.exception : DbException;
+
+            auto c = column(columnIndex);
+            if (lastIsNull)
+                return Decimal.init;
+            // Read the values of a Nullable column directly, so that a Decimal keeps its scale
+            if (auto nullable = cast(CH.NullableColumn) c)
+                c = nullable.nested;
+            auto value = translate(CH.readValue!(CH.Decimal)(c, rowInBlock));
+            static if (is(typeof(value) == Decimal))
+                return value; // clickhoused 0.9 and newer use dbwire's Decimal
+            else
+            {
+                try
+                    return Decimal.fromString(value.toFixedString());
+                catch (DbException e)
+                    throw new SQLException(e.msg, e);
+            }
         }
 
         override SysTime getSysTime(int columnIndex)
