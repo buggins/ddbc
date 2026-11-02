@@ -253,6 +253,47 @@ public:
 
 /// Helper implementation of ResultSet - throws Method not implemented for most of methods.
 /// Useful for driver implementations
+/++
+Parses decimal text exactly, as databases print numbers: `"-12.345"`,
+`"1.5E-7"`, `"1e+20"` (the exponent shifts the decimal point; the result
+keeps all digits). Surrounding spaces are ignored.
+
+Throws: `SQLException` if the text is not a finite decimal number, or needs
+more than 76 digits or a scale beyond 255.
++/
+Decimal parseDecimal(string text) {
+	import std.string : indexOfAny, strip;
+	import dbwire.exception : DbException;
+	import dbwire.types.wideint : Int256;
+
+	const trimmed = text.strip();
+	try {
+		const e = trimmed.indexOfAny("eE");
+		if (e < 0)
+			return Decimal.fromString(trimmed);
+		const mantissa = Decimal.fromString(trimmed[0 .. e]);
+		const exponentText = trimmed[e + 1 .. $];
+		enforce!SQLException(exponentText.length > 0 && exponentText.length <= 6,
+				"Cannot parse '" ~ text ~ "' as a decimal number");
+		const exponent = to!int(exponentText);
+		return Decimal(mantissa.unscaled, mantissa.scale - exponent);
+	} catch (DbException e) {
+		throw new SQLException("Cannot parse '" ~ text ~ "' as a decimal number: " ~ e.msg, e);
+	} catch (ConvException e) {
+		throw new SQLException("Cannot parse '" ~ text ~ "' as a decimal number", e);
+	}
+}
+
+///
+unittest {
+	assert(parseDecimal("-12.340").toFixedString() == "-12.340"); // the scale is kept
+	assert(parseDecimal(" 1.5E-7 ").toString() == "0.00000015");
+	assert(parseDecimal("1e+20").toString() == "100000000000000000000");
+	assert(parseDecimal("2.50e1") == Decimal.fromString("25"));
+	foreach (bad; ["", "abc", "1e", "1e+", "nan", "inf", "1e999", "1.5.5"])
+		assertThrown!SQLException(parseDecimal(bad), bad);
+}
+
 class ResultSetImpl : ddbc.core.ResultSet {
 	private import std.datetime : DateTime, Date, TimeOfDay;
 	private import std.datetime.systime : SysTime;
@@ -365,6 +406,17 @@ public:
 	}
 	override float getFloat(string columnName) {
 		return getFloat(findColumn(columnName));
+	}
+	/// Reads the value as text and parses it exactly (see `parseDecimal`); drivers
+	/// with a native decimal value override this. A NULL reads as `Decimal.init`.
+	override Decimal getDecimal(int columnIndex) {
+		string text = getString(columnIndex);
+		if (wasNull())
+			return Decimal.init;
+		return parseDecimal(text);
+	}
+	override Decimal getDecimal(string columnName) {
+		return getDecimal(findColumn(columnName));
 	}
 	override string getString(int columnIndex) {
 		throw new SQLException("Method not implemented");

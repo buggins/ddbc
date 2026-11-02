@@ -759,6 +759,10 @@ public:
             throw new SQLException(e);
         }
     }
+    /// Sent as text (`Decimal.toFixedString`); the server converts it to the column type.
+    override void setDecimal(int parameterIndex, Decimal x) {
+        setString(parameterIndex, x.toFixedString());
+    }
     override void setString(int parameterIndex, string x) {
         checkClosed();
         lock();
@@ -821,6 +825,10 @@ public:
         }
 	}
 	override void setVariant(int parameterIndex, Variant x) {
+	    if (auto d = x.peek!Decimal) {
+	        setDecimal(parameterIndex, *d);
+	        return;
+	    }
         checkClosed();
         lock();
         scope(exit) unlock();

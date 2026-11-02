@@ -10,7 +10,7 @@ import std.exception : assertThrown;
 import std.variant;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
 import ddbc.core : Connection, PreparedStatement, ResultSet, ResultSetMetaData, SqlType, SQLException, Statement,
     TransactionIsolation;
 
@@ -23,6 +23,38 @@ version(USE_CLICKHOUSE) {
     string clickHouseUrl() {
         return "ddbc:clickhouse://localhost:%s/default?user=default%s".format(environment.get("CLICKHOUSE_PORT", "9000"),
                 environment.get("CLICKHOUSE_PARAMS", ""));
+    }
+
+    // Exact decimals: https://github.com/buggins/ddbc/issues/158
+    class ClickHouseDecimalTest : DdbcTestFixture {
+        mixin UnitTest;
+
+        this() {
+            super(
+                clickHouseUrl(),
+                "CREATE TEMPORARY TABLE ddbc_decimal (id UInt32, amount Nullable(Decimal(30, 4)), "
+                    ~ "missing Nullable(Decimal(30, 4))) ENGINE = Memory",
+                "DROP TEMPORARY TABLE IF EXISTS ddbc_decimal"
+            );
+        }
+
+        @Test
+        public void testDecimalRoundTrip() {
+            checkDecimalRoundTrip(conn, "ddbc_decimal", true,
+                    ["12.3400", "-0.0005", "123456789012345678901234.5678", "0.0000"]);
+        }
+
+        @Test
+        public void testDecimalFromOtherColumns() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            auto rs = stmt.executeQuery("SELECT toDecimal64('1.50', 2) AS d, 42 AS i, '7.25' AS s");
+            scope(exit) rs.close();
+            assertTrue(rs.next());
+            assertEquals("1.50", rs.getDecimal(1).toFixedString()); // the column's scale
+            assertEquals("42", rs.getDecimal(2).toString());
+            assertEquals("7.25", rs.getDecimal(3).toString());
+        }
     }
 
     class ClickHouseTest : DdbcTestFixture {
