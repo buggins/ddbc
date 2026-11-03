@@ -655,7 +655,10 @@ string extractDriverNameFromURL(string url) {
 	// sqlserver: the native driver (configuration MSSQL) when it is compiled in, else ODBC
 	if (dbName == "sqlserver")
 		return DriverFactory.isRegistered("sqlserver") ? "sqlserver" : "odbc";
-	return dbName == "oracle" ? "odbc" : dbName;
+	// oracle: the native driver (configuration ORACLE) when it is compiled in, else ODBC
+	if (dbName == "oracle")
+		return DriverFactory.isRegistered("oracle") ? "oracle" : "odbc";
+	return dbName;
 }
 
 private unittest {
@@ -669,7 +672,11 @@ private unittest {
 		enum sqlServerDriver = "odbc";
 	assert(extractDriverNameFromURL("ddbc:sqlserver://127.0.0.1:1433/mydb") == sqlServerDriver);
 	assert(extractDriverNameFromURL("ddbc:mssql://127.0.0.1:1433/mydb") == "mssql");
-	assert(extractDriverNameFromURL("ddbc:oracle://127.0.0.1:1521/mydb") == "odbc");
+	version (USE_ORACLE)
+		enum oracleDriver = "oracle";
+	else
+		enum oracleDriver = "odbc";
+	assert(extractDriverNameFromURL("ddbc:oracle://127.0.0.1:1521/mydb") == oracleDriver);
 	assert(extractDriverNameFromURL("ddbc:odbc://127.0.0.1:3306/mydb") == "odbc");
 
 	// same again without the ddbc prefix:
@@ -678,7 +685,7 @@ private unittest {
 	assert(extractDriverNameFromURL("mysql://127.0.0.1:3306/mydb") == "mysql");
 	assert(extractDriverNameFromURL("postgresql://127.0.0.1:5432/mydb") == "postgresql");
 	assert(extractDriverNameFromURL("sqlserver://127.0.0.1:1433/mydb") == sqlServerDriver);
-	assert(extractDriverNameFromURL("oracle://127.0.0.1:1521/mydb") == "odbc");
+	assert(extractDriverNameFromURL("oracle://127.0.0.1:1521/mydb") == oracleDriver);
 	assert(extractDriverNameFromURL("odbc://127.0.0.1:3306/mydb") == "odbc");
 }
 

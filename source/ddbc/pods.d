@@ -1203,6 +1203,8 @@ bool insert(T)(Statement stmt, ref T o) if (__traits(isPOD, T)) {
     insertSQL ~= "(" ~ join(values, ",") ~ ")";
     if (stmt.getDialectType() == DialectType.PGSQL)
         insertSQL ~= " RETURNING id"; // Postgres reports generated keys only when asked for them
+    else if (stmt.getDialectType() == DialectType.PLSQL)
+        insertSQL ~= " RETURNING id INTO ?"; // Oracle returns values only into bind variables
     Variant insertId;
     stmt.executeUpdate(insertSQL, insertId);
     if (!insertId.hasValue) {
