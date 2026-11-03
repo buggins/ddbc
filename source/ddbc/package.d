@@ -24,6 +24,7 @@ PGSQL                       USE_PGSQL                          postgresql
 ODBC                        USE_ODBC                           odbc
 ClickHouse                  USE_CLICKHOUSE                     clickhouse (needs D frontend 2.105+; not in full)
 MSSQL                       USE_MSSQL                          mssql, sqlserver: native SQL Server driver (mssql-native; not in full)
+ORACLE                      USE_ORACLE                         oracle: native Oracle driver (oracle-native; not in full)
 API                         (none)                             (no drivers, API only)
 
 
@@ -126,6 +127,13 @@ For SQL Server with the native driver (configuration MSSQL), use following form 
 the ODBC form `sqlserver://host,port?user=...,password=...,encrypt=yes` works with both.
 
 
+For Oracle with the native driver (configuration ORACLE), use following form of URL:
+
+    oracle://host:port/service_name?user=username,password=userpassword
+
+`oracle://` URLs use the ODBC driver when the native one is not compiled in.
+
+
 For SQLite, use following form of URL:
 
     sqlite:db_file_path_name
@@ -222,6 +230,11 @@ version(USE_MSSQL)
 {
     // register the native SQL Server driver
     private import ddbc.drivers.mssqlddbc;
+}
+version(USE_ORACLE)
+{
+    // register the native Oracle driver
+    private import ddbc.drivers.oracleddbc;
 }
 version(USE_ODBC)
 {

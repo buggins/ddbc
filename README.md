@@ -5,7 +5,7 @@ DDBC
 
 DDBC is DB Connector for D language (similar to JDBC)
 
-Currently supports MySQL, PostgreSQL, SQLite, SQL Server (via ODBC, or natively with the opt-in `MSSQL` configuration and the pure D [mssql-native](https://code.dlang.org/packages/mssql-native) client) and ClickHouse (opt-in `ClickHouse` configuration, via the pure D [clickhoused](https://code.dlang.org/packages/clickhoused) client).
+Currently supports MySQL, PostgreSQL, SQLite, SQL Server (via ODBC, or natively with the opt-in `MSSQL` configuration and the pure D [mssql-native](https://code.dlang.org/packages/mssql-native) client), Oracle (natively with the opt-in `ORACLE` configuration and the pure D [oracle-native](https://code.dlang.org/packages/oracle-native) client, or via ODBC) and ClickHouse (opt-in `ClickHouse` configuration, via the pure D [clickhoused](https://code.dlang.org/packages/clickhoused) client).
 
 The project is hosted on [github](https://github.com/buggins/ddbc) with documentation available on the [wiki](https://github.com/buggins/ddbc/wiki).
 
@@ -231,6 +231,32 @@ or
 ddbc:odbc://localhost,1433?user=sa,password=bbk4k77JKH88g54,driver=FreeTDS
 ```
 
+### Oracle (native)
+
+Use the `ORACLE` configuration (`"subConfigurations": { "ddbc": "ORACLE" }`): Oracle Net (TNS/TTC) in pure D through
+[oracle-native](https://code.dlang.org/packages/oracle-native), no Instant Client, OCI, ODBC or other C library at
+build time. Oracle Database 12.1 and newer.
+
+```
+ddbc:oracle://127.0.0.1:1521/FREEPDB1?user=scott,password=tiger
+```
+
+The path is the service name (`sid=...` connects by SID instead); the port defaults to 1521. Other parameters are
+the options of oracle-native connection strings: `secure=true` with `tls_ca_file` for TLS (the system's OpenSSL
+library, loaded at run time), `fetch_size`, `statement_cache_size`, `time_zone`, `connect_timeout`, ...;
+`auto_commit=false` starts with auto-commit off. With this configuration `oracle://` URLs use the native driver;
+without it, ODBC.
+
+All common column types are read exactly: `NUMBER` with `getDecimal` (keeping the column's scale),
+`BINARY_FLOAT`/`BINARY_DOUBLE`, `VARCHAR2`/`NVARCHAR2`/`CHAR`, `RAW`, `DATE` and `TIMESTAMP` (as UTC through
+`getSysTime`), `TIMESTAMP WITH TIME ZONE` with its zone, `CLOB`/`NCLOB`/`BLOB` (through `getString`/`getBytes`),
+`LONG`, `ROWID`. Prepared statements take `?` (or `:1`, `:name`) placeholders and are parsed once (statement cache).
+`executeUpdate(sql, insertId)` gives the value of a `RETURNING id INTO ?` clause, whose placeholder needs no value
+(Oracle has no "last insert id"). Auto-commit commits after each statement that changes data; the isolation levels
+are `READ_COMMITTED` and `SERIALIZABLE`; the catalog is the current schema. Empty strings are NULL in Oracle. Result
+sets are forward-only and streamed. For LOB locators, array DML, PL/SQL OUT parameters and REF cursors, use
+`getNativeConnection()`.
+
 ### Oracle (via ODBC) **experimental**
 
 ```
@@ -248,7 +274,7 @@ the DSN name will be used.
 
 ## Contributing
 
-pull requests are welcome. Please ensure your local branch is up to date and all tests are passing locally before making a pull request. A docker-compose file is included to help with local development. Use `docker-compose up -d` then run `dub test --config=MySQL`, `dub test --config=PGSQL` and `dub test --config=ODBC`. ClickHouse tests run with `dub run --config=test-clickhouse`, the native SQL Server tests with `MSSQL_PORT=1433 dub run --config=test-mssql`. See the `.travis.yml` file and individual driver code for details on creating the relevant databases for local testing.
+pull requests are welcome. Please ensure your local branch is up to date and all tests are passing locally before making a pull request. A docker-compose file is included to help with local development. Use `docker-compose up -d` then run `dub test --config=MySQL`, `dub test --config=PGSQL` and `dub test --config=ODBC`. ClickHouse tests run with `dub run --config=test-clickhouse`, the native SQL Server tests with `MSSQL_PORT=1433 dub run --config=test-mssql`, the native Oracle tests with `ORACLE_PORT=1521 ORACLE_SERVICE=FREEPDB1 ORACLE_USER=testuser ORACLE_PASSWORD=... dub run --config=test-oracle`. See the `.travis.yml` file and individual driver code for details on creating the relevant databases for local testing.
 
 The examples should also run, make sure to change to the _example_ directory and run `dub build` then make sure that the compiled executable will run with each supported database (you'll need to install relevant libs and create databases and users with relevant permissions):
 

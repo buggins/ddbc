@@ -94,6 +94,10 @@ jobs:
       - name: dub build (MSSQL) ${{ runner.arch }}
         run: dub build --config=MSSQL
 
+      # native Oracle driver (pure D, no system libraries)
+      - name: dub build (ORACLE) ${{ runner.arch }}
+        run: dub build --config=ORACLE
+
       # x86 (Windows Only)
       - name: dub test with full config (x86)
         if: ${{ startsWith(matrix.os, 'windows') }}
@@ -198,6 +202,19 @@ jobs:
 #          --health-timeout 3s
 #          --health-retries 3
 
+      oracle:
+        image: gvenzl/oracle-free:23-slim-faststart
+        ports: [1521]
+        env:
+          ORACLE_PASSWORD: Oracle_test123
+          APP_USER: testuser
+          APP_USER_PASSWORD: Test_password123
+        options: >-
+          --health-cmd /opt/oracle/healthcheck.sh
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 60
+
     steps:
       - uses: actions/checkout@v5
 
@@ -228,6 +245,14 @@ jobs:
         env:
           MSSQL_PORT: ${{ job.services.mssql.ports[1433] }}
         run: dub run --config=test-mssql
+
+      - name: Run ddbctest (Oracle, native driver)
+        env:
+          ORACLE_PORT: ${{ job.services.oracle.ports[1521] }}
+          ORACLE_SERVICE: FREEPDB1
+          ORACLE_USER: testuser
+          ORACLE_PASSWORD: Test_password123
+        run: dub run --config=test-oracle
 
       - name: Build The Example Project
         working-directory: ./example
