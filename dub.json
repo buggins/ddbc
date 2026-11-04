@@ -14,7 +14,7 @@
         "frontend": ">=2.097"
     },
     "dependencies": {
-        "dbwire:types": "~>0.5.0"
+        "dbwire:types": "~>0.6.0"
     },
     "systemDependencies": "Depending on configuration: PostgreSQL client library (libpq; on Windows, libpq.dll from a PostgreSQL installation in PATH), SQLite v3, ODBC",
     "configurations": [
@@ -105,14 +105,14 @@
             "name": "MSSQL",
             "versions": ["USE_MSSQL"],
             "dependencies": {
-                "mssql-native": "~>0.2.1"
+                "mssql-native": "~>0.2.2"
             }
         },
         {
             "name": "ORACLE",
             "versions": ["USE_ORACLE"],
             "dependencies": {
-                "oracle-native": "~>0.1.0"
+                "oracle-native": "~>0.3.0"
             }
         },
         {
@@ -169,7 +169,7 @@
             "versions": ["USE_SQLITE", "USE_MSSQL"],
             "dependencies": {
                 "d-unit": "~>0.10.2",
-                "mssql-native": "~>0.2.1"
+                "mssql-native": "~>0.2.2"
             },
             "libs-posix": ["sqlite3"],
             "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],
@@ -185,7 +185,7 @@
             "versions": ["USE_SQLITE", "USE_ORACLE"],
             "dependencies": {
                 "d-unit": "~>0.10.2",
-                "oracle-native": "~>0.1.0"
+                "oracle-native": "~>0.3.0"
             },
             "libs-posix": ["sqlite3"],
             "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],
