@@ -243,9 +243,10 @@ ddbc:oracle://127.0.0.1:1521/FREEPDB1?user=scott,password=tiger
 
 The path is the service name (`sid=...` connects by SID instead); the port defaults to 1521. Other parameters are
 the options of oracle-native connection strings: `secure=true` with `tls_ca_file` for TLS (the system's OpenSSL
-library, loaded at run time), `fetch_size`, `statement_cache_size`, `time_zone`, `connect_timeout`, ...;
-`auto_commit=false` starts with auto-commit off. With this configuration `oracle://` URLs use the native driver;
-without it, ODBC.
+library, loaded at run time) or `wallet_location` for a wallet, `server=pooled` for Database Resident Connection
+Pooling (DRCP; `pool_connection_class`, `pool_purity`), `proxy_client` for proxy authentication, `fetch_size`,
+`statement_cache_size`, `time_zone`, `connect_timeout`, ...; `auto_commit=false` starts with auto-commit off. With
+this configuration `oracle://` URLs use the native driver; without it, ODBC.
 
 All common column types are read exactly: `NUMBER` with `getDecimal` (keeping the column's scale),
 `BINARY_FLOAT`/`BINARY_DOUBLE`, `VARCHAR2`/`NVARCHAR2`/`CHAR`, `RAW`, `DATE` and `TIMESTAMP` (as UTC through
