@@ -17,7 +17,14 @@ import ddbc.pods;
 
 static import ddbc.core;
 
-version(USE_PGSQL) {
+// The same tests run with the libpq driver (PGSQL) and the native one (PGNATIVE): postgresql:// URLs
+// use the native driver when the libpq one is not compiled in.
+version (USE_PGSQL)
+    version = PostgresTests;
+else version (USE_PGNATIVE)
+    version = PostgresTests;
+
+version(PostgresTests) {
     pragma(msg, "DDBC test will run Postgres tests");
 
     class PostgresTest : DdbcTestFixture {

@@ -1,0 +1,14 @@
+{
+    "name": "ddbc_pgnative_vibe",
+    "description": "DDBC's native PostgreSQL driver in vibe.d tasks (fiber mode)",
+    "homepage": "https://github.com/buggins/ddbc",
+    "license": "BSL-1.0",
+    "dependencies": {
+        "ddbc": {"version": "~master", "path": "../../"},
+        "vibe-core": "~>2.14"
+    },
+    "targetType": "executable",
+    "subConfigurations": {
+        "ddbc": "PGNATIVE"
+    }
+}

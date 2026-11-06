@@ -5,7 +5,7 @@ DDBC
 
 DDBC is DB Connector for D language (similar to JDBC)
 
-Currently supports MySQL, PostgreSQL, SQLite, SQL Server (via ODBC, or natively with the opt-in `MSSQL` configuration and the pure D [mssql-native](https://code.dlang.org/packages/mssql-native) client), Oracle (natively with the opt-in `ORACLE` configuration and the pure D [oracle-native](https://code.dlang.org/packages/oracle-native) client, or via ODBC) and ClickHouse (opt-in `ClickHouse` configuration, via the pure D [clickhoused](https://code.dlang.org/packages/clickhoused) client).
+Currently supports MySQL, PostgreSQL (through libpq, or natively with the opt-in `PGNATIVE` configuration and the pure D [postgresql-native](https://code.dlang.org/packages/postgresql-native) client), SQLite, SQL Server (via ODBC, or natively with the opt-in `MSSQL` configuration and the pure D [mssql-native](https://code.dlang.org/packages/mssql-native) client), Oracle (natively with the opt-in `ORACLE` configuration and the pure D [oracle-native](https://code.dlang.org/packages/oracle-native) client, or via ODBC) and ClickHouse (opt-in `ClickHouse` configuration, via the pure D [clickhoused](https://code.dlang.org/packages/clickhoused) client).
 
 The project is hosted on [github](https://github.com/buggins/ddbc) with documentation available on the [wiki](https://github.com/buggins/ddbc/wiki).
 
@@ -176,6 +176,35 @@ package (e.g. `libpq-dev` or `postgresql-libs`). On Windows, install PostgreSQL 
 its `bin` directory, e.g. `C:\Program Files\PostgreSQL\17\bin`, to `PATH`: `libpq.dll` needs the other DLLs in that
 directory (OpenSSL, libintl, ...). ddbc no longer ships its own `libpq.dll`.
 
+### PostgreSQL (native)
+
+Use the `PGNATIVE` configuration (`"subConfigurations": { "ddbc": "PGNATIVE" }`): the PostgreSQL protocol in pure D
+through [postgresql-native](https://code.dlang.org/packages/postgresql-native), no libpq or other C library at build
+time; it works in threads and in vibe.d tasks (fiber mode, chosen automatically). PostgreSQL 13 and newer.
+
+```
+ddbc:postgresql://127.0.0.1:5432/dbname?user=app,password=secret
+ddbc:postgresql://db1:5432,db2:5432/dbname?user=app,password=secret,sslmode=verify-full,sslrootcert=ca.pem
+ddbc:pgnative://127.0.0.1/dbname?user=app,password=secret
+```
+
+The path is the database; the port defaults to 5432; several hosts fail over. Other parameters are libpq's
+connection keywords: `sslmode` (default `prefer`), `sslrootcert`, `sslcert`, `sslkey`, `application_name`,
+`connect_timeout`, `target_session_attrs`, `require_auth`, `channel_binding`, and postgresql-native's
+`statement_cache_size` and `io_mode`; `ssl=true`/`false` as for the libpq driver; `auto_commit=false` starts with
+auto-commit off. `postgresql://` and `postgres://` URLs use the native driver when the libpq driver (`PGSQL`) is not
+compiled in; `pgnative://` URLs always do.
+
+Values arrive in binary and are read exactly: `numeric` with `getDecimal` (with its scale), integers, `float4`/`float8`,
+text types, `bytea`, `bool`, `date`, `time`, `timestamp` (as UTC through `getSysTime`), `timestamptz`; `getString`
+gives the server's text for every type (arrays, `json`, `uuid`, intervals, ...). Prepared statements take `?` (or `$1`)
+placeholders, values are sent for the types the server infers, and statements are parsed once (statement cache).
+`executeUpdate(sql, insertId)` gives the first value a statement returns (`INSERT ... RETURNING id`); `executeUpdate(sql)`
+without parameters may run several statements. With auto-commit off a transaction starts with the next statement;
+`setTransactionIsolation` applies to the following transactions; the catalog is the database. Result sets are
+forward-only and streamed. For COPY, LISTEN/NOTIFY, arrays and the other postgresql-native features, use
+`getNativeConnection()`.
+
 ### ClickHouse
 
 Use the `ClickHouse` configuration (`"subConfigurations": { "ddbc": "ClickHouse" }`). The default port is 9000 (the native protocol), or 9440 with TLS:
@@ -275,7 +304,7 @@ the DSN name will be used.
 
 ## Contributing
 
-pull requests are welcome. Please ensure your local branch is up to date and all tests are passing locally before making a pull request. A docker-compose file is included to help with local development. Use `docker-compose up -d` then run `dub test --config=MySQL`, `dub test --config=PGSQL` and `dub test --config=ODBC`. ClickHouse tests run with `dub run --config=test-clickhouse`, the native SQL Server tests with `MSSQL_PORT=1433 dub run --config=test-mssql`, the native Oracle tests with `ORACLE_PORT=1521 ORACLE_SERVICE=FREEPDB1 ORACLE_USER=testuser ORACLE_PASSWORD=... dub run --config=test-oracle`. See the `.travis.yml` file and individual driver code for details on creating the relevant databases for local testing.
+pull requests are welcome. Please ensure your local branch is up to date and all tests are passing locally before making a pull request. A docker-compose file is included to help with local development. Use `docker-compose up -d` then run `dub test --config=MySQL`, `dub test --config=PGSQL` and `dub test --config=ODBC`. ClickHouse tests run with `dub run --config=test-clickhouse`, the native SQL Server tests with `MSSQL_PORT=1433 dub run --config=test-mssql`, the native Oracle tests with `ORACLE_PORT=1521 ORACLE_SERVICE=FREEPDB1 ORACLE_USER=testuser ORACLE_PASSWORD=... dub run --config=test-oracle`, the native PostgreSQL tests with `POSTGRES_PORT=5432 dub run --config=test-pgnative` (and `dub run` in `examples/pgnative_vibe` for fiber mode). See the `.travis.yml` file and individual driver code for details on creating the relevant databases for local testing.
 
 The examples should also run, make sure to change to the _example_ directory and run `dub build` then make sure that the compiled executable will run with each supported database (you'll need to install relevant libs and create databases and users with relevant permissions):
 

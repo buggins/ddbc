@@ -25,6 +25,8 @@ ODBC                        USE_ODBC                           odbc
 ClickHouse                  USE_CLICKHOUSE                     clickhouse (needs D frontend 2.105+; not in full)
 MSSQL                       USE_MSSQL                          mssql, sqlserver: native SQL Server driver (mssql-native; not in full)
 ORACLE                      USE_ORACLE                         oracle: native Oracle driver (oracle-native; not in full)
+PGNATIVE                    USE_PGNATIVE                       pgnative, and postgresql without PGSQL: native PostgreSQL driver
+                                                               (postgresql-native; not in full)
 API                         (none)                             (no drivers, API only)
 
 
@@ -235,6 +237,11 @@ version(USE_ORACLE)
 {
     // register the native Oracle driver
     private import ddbc.drivers.oracleddbc;
+}
+version(USE_PGNATIVE)
+{
+    // register the native PostgreSQL driver
+    private import ddbc.drivers.pgnativeddbc;
 }
 version(USE_ODBC)
 {
