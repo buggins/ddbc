@@ -33,7 +33,7 @@ API                         (none)                             (no drivers, API 
 When using in DUB based project, add "ddbc" dependency to your project's dub.json:
 
 "dependencies": {
-    "ddbc": "~>0.10.1"
+    "ddbc": "~>0.11.0"
 }
 
 Default configuration is "full". You can choose other configuration by specifying subConfiguration for ddbc, e.g.:
