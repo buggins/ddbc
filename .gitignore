@@ -38,6 +38,8 @@ Unittest/*
 .dub/
 dub.selections.json
 test/ddbc-tests
+test/ddbc-tests-pgnative
+examples/pgnative_vibe/ddbc_pgnative_vibe
 test/ddbc-tests-clickhouse
 test/ddbc-tests-mssql
 test/ddbc-tests-oracle

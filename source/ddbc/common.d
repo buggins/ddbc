@@ -658,6 +658,10 @@ string extractDriverNameFromURL(string url) {
 	// oracle: the native driver (configuration ORACLE) when it is compiled in, else ODBC
 	if (dbName == "oracle")
 		return DriverFactory.isRegistered("oracle") ? "oracle" : "odbc";
+	// postgresql, postgres: the libpq driver (PGSQL) when it is compiled in, else the native one (PGNATIVE)
+	if (dbName == "postgresql" || dbName == "postgres")
+		return !DriverFactory.isRegistered("postgresql") && DriverFactory.isRegistered("pgnative") ? "pgnative"
+			: "postgresql";
 	return dbName;
 }
 
@@ -665,7 +669,15 @@ private unittest {
 	assert(extractDriverNameFromURL("ddbc:sqlite::memory:") == "sqlite");
 	assert(extractDriverNameFromURL("ddbc:sqlite:ddbc-test.sqlite") == "sqlite");
 	assert(extractDriverNameFromURL("ddbc:mysql://127.0.0.1:3306/mydb") == "mysql");
-	assert(extractDriverNameFromURL("ddbc:postgresql://127.0.0.1:5432/mydb") == "postgresql");
+	version (USE_PGSQL)
+		enum postgresDriver = "postgresql";
+	else version (USE_PGNATIVE)
+		enum postgresDriver = "pgnative";
+	else
+		enum postgresDriver = "postgresql";
+	assert(extractDriverNameFromURL("ddbc:postgresql://127.0.0.1:5432/mydb") == postgresDriver);
+	assert(extractDriverNameFromURL("ddbc:postgres://127.0.0.1:5432/mydb") == postgresDriver);
+	assert(extractDriverNameFromURL("ddbc:pgnative://127.0.0.1:5432/mydb") == "pgnative");
 	version (USE_MSSQL)
 		enum sqlServerDriver = "sqlserver";
 	else
@@ -683,7 +695,7 @@ private unittest {
 	assert(extractDriverNameFromURL("sqlite::memory:") == "sqlite");
 	assert(extractDriverNameFromURL("sqlite:ddbc-test.sqlite") == "sqlite");
 	assert(extractDriverNameFromURL("mysql://127.0.0.1:3306/mydb") == "mysql");
-	assert(extractDriverNameFromURL("postgresql://127.0.0.1:5432/mydb") == "postgresql");
+	assert(extractDriverNameFromURL("postgresql://127.0.0.1:5432/mydb") == postgresDriver);
 	assert(extractDriverNameFromURL("sqlserver://127.0.0.1:1433/mydb") == sqlServerDriver);
 	assert(extractDriverNameFromURL("oracle://127.0.0.1:1521/mydb") == oracleDriver);
 	assert(extractDriverNameFromURL("odbc://127.0.0.1:3306/mydb") == "odbc");

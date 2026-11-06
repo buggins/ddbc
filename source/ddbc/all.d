@@ -31,6 +31,10 @@ version(USE_MYSQL)
 {
         public import ddbc.drivers.mysqlddbc;
 }
+version(USE_PGNATIVE)
+{
+        public import ddbc.drivers.pgnativeddbc;
+}
 version(USE_ODBC)
 {
         public import ddbc.drivers.odbcddbc;

@@ -98,6 +98,10 @@ jobs:
       - name: dub build (ORACLE) ${{ runner.arch }}
         run: dub build --config=ORACLE
 
+      # native PostgreSQL driver (pure D, no system libraries)
+      - name: dub build (PGNATIVE) ${{ runner.arch }}
+        run: dub build --config=PGNATIVE
+
       # x86 (Windows Only)
       - name: dub test with full config (x86)
         if: ${{ startsWith(matrix.os, 'windows') }}
@@ -253,6 +257,17 @@ jobs:
           ORACLE_USER: testuser
           ORACLE_PASSWORD: Test_password123
         run: dub run --config=test-oracle
+
+      - name: Run ddbctest (Postgres, native driver)
+        env:
+          POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+        run: dub run --config=test-pgnative
+
+      - name: Run the native Postgres driver in vibe.d tasks
+        working-directory: ./examples/pgnative_vibe
+        env:
+          POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+        run: dub run
 
       - name: Build The Example Project
         working-directory: ./example
