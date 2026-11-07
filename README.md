@@ -190,7 +190,8 @@ ddbc:pgnative://127.0.0.1/dbname?user=app,password=secret
 
 The path is the database; the port defaults to 5432; several hosts fail over. Other parameters are libpq's
 connection keywords: `sslmode` (default `prefer`), `sslrootcert`, `sslcert`, `sslkey`, `application_name`,
-`connect_timeout`, `target_session_attrs`, `require_auth`, `channel_binding`, and postgresql-native's
+`connect_timeout`, `target_session_attrs`, `require_auth`, `channel_binding`, `hostaddr`, `service`, `sslcrl`,
+`sslcrldir`, and postgresql-native's
 `statement_cache_size` and `io_mode`; `ssl=true`/`false` as for the libpq driver; `auto_commit=false` starts with
 auto-commit off. `postgresql://` and `postgres://` URLs use the native driver when the libpq driver (`PGSQL`) is not
 compiled in; `pgnative://` URLs always do.
@@ -225,7 +226,7 @@ TLS uses the system's OpenSSL library, loaded at run time only when a secure con
 
 ClickHouse has no transactions (auto-commit only) and no auto-increment keys. Result sets are forward-only and streamed; prepared statement parameters are sent as typed server-side query parameters.
 
-All column types of clickhoused 0.6 can be read: besides numbers, strings, dates and UUIDs also `Decimal` (reported as `DECIMAL`, with precision and scale), 128/256-bit integers (`NUMERIC`), `BFloat16` (`FLOAT`), `Time`/`Time64` (`TIME`; `getTime` for values from 00:00:00 to 23:59:59), `LowCardinality`, `IPv4`/`IPv6`, and `Array`, `Tuple`, `Map`, the geo types, `Variant`, `Dynamic` and `JSON` (`OTHER`, as text, e.g. `[1,2]`, `{'k':1}`, `(1.5,-2)`, `{"a":1}`; `getVariant` gives a Variant/Dynamic cell's value). JSON needs ClickHouse 24.10 or newer. For typed access to composite values, use `getNativeConnection()` and clickhoused's struct mapping. clickhoused 0.6 decodes strings, `Bool`/`UUID`/`Nullable` columns and LZ4-compressed results several times faster, and `getString` of floating-point values about 10–20 times faster.
+All column types of clickhoused 0.9 can be read: besides numbers, strings, dates and UUIDs also `Decimal` (reported as `DECIMAL`, with precision and scale), 128/256-bit integers (`NUMERIC`), `BFloat16` (`FLOAT`), `Time`/`Time64` (`TIME`; `getTime` for values from 00:00:00 to 23:59:59), `LowCardinality`, `IPv4`/`IPv6`, and `Array`, `Tuple`, `Map`, the geo types, `Variant`, `Dynamic` and `JSON` (`OTHER`, as text, e.g. `[1,2]`, `{'k':1}`, `(1.5,-2)`, `{"a":1}`; `getVariant` gives a Variant/Dynamic cell's value). JSON needs ClickHouse 24.10 or newer. For typed access to composite values, use `getNativeConnection()` and clickhoused's struct mapping. clickhoused 0.6 decodes strings, `Bool`/`UUID`/`Nullable` columns and LZ4-compressed results several times faster, and `getString` of floating-point values about 10–20 times faster.
 
 ### Microsoft SQL Server (native)
 
