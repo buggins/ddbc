@@ -1208,24 +1208,13 @@ version (USE_CLICKHOUSE)
         /// and string columns convert as clickhoused's `readValue` does.
         override Decimal getDecimal(int columnIndex)
         {
-            import dbwire.exception : DbException;
-
             auto c = column(columnIndex);
             if (lastIsNull)
                 return Decimal.init;
             // Read the values of a Nullable column directly, so that a Decimal keeps its scale
             if (auto nullable = cast(CH.NullableColumn) c)
                 c = nullable.nested;
-            auto value = translate(CH.readValue!(CH.Decimal)(c, rowInBlock));
-            static if (is(typeof(value) == Decimal))
-                return value; // clickhoused 0.9 and newer use dbwire's Decimal
-            else
-            {
-                try
-                    return Decimal.fromString(value.toFixedString());
-                catch (DbException e)
-                    throw new SQLException(e.msg, e);
-            }
+            return translate(CH.readValue!(CH.Decimal)(c, rowInBlock));
         }
 
         override SysTime getSysTime(int columnIndex)
