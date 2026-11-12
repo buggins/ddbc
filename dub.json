@@ -123,6 +123,26 @@
             }
         },
         {
+            "name": "full-native",
+            "versions": ["USE_MYSQL", "USE_SQLITE", "USE_CLICKHOUSE", "USE_MSSQL", "USE_ORACLE", "USE_PGNATIVE"],
+            "dependencies": {
+                "mysql-native": "~>3.1.0",
+                "clickhoused": "~>0.9.2",
+                "mssql-native": "~>0.3.1",
+                "oracle-native": "~>0.4.1",
+                "postgresql-native": "~>0.6.1"
+            },
+            "libs-posix": ["sqlite3"],
+            "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],
+            "lflags-osx-aarch64": ["-L/opt/homebrew/opt/sqlite3/lib/"],
+            "copyFiles-windows-x86": [ "libs/win32/sqlite3.dll" ],
+            "copyFiles-windows-x86_64": [ "libs/win64/sqlite3.dll" ],
+            "sourceFiles-windows-x86_64" : [ "libs/win64/sqlite3.lib" ],
+            "sourceFiles-windows-x86-ldc" : [ "libs/win32-mscoff/sqlite3.lib" ],
+            "sourceFiles-windows-x86_omf-dmd" : [ "libs/win32/sqlite3.lib" ],
+            "sourceFiles-windows-x86_mscoff-dmd" : [ "libs/win32-mscoff/sqlite3.lib" ]
+        },
+        {
             "name": "API"
         },
         {
@@ -208,6 +228,26 @@
             "versions": ["USE_SQLITE", "USE_PGNATIVE"],
             "dependencies": {
                 "d-unit": "~>0.10.2",
+                "postgresql-native": "~>0.6.1"
+            },
+            "libs-posix": ["sqlite3"],
+            "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],
+            "lflags-osx-aarch64": ["-L/opt/homebrew/opt/sqlite3/lib/"]
+        },
+        {
+            "name": "test-native",
+            "sourcePaths" : ["test/ddbctest"],
+            "mainSourceFile": "test/ddbctest/main.d",
+            "targetName": "ddbc-tests-native",
+            "targetPath": "test",
+            "targetType": "executable",
+            "versions": ["USE_MYSQL", "USE_SQLITE", "USE_CLICKHOUSE", "USE_MSSQL", "USE_ORACLE", "USE_PGNATIVE"],
+            "dependencies": {
+                "d-unit": "~>0.10.2",
+                "mysql-native": "~>3.1.0",
+                "clickhoused": "~>0.9.2",
+                "mssql-native": "~>0.3.1",
+                "oracle-native": "~>0.4.1",
                 "postgresql-native": "~>0.6.1"
             },
             "libs-posix": ["sqlite3"],
