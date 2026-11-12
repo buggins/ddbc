@@ -27,11 +27,13 @@ ddbc's drivers are compiled in by dub configurations. An application picks one w
 ```
 
 Without `subConfigurations` dub uses the first configuration, `full`. A build has exactly one ddbc configuration, so
-the drivers of different configurations can't be combined (for example native Oracle with MySQL).
+the drivers of different configurations can't be combined (for example native Oracle with the libpq driver);
+`full-native` has all the newer drivers together.
 
 | Configuration | Drivers (version identifiers) | C libraries |
 |---|---|---|
 | `full` (default) | MySQL (`USE_MYSQL`), SQLite (`USE_SQLITE`), PostgreSQL via libpq (`USE_PGSQL`), ODBC (`USE_ODBC`): SQL Server and Oracle through ODBC | sqlite3, libpq, ODBC |
+| `full-native` | MySQL (`USE_MYSQL`), SQLite (`USE_SQLITE`), and the native ClickHouse (`USE_CLICKHOUSE`), SQL Server (`USE_MSSQL`), Oracle (`USE_ORACLE`) and PostgreSQL (`USE_PGNATIVE`) drivers | sqlite3 |
 | `MySQL`, `SQLite`, `PGSQL`, `ODBC` | that driver only | its library (none for MySQL) |
 | `PGNATIVE` | PostgreSQL, pure D ([postgresql-native](https://code.dlang.org/packages/postgresql-native), `USE_PGNATIVE`) | none |
 | `MSSQL` | SQL Server, pure D ([mssql-native](https://code.dlang.org/packages/mssql-native), `USE_MSSQL`) | none |
@@ -45,16 +47,16 @@ The URL scheme selects the driver among those compiled in:
 
 | URL | Driver |
 |---|---|
-| `postgresql://`, `postgres://` | libpq when `PGSQL` is compiled in, otherwise native |
+| `postgresql://`, `postgres://` | libpq when `PGSQL` is compiled in (`full`, `PGSQL`), otherwise native |
 | `pgnative://` | native PostgreSQL |
-| `sqlserver://` | native in `MSSQL`, otherwise ODBC |
+| `sqlserver://` | native in `MSSQL` and `full-native`, otherwise ODBC |
 | `mssql://` | native SQL Server |
-| `oracle://` | native in `ORACLE`, otherwise ODBC |
+| `oracle://` | native in `ORACLE` and `full-native`, otherwise ODBC |
 | `clickhouse://`, `mysql://`, `sqlite:`, `odbc://` | that driver |
 
 ### Threads or vibe.d (fiber mode)
 
-The native drivers (`PGNATIVE`, `MSSQL`, `ORACLE`, `ClickHouse`) and MySQL work both with blocking sockets in
+The native drivers (`PGNATIVE`, `MSSQL`, `ORACLE`, `ClickHouse`, all in `full-native`) and MySQL work both with blocking sockets in
 ordinary threads and with vibe.d sockets in vibe.d tasks. vibe.d support needs no ddbc configuration: it is compiled
 in when the application depends on `vibe-core` (the client libraries have it as an optional dependency, and dub then
 defines `Have_vibe_core`). The native clients accept vibe-core 1.22 to 2.x.
@@ -360,7 +362,7 @@ the DSN name will be used.
 
 ## Contributing
 
-pull requests are welcome. Please ensure your local branch is up to date and all tests are passing locally before making a pull request. A docker-compose file is included to help with local development. Use `docker-compose up -d` then run `dub test --config=MySQL`, `dub test --config=PGSQL` and `dub test --config=ODBC`. ClickHouse tests run with `dub run --config=test-clickhouse`, the native SQL Server tests with `MSSQL_PORT=1433 dub run --config=test-mssql`, the native Oracle tests with `ORACLE_PORT=1521 ORACLE_SERVICE=FREEPDB1 ORACLE_USER=testuser ORACLE_PASSWORD=... dub run --config=test-oracle`, the native PostgreSQL tests with `POSTGRES_PORT=5432 dub run --config=test-pgnative` (and `dub run` in `examples/pgnative_vibe` for fiber mode). See the `.travis.yml` file and individual driver code for details on creating the relevant databases for local testing.
+pull requests are welcome. Please ensure your local branch is up to date and all tests are passing locally before making a pull request. A docker-compose file is included to help with local development. Use `docker-compose up -d` then run `dub test --config=MySQL`, `dub test --config=PGSQL` and `dub test --config=ODBC`. ClickHouse tests run with `dub run --config=test-clickhouse`, the native SQL Server tests with `MSSQL_PORT=1433 dub run --config=test-mssql`, the native Oracle tests with `ORACLE_PORT=1521 ORACLE_SERVICE=FREEPDB1 ORACLE_USER=testuser ORACLE_PASSWORD=... dub run --config=test-oracle`, the native PostgreSQL tests with `POSTGRES_PORT=5432 dub run --config=test-pgnative` (and `dub run` in `examples/pgnative_vibe` for fiber mode), and all new drivers in one build (`full-native`) with `dub run --config=test-native` and the environment variables of all of them (`MYSQL_PORT`, `CLICKHOUSE_PORT`, `MSSQL_PORT`, `ORACLE_*`, `POSTGRES_PORT`). See the `.travis.yml` file and individual driver code for details on creating the relevant databases for local testing.
 
 The examples should also run, make sure to change to the _example_ directory and run `dub build` then make sure that the compiled executable will run with each supported database (you'll need to install relevant libs and create databases and users with relevant permissions):
 

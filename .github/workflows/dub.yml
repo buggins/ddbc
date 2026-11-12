@@ -102,6 +102,10 @@ jobs:
       - name: dub build (PGNATIVE) ${{ runner.arch }}
         run: dub build --config=PGNATIVE
 
+      # all new drivers: the native ones, mysql-native and SQLite
+      - name: dub build (full-native) ${{ runner.arch }}
+        run: dub build --config=full-native
+
       # x86 (Windows Only)
       - name: dub test with full config (x86)
         if: ${{ startsWith(matrix.os, 'windows') }}
@@ -262,6 +266,18 @@ jobs:
         env:
           POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
         run: dub run --config=test-pgnative
+
+      - name: Run ddbctest (all new drivers in one build, full-native)
+        env:
+          MYSQL_PORT: ${{ job.services.mysql.ports[3306] }}
+          CLICKHOUSE_PORT: ${{ job.services.clickhouse.ports[9000] }}
+          MSSQL_PORT: ${{ job.services.mssql.ports[1433] }}
+          ORACLE_PORT: ${{ job.services.oracle.ports[1521] }}
+          ORACLE_SERVICE: FREEPDB1
+          ORACLE_USER: testuser
+          ORACLE_PASSWORD: Test_password123
+          POSTGRES_PORT: ${{ job.services.postgres.ports[5432] }}
+        run: dub run --config=test-native
 
       - name: Run the native Postgres driver in vibe.d tasks
         working-directory: ./examples/pgnative_vibe
