@@ -16,6 +16,60 @@ See also: [hibernated](https://github.com/buggins/hibernated) - ORM for D langua
 NOTE: project has been moved from SourceForge to GitHub
 
 
+## Choosing drivers
+
+ddbc's drivers are compiled in by dub configurations. An application picks one with `subConfigurations` in its
+`dub.json`:
+
+```json
+"dependencies": { "ddbc": "~>0.12" },
+"subConfigurations": { "ddbc": "PGNATIVE" }
+```
+
+Without `subConfigurations` dub uses the first configuration, `full`. A build has exactly one ddbc configuration, so
+the drivers of different configurations can't be combined (for example native Oracle with MySQL).
+
+| Configuration | Drivers (version identifiers) | C libraries |
+|---|---|---|
+| `full` (default) | MySQL (`USE_MYSQL`), SQLite (`USE_SQLITE`), PostgreSQL via libpq (`USE_PGSQL`), ODBC (`USE_ODBC`): SQL Server and Oracle through ODBC | sqlite3, libpq, ODBC |
+| `MySQL`, `SQLite`, `PGSQL`, `ODBC` | that driver only | its library (none for MySQL) |
+| `PGNATIVE` | PostgreSQL, pure D ([postgresql-native](https://code.dlang.org/packages/postgresql-native), `USE_PGNATIVE`) | none |
+| `MSSQL` | SQL Server, pure D ([mssql-native](https://code.dlang.org/packages/mssql-native), `USE_MSSQL`) | none |
+| `ORACLE` | Oracle, pure D ([oracle-native](https://code.dlang.org/packages/oracle-native), `USE_ORACLE`) | none |
+| `ClickHouse` | ClickHouse, pure D ([clickhoused](https://code.dlang.org/packages/clickhoused), `USE_CLICKHOUSE`) | none |
+| `API` | none: the interfaces only | none |
+
+`full-omf` and `SQLite-omf` are the Windows OMF variants; the `test*` configurations are for ddbc's own tests.
+
+The URL scheme selects the driver among those compiled in:
+
+| URL | Driver |
+|---|---|
+| `postgresql://`, `postgres://` | libpq when `PGSQL` is compiled in, otherwise native |
+| `pgnative://` | native PostgreSQL |
+| `sqlserver://` | native in `MSSQL`, otherwise ODBC |
+| `mssql://` | native SQL Server |
+| `oracle://` | native in `ORACLE`, otherwise ODBC |
+| `clickhouse://`, `mysql://`, `sqlite:`, `odbc://` | that driver |
+
+### Threads or vibe.d (fiber mode)
+
+The native drivers (`PGNATIVE`, `MSSQL`, `ORACLE`, `ClickHouse`) and MySQL work both with blocking sockets in
+ordinary threads and with vibe.d sockets in vibe.d tasks. vibe.d support needs no ddbc configuration: it is compiled
+in when the application depends on `vibe-core` (the client libraries have it as an optional dependency, and dub then
+defines `Have_vibe_core`). The native clients accept vibe-core 1.22 to 2.x.
+
+- **Native drivers:** each connection chooses when it is opened: vibe.d sockets inside a vibe.d task, blocking
+  sockets otherwise (including all programs built without vibe-core). A URL parameter forces one mode: `io=phobos`
+  or `io=vibe` for ClickHouse and SQL Server, `io_mode=phobos` or `io_mode=vibe` for PostgreSQL and Oracle. A
+  fiber-mode connection must be used on the thread that opened it.
+- **MySQL:** mysql-native uses vibe.d sockets for every connection when vibe-core is part of the build, and blocking
+  sockets otherwise.
+- **libpq (`PGSQL`), ODBC and SQLite** are C libraries and always block: inside a vibe.d task each call blocks the
+  thread's event loop.
+
+`examples/pgnative_vibe` runs the native PostgreSQL driver in vibe.d tasks.
+
 ## Sample code
 
 ```d
@@ -180,7 +234,8 @@ directory (OpenSSL, libintl, ...). ddbc no longer ships its own `libpq.dll`.
 
 Use the `PGNATIVE` configuration (`"subConfigurations": { "ddbc": "PGNATIVE" }`): the PostgreSQL protocol in pure D
 through [postgresql-native](https://code.dlang.org/packages/postgresql-native), no libpq or other C library at build
-time; it works in threads and in vibe.d tasks (fiber mode, chosen automatically). PostgreSQL 13 and newer.
+time; it works in threads and in vibe.d tasks (fiber mode, chosen automatically: see
+[Threads or vibe.d](#threads-or-vibed-fiber-mode)). PostgreSQL 13 and newer.
 
 ```
 ddbc:postgresql://127.0.0.1:5432/dbname?user=app,password=secret
