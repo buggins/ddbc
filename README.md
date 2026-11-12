@@ -27,11 +27,13 @@ ddbc's drivers are compiled in by dub configurations. An application picks one w
 ```
 
 Without `subConfigurations` dub uses the first configuration, `full`. A build has exactly one ddbc configuration, so
-the drivers of different configurations can't be combined (for example native Oracle with MySQL).
+the drivers of different configurations can't be combined (for example native Oracle with the libpq driver);
+`full-native` has all the newer drivers together.
 
 | Configuration | Drivers (version identifiers) | C libraries |
 |---|---|---|
 | `full` (default) | MySQL (`USE_MYSQL`), SQLite (`USE_SQLITE`), PostgreSQL via libpq (`USE_PGSQL`), ODBC (`USE_ODBC`): SQL Server and Oracle through ODBC | sqlite3, libpq, ODBC |
+| `full-native` | MySQL (`USE_MYSQL`), SQLite (`USE_SQLITE`), and the native ClickHouse (`USE_CLICKHOUSE`), SQL Server (`USE_MSSQL`), Oracle (`USE_ORACLE`) and PostgreSQL (`USE_PGNATIVE`) drivers | sqlite3 |
 | `MySQL`, `SQLite`, `PGSQL`, `ODBC` | that driver only | its library (none for MySQL) |
 | `PGNATIVE` | PostgreSQL, pure D ([postgresql-native](https://code.dlang.org/packages/postgresql-native), `USE_PGNATIVE`) | none |
 | `MSSQL` | SQL Server, pure D ([mssql-native](https://code.dlang.org/packages/mssql-native), `USE_MSSQL`) | none |
@@ -45,16 +47,16 @@ The URL scheme selects the driver among those compiled in:
 
 | URL | Driver |
 |---|---|
-| `postgresql://`, `postgres://` | libpq when `PGSQL` is compiled in, otherwise native |
+| `postgresql://`, `postgres://` | libpq when `PGSQL` is compiled in (`full`, `PGSQL`), otherwise native |
 | `pgnative://` | native PostgreSQL |
-| `sqlserver://` | native in `MSSQL`, otherwise ODBC |
+| `sqlserver://` | native in `MSSQL` and `full-native`, otherwise ODBC |
 | `mssql://` | native SQL Server |
-| `oracle://` | native in `ORACLE`, otherwise ODBC |
+| `oracle://` | native in `ORACLE` and `full-native`, otherwise ODBC |
 | `clickhouse://`, `mysql://`, `sqlite:`, `odbc://` | that driver |
 
 ### Threads or vibe.d (fiber mode)
 
-The native drivers (`PGNATIVE`, `MSSQL`, `ORACLE`, `ClickHouse`) and MySQL work both with blocking sockets in
+The native drivers (`PGNATIVE`, `MSSQL`, `ORACLE`, `ClickHouse`, all in `full-native`) and MySQL work both with blocking sockets in
 ordinary threads and with vibe.d sockets in vibe.d tasks. vibe.d support needs no ddbc configuration: it is compiled
 in when the application depends on `vibe-core` (the client libraries have it as an optional dependency, and dub then
 defines `Have_vibe_core`). The native clients accept vibe-core 1.22 to 2.x.
