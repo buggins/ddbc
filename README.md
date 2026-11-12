@@ -22,7 +22,7 @@ ddbc's drivers are compiled in by dub configurations. An application picks one w
 `dub.json`:
 
 ```json
-"dependencies": { "ddbc": "~>0.12" },
+"dependencies": { "ddbc": "~>0.13" },
 "subConfigurations": { "ddbc": "PGNATIVE" }
 ```
 
