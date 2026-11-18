@@ -62,9 +62,9 @@ in when the application depends on `vibe-core` (the client libraries have it as 
 defines `Have_vibe_core`). The native clients accept vibe-core 1.22 to 2.x.
 
 - **Native drivers:** each connection chooses when it is opened: vibe.d sockets inside a vibe.d task, blocking
-  sockets otherwise (including all programs built without vibe-core). A URL parameter forces one mode: `io=phobos`
-  or `io=vibe` for ClickHouse and SQL Server, `io_mode=phobos` or `io_mode=vibe` for PostgreSQL and Oracle. A
-  fiber-mode connection must be used on the thread that opened it.
+  sockets otherwise (including all programs built without vibe-core). A URL parameter forces one mode, the same in every native
+  driver: `io_mode=phobos` or `io_mode=vibe` (`io` for short; `auto`, the default, chooses as above). A fiber-mode
+  connection must be used on the thread that opened it.
 - **MySQL:** mysql-native uses vibe.d sockets for every connection when vibe-core is part of the build, and blocking
   sockets otherwise.
 - **libpq (`PGSQL`), ODBC and SQLite** are C libraries and always block: inside a vibe.d task each call blocks the

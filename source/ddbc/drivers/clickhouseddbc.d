@@ -12,7 +12,7 @@
  * clickhouse://host[:port][,host2[:port2]...]/database?user=name,password=secret,compress=lz4
  * ---
  * The port defaults to 9000, or 9440 with `secure=true`. Parameters are the options of
- * clickhoused connection strings (`compress`, `connect_timeout`, `receive_timeout`, `io`, ...);
+ * clickhoused connection strings (`compress`, `connect_timeout`, `receive_timeout`, `io_mode`, ...);
  * any other parameter is sent to the server as a setting, e.g. `max_threads=4`.
  *
  * TLS: `secure=true`, plus optionally `tls_ca_file`, `tls_cert_file`, `tls_key_file`,
