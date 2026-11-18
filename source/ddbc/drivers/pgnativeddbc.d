@@ -366,7 +366,7 @@ version (USE_PGNATIVE)
     }
 
     /// DDBC connection to PostgreSQL.
-    class PGNativeConnection : ddbc.core.Connection
+    class PGNativeConnection : ddbc.core.Connection, ConnectionValidator
     {
     private:
         PG.Connection pg;
@@ -433,6 +433,31 @@ version (USE_PGNATIVE)
         void unlock()
         {
             driverLock.unlock();
+        }
+
+        /// Whether the connection still works, checked with postgresql-native's ping (`ConnectionValidator`;
+        /// the connection pool calls it before it hands out an idle connection). A connection
+        /// with an unfinished result set doesn't count as working: the rest isn't read for it.
+        override bool isValid()
+        {
+            import dbwire.exception : DbException;
+
+            if (closed)
+                return false;
+            lock();
+            scope (exit)
+                unlock();
+            if (activeResultSet !is null)
+                return false;
+            try
+            {
+                pg.ping();
+                return true;
+            }
+            catch (DbException e)
+                return false;
+            catch (SQLException e)
+                return false;
         }
 
         /// Frees the server connection before another statement runs on it: an unfinished

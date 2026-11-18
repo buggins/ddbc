@@ -392,7 +392,7 @@ version (USE_MSSQL)
     }
 
     /// DDBC connection to SQL Server.
-    class MSSQLConnection : ddbc.core.Connection
+    class MSSQLConnection : ddbc.core.Connection, ConnectionValidator
     {
     private:
         MS.Connection ms;
@@ -462,6 +462,31 @@ version (USE_MSSQL)
         void unlock()
         {
             driverLock.unlock();
+        }
+
+        /// Whether the connection still works, checked with mssql-native's ping (`ConnectionValidator`;
+        /// the connection pool calls it before it hands out an idle connection). A connection
+        /// with an unfinished result set doesn't count as working: the rest isn't read for it.
+        override bool isValid()
+        {
+            import dbwire.exception : DbException;
+
+            if (closed)
+                return false;
+            lock();
+            scope (exit)
+                unlock();
+            if (activeResultSet !is null)
+                return false;
+            try
+            {
+                ms.ping();
+                return true;
+            }
+            catch (DbException e)
+                return false;
+            catch (SQLException e)
+                return false;
         }
 
         /// Frees the server connection before another statement runs on it: an unfinished

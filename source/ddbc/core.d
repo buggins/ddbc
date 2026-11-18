@@ -234,6 +234,19 @@ interface Connection : DialectAware {
     void setTransactionIsolation(TransactionIsolation level);
 }
 
+/**
+ * An optional interface for connections that can check cheaply whether they still work, e.g.
+ * with the client's own ping. The connection pool (`createConnectionPool`) uses it before it
+ * hands out an idle connection; it runs a test query on connections without it.
+ */
+interface ConnectionValidator {
+	/++
+	Whether the connection still works. Database errors give `false`; other exceptions (e.g. an
+	interrupted vibe.d task) propagate.
+	+/
+	bool isValid();
+}
+
 interface ResultSetMetaData {
 	//Returns the number of columns in this ResultSet object.
 	int getColumnCount();

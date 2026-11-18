@@ -80,7 +80,8 @@ class ConnectionPoolTest {
     @Test
     public void testBrokenConnection() {
         Driver driver = new FakeDriver();
-        DataSource dataSource = new ConnectionPoolDataSourceImpl(driver, "");
+        // up to 10 connections: the test holds two at once (the default maxPoolSize is 1)
+        DataSource dataSource = new ConnectionPoolDataSourceImpl(driver, "", null, 10);
 
         // Test verify that when the database is down, nothing can be done.
         throwOnConnect = true;
@@ -112,16 +113,17 @@ class ConnectionPoolTest {
         c2.close();
         // There are now 2 connections free for re-use, simulate a network disconnect.
         throwOnExecute = true;
-        // One connection attempts to be re-used, but it fails and a new one is created.
+        // Both fail their check and are closed, then a new connection is created.
         Connection c3 = dataSource.getConnection();
         assert(executeCount == 2);
         assert(connectCount == 3);
-        // Restore our network and make sure the 1 remainininig free connect is re-used.
+        // Restore our network: c3 is in use and no connection is free, so a new one is made.
         throwOnExecute = false;
         Connection c4 = dataSource.getConnection();
-        assert(executeCount == 3);
-        assert(connectCount == 3);
-        // We are now out of free connections, the next attempt should make a new one.
+        assert(executeCount == 2);
+        assert(connectCount == 4);
+        // Returned connections are checked and re-used.
+        c3.close();
         Connection c5 = dataSource.getConnection();
         assert(executeCount == 3);
         assert(connectCount == 4);
