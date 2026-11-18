@@ -320,7 +320,7 @@ version (USE_ORACLE)
     }
 
     /// DDBC connection to Oracle Database.
-    class OracleConnection : ddbc.core.Connection
+    class OracleConnection : ddbc.core.Connection, ConnectionValidator
     {
     private:
         OR.Connection ora;
@@ -397,6 +397,31 @@ version (USE_ORACLE)
         void unlock()
         {
             driverLock.unlock();
+        }
+
+        /// Whether the connection still works, checked with oracle-native's ping (`ConnectionValidator`;
+        /// the connection pool calls it before it hands out an idle connection). A connection
+        /// with an unfinished result set doesn't count as working: the rest isn't read for it.
+        override bool isValid()
+        {
+            import dbwire.exception : DbException;
+
+            if (closed)
+                return false;
+            lock();
+            scope (exit)
+                unlock();
+            if (activeResultSet !is null)
+                return false;
+            try
+            {
+                ora.ping();
+                return true;
+            }
+            catch (DbException e)
+                return false;
+            catch (SQLException e)
+                return false;
         }
 
         /// Frees the server connection before another statement runs on it: an unfinished

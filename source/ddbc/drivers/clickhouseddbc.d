@@ -204,7 +204,7 @@ version (USE_CLICKHOUSE)
     }
 
     /// DDBC connection to a ClickHouse server.
-    class ClickHouseConnection : ddbc.core.Connection
+    class ClickHouseConnection : ddbc.core.Connection, ConnectionValidator
     {
     private:
         CH.Connection ch;
@@ -271,6 +271,31 @@ version (USE_CLICKHOUSE)
         void unlock()
         {
             driverLock.unlock();
+        }
+
+        /// Whether the connection still works, checked with clickhoused's ping (`ConnectionValidator`;
+        /// the connection pool calls it before it hands out an idle connection). A connection
+        /// with an unfinished result set doesn't count as working: the rest isn't read for it.
+        override bool isValid()
+        {
+            import dbwire.exception : DbException;
+
+            if (closed)
+                return false;
+            lock();
+            scope (exit)
+                unlock();
+            if (activeResultSet !is null)
+                return false;
+            try
+            {
+                ch.ping();
+                return true;
+            }
+            catch (DbException e)
+                return false;
+            catch (SQLException e)
+                return false;
         }
 
         /// Frees the server connection before another statement runs on it: an unfinished

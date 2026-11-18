@@ -111,18 +111,23 @@ class ConnectionWrapper : Connection {
 		closed = true;
 		pool.onConnectionClosed(base); 
 	}
-	override PreparedStatement prepareStatement(string query) { return base.prepareStatement(query); }
-	override void commit() { base.commit(); }
-	override Statement createStatement() { return base.createStatement(); }
-	override string getCatalog() { return base.getCatalog(); }
+	// the connection, while this wrapper is open: once returned, another user may have it
+	private Connection open() {
+		enforce!SQLException(!closed, "Connection is already closed");
+		return base;
+	}
+	override PreparedStatement prepareStatement(string query) { return open().prepareStatement(query); }
+	override void commit() { open().commit(); }
+	override Statement createStatement() { return open().createStatement(); }
+	override string getCatalog() { return open().getCatalog(); }
 	override bool isClosed() { return closed; }
-	override void rollback() { base.rollback(); }
-	override bool getAutoCommit() { return base.getAutoCommit(); }
-	override void setAutoCommit(bool autoCommit) { base.setAutoCommit(autoCommit); }
-	override void setCatalog(string catalog) { base.setCatalog(catalog); }
-    override TransactionIsolation getTransactionIsolation() { return base.getTransactionIsolation(); }
+	override void rollback() { open().rollback(); }
+	override bool getAutoCommit() { return open().getAutoCommit(); }
+	override void setAutoCommit(bool autoCommit) { open().setAutoCommit(autoCommit); }
+	override void setCatalog(string catalog) { open().setCatalog(catalog); }
+    override TransactionIsolation getTransactionIsolation() { return open().getTransactionIsolation(); }
     override void setTransactionIsolation(TransactionIsolation level) {
-        base.setTransactionIsolation(level);
+        open().setTransactionIsolation(level);
     }
 }
 
@@ -153,108 +158,207 @@ static void myRemove(T : Object)(ref T[] array, T item) {
     array.length = array.length - 1;
 }
 
-// TODO: implement limits
-// TODO: thread safety
-/// Simple connection pool DataSource implementation.
-/// When close() is called on connection received from this pool, it will be returned to pool instead of closing.
-/// Next getConnection() will just return existing connection from pool, instead of slow connection establishment process.
-class ConnectionPoolDataSourceImpl : DataSourceImpl, ConnectionCloseHandler {
-private:
-	int maxPoolSize;
-	int timeToLive;
-	int waitTimeOut;
+/++
+A connection pool: `getConnection` hands out a connection that goes back to the pool when it is
+closed, so that the next `getConnection` can reuse it instead of opening a new one.
 
-	Connection [] activeConnections;
-	Connection [] freeConnections;
+The pool may be shared between threads. At most `maxPoolSize` connections are open at once; when
+all are in use, `getConnection` waits for one to be closed, up to `waitTimeOut` seconds. In
+vibe.d tasks each thread has a pool of its own, and waiting yields to other tasks. Built on
+dbwire's `PoolCore`, as the native clients' own pools.
 
-public:
+Before an idle connection is handed out, it is checked: with `ConnectionValidator.isValid` when
+the driver implements it (the native drivers use their client's ping), else with a test query
+(`SELECT 1`, or `SELECT 1 FROM DUAL` for Oracle). A connection that fails the check is closed
+and replaced.
 
+Close every connection taken from the pool: one that the garbage collector finalizes instead
+keeps its place in the pool, and its server connection stays open.
++/
+class ConnectionPoolDataSourceImpl : DataSourceImpl {
+	import dbwire.client.pool : PoolCore;
+
+	private PoolCore pool;
+
+	/++
+	Params:
+	    driver = opens the connections.
+	    url = the connection URL, as for `Driver.connect`.
+	    params = connection parameters, as for `Driver.connect`.
+	    maxPoolSize = the most connections open at once (per thread in vibe.d tasks).
+	    timeToLive = seconds a connection is kept; older ones are closed when they are returned
+	        or found idle. 0: no limit.
+	    waitTimeOut = seconds `getConnection` waits when `maxPoolSize` connections are in use,
+	        before it throws `SQLException`. 0: it doesn't wait.
+
+	Throws: `SQLException` if `maxPoolSize` is less than 1, or `timeToLive` or `waitTimeOut` is
+	negative.
+	+/
 	this(Driver driver, string url, string[string]params = null, int maxPoolSize = 1, int timeToLive = 600, int waitTimeOut = 30) {
+		import core.time : Duration, seconds;
+		import dbwire.client.pool : PoolOptions;
+		import dbwire.io.backend : IoMode;
+
 		super(driver, url, params);
-		this.maxPoolSize = maxPoolSize;
-		this.timeToLive = timeToLive;
-		this.waitTimeOut = waitTimeOut;
+		enforce!SQLException(maxPoolSize >= 1, "maxPoolSize must be at least 1");
+		enforce!SQLException(timeToLive >= 0 && waitTimeOut >= 0, "timeToLive and waitTimeOut must not be negative");
+		PoolOptions options;
+		options.maxConnections = maxPoolSize;
+		options.waitTimeout = waitTimeOut.seconds;
+		options.maxLifetime = timeToLive.seconds; // zero: no limit
+		options.maxIdleTime = timeToLive > 0 ? timeToLive.seconds : Duration.max;
+		options.pingAfterIdle = Duration.zero; // every idle connection is checked before it is handed out
+		pool = new PoolCore(options, IoMode.auto_, &openConnection);
 	}
 
-    /**
-     * If a previously closed connection is available, test it and return it instead of creating a
-     * new connection. At most, one connection will be tested before creating a new connection, in
-     * order to prevent large delays due to having to test multiple connections.
-     */
+	/++
+	Takes a connection from the pool, or opens a new one if none is idle and fewer than
+	`maxPoolSize` are open; otherwise waits up to `waitTimeOut` seconds for one to be closed.
+
+	Throws: `SQLException` if no connection became free in time or the pool is closed, or if a
+	new connection can't be opened (the driver's `SQLException`; other dbwire exceptions are
+	turned into one); other exceptions, e.g. of an interrupted vibe.d task, propagate.
+	+/
 	override Connection getConnection() {
-		Connection conn = null;
-		//writeln("getConnection(): freeConnections.length = " ~ to!string(freeConnections.length));
-		if (freeConnections.length > 0) {
-			tracef("Retrieving database connection from pool of %s", freeConnections.length);
-			conn = freeConnections[freeConnections.length - 1]; // $ - 1
-			auto oldSize = freeConnections.length;
-			myRemove(freeConnections, freeConnections.length - 1);
-            //freeConnections.length = oldSize - 1; // some bug in remove? length is not decreased...
-            auto newSize = freeConnections.length;
-            assert(newSize == oldSize - 1);
-
-            // Test the connection to make sure it is still alive.
-            Statement testStatement = conn.createStatement();
-            scope (exit) testStatement.close();
-            try {
-                ResultSet testResultSet = testStatement.executeQuery("SELECT 1;");
-                scope (exit) testResultSet.close();
-            } catch (Exception e) {
-                // This connection is not usable, do not add it to active connections,
-                // and do not cycle through the rest of the freeConnections to prevent
-                // excess delays.
-                trace("Exception trying to use freeConnection.", e);
-                conn = null;
-            }
-        }
-
-        // Either there were no free connections, or the one that was picked out was invalid.
-        if (conn is null) {
-            tracef("Creating new database connection (%s) %s %s", driver, url, params);
-
-            try {
-                conn = super.getConnection();
-            } catch (Throwable e) {
-                errorf("could not create db connection : %s", e.msg);
-                throw e;
-            }
-            //writeln("getConnection(): connection created");
-        }
-        auto oldSize = activeConnections.length;
-        activeConnections ~= conn;
-        auto newSize = activeConnections.length;
-        assert(oldSize == newSize - 1);
-        auto wrapper = new ConnectionWrapper(this, conn);
-		return wrapper;
+		return new PooledConnectionWrapper(acquire());
 	}
 
-	void removeUsed(Connection connection) {
-		foreach (i, item; activeConnections) {
-			if (item == connection) {
-                auto oldSize = activeConnections.length;
-				//std.algorithm.remove(activeConnections, i);
-                myRemove(activeConnections, i);
-                //activeConnections.length = oldSize - 1;
-                auto newSize = activeConnections.length;
-                assert(oldSize == newSize + 1);
-                tracef("database connections reduced from %s to %s", oldSize, newSize);
-                return;
-			}
+	/// Number of idle connections (of the calling thread in vibe.d tasks).
+	@property size_t idleConnections() {
+		return pool.idleConnections;
+	}
+
+	/// Number of connections handed out and not closed yet (of the calling thread in vibe.d tasks).
+	@property size_t activeConnections() {
+		return pool.activeConnections;
+	}
+
+	/++
+	Closes the idle connections and stops handing out connections. Connections in use are
+	closed when they are returned.
+	+/
+	void close() {
+		pool.close();
+	}
+
+	private auto acquire() {
+		import dbwire.exception : DbException;
+
+		try
+			return pool.acquire();
+		catch (DbException e) // the pool's own errors: it is closed, or the wait timed out
+			throw new SQLException(e.msg, e);
+	}
+
+	private Poolable openConnection() @trusted {
+		auto conn = driver.connect(url, params);
+		scope (failure)
+			collectException(conn.close()); // not handed to the pool: it would stay open
+		return new PooledItem(conn);
+	}
+}
+
+import dbwire.client.pool : PoolLease, Poolable;
+
+/// A connection of the pool, as dbwire's `PoolCore` sees it.
+private final class PooledItem : Poolable {
+	Connection conn;
+	bool initialAutoCommit; // restored when the connection is returned
+	bool broken; // its state couldn't be reset: closed when returned
+
+	this(Connection conn) {
+		this.conn = conn;
+		initialAutoCommit = conn.getAutoCommit();
+	}
+
+	@property bool isOpen() const @trusted nothrow {
+		try
+			return !(cast() conn).isClosed();
+		catch (Exception e)
+			return false;
+	}
+
+	@property bool isBusy() const @safe nothrow {
+		return broken; // the pool closes a busy connection when it is returned
+	}
+
+	// throws a DbException if the connection doesn't work: the pool then closes it and takes another;
+	// other exceptions (e.g. an interrupted vibe.d task) propagate to getConnection's caller
+	void ping() @trusted {
+		import dbwire.exception : ConnectionException;
+
+		if (!connectionWorks(conn))
+			throw new ConnectionException("The pooled connection failed its check");
+	}
+
+	void close() @trusted nothrow {
+		try
+			conn.close();
+		catch (Exception e)
+			collectException(tracef("Error closing a pooled connection: %s", e.msg));
+	}
+}
+
+/++
+Whether `conn` still works: `ConnectionValidator.isValid`, or a test query. Database errors give
+`false`; other exceptions (e.g. an interrupted vibe.d task) propagate.
++/
+private bool connectionWorks(Connection conn) {
+	import dbwire.exception : DbException;
+
+	if (auto validator = cast(ConnectionValidator) conn)
+		return validator.isValid();
+	try {
+		const sql = conn.getDialectType() == DialectType.PLSQL ? "SELECT 1 FROM DUAL" : "SELECT 1";
+		auto statement = conn.createStatement();
+		scope (exit)
+			statement.close();
+		statement.executeQuery(sql).close();
+		return true;
+	} catch (SQLException e) {
+		trace("A pooled connection failed its check: ", e.msg);
+		return false;
+	} catch (DbException e) {
+		trace("A pooled connection failed its check: ", e.msg);
+		return false;
+	}
+}
+
+/// A connection taken from the pool: `close` returns it.
+private final class PooledConnectionWrapper : ConnectionWrapper {
+	private PoolLease lease;
+
+	this(PoolLease lease) {
+		super(null, (cast(PooledItem) lease.connection).conn);
+		this.lease = move(lease);
+	}
+
+	/++
+	Returns the connection to the pool, after rolling back an open transaction (with auto-commit
+	off) and restoring its initial auto-commit mode; if that fails, the pool closes it.
+	+/
+	override void close() {
+		import dbwire.exception : DbException;
+
+		assert(!closed, "Connection is already closed");
+		closed = true;
+		auto item = cast(PooledItem) lease.connection;
+		scope (exit)
+			lease.release();
+		try {
+			if (!base.getAutoCommit())
+				base.rollback();
+			if (base.getAutoCommit() != item.initialAutoCommit)
+				base.setAutoCommit(item.initialAutoCommit);
+		} catch (SQLException e) {
+			item.broken = true;
+		} catch (DbException e) {
+			item.broken = true;
+		} catch (Exception e) {
+			item.broken = true; // e.g. an interrupted vibe.d task: the state is unknown
+			throw e;
 		}
-		throw new SQLException("Connection being closed is not found in pool");
 	}
-
-	override void onConnectionClosed(Connection connection) {
-        //writeln("onConnectionClosed");
-        assert(connection !is null);
-        //writeln("calling removeUsed");
-        removeUsed(connection);
-        //writeln("adding to free list");
-        auto oldSize = freeConnections.length;
-        freeConnections ~= connection;
-        auto newSize = freeConnections.length;
-        assert(newSize == oldSize + 1);
-    }
 }
 
 /// Helper implementation of ResultSet - throws Method not implemented for most of methods.
@@ -757,3 +861,206 @@ DataSource createConnectionPool(string url, string[string]params = null, int max
     return new ConnectionPoolDataSourceImpl(driver, url, params, maxPoolSize, timeToLive, waitTimeOut);
 }
 
+
+version (unittest) {
+	import core.atomic : atomicLoad, atomicOp, cas;
+
+	// a driver whose connections count what happens to them (ddbc#184)
+	private final class PoolTestDriver : Driver {
+		shared int opened, closedCount, open, maxOpen, queries;
+		bool validates; // the connections implement ConnectionValidator
+		bool valid = true; // what the check finds
+		DialectType dialect = DialectType.SQLITE;
+		string lastQuery;
+		bool failRollback; // rollback() throws a SQLException
+		bool interrupt; // the check query throws an exception that is not a database error
+		shared int rollbacks;
+
+		Connection connect(string url, string[string] params) {
+			const now = open.atomicOp!"+="(1);
+			opened.atomicOp!"+="(1);
+			for (int m = maxOpen.atomicLoad; now > m; m = maxOpen.atomicLoad)
+				if (cas(&maxOpen, m, now))
+					break;
+			return validates ? new PoolTestValidatingConnection(this) : new PoolTestConnection(this);
+		}
+	}
+
+	private class PoolTestConnection : Connection {
+		PoolTestDriver driver;
+		bool closed;
+		this(PoolTestDriver driver) { this.driver = driver; }
+		void close() {
+			assert(!closed);
+			closed = true;
+			driver.open.atomicOp!"-="(1);
+			driver.closedCount.atomicOp!"+="(1);
+		}
+		bool autoCommit = true;
+		void commit() { }
+		string getCatalog() { return ""; }
+		void setCatalog(string catalog) { }
+		bool isClosed() { return closed; }
+		void rollback() {
+			driver.rollbacks.atomicOp!"+="(1);
+			if (driver.failRollback)
+				throw new SQLException("the server is gone");
+		}
+		bool getAutoCommit() { return autoCommit; }
+		void setAutoCommit(bool autoCommit) { this.autoCommit = autoCommit; }
+		Statement createStatement() { return new PoolTestStatement(driver); }
+		PreparedStatement prepareStatement(string query) { return null; }
+		TransactionIsolation getTransactionIsolation() { return TransactionIsolation.READ_COMMITTED; }
+		void setTransactionIsolation(TransactionIsolation level) { }
+		DialectType getDialectType() { return driver.dialect; }
+	}
+
+	private final class PoolTestValidatingConnection : PoolTestConnection, ConnectionValidator {
+		this(PoolTestDriver driver) { super(driver); }
+		bool isValid() { return driver.valid; }
+	}
+
+	private final class PoolTestResultSet : ResultSetImpl {
+		override void close() { }
+	}
+
+	private final class PoolTestStatement : Statement {
+		PoolTestDriver driver;
+		this(PoolTestDriver driver) { this.driver = driver; }
+		ResultSet executeQuery(string query) {
+			driver.lastQuery = query;
+			driver.queries.atomicOp!"+="(1);
+			if (driver.interrupt)
+				throw new Exception("interrupted");
+			if (!driver.valid)
+				throw new SQLException("the server is gone");
+			return new PoolTestResultSet();
+		}
+		int executeUpdate(string query) { return 0; }
+		int executeUpdate(string query, out Variant insertId) { return 0; }
+		void close() { }
+		DialectType getDialectType() { return driver.dialect; }
+	}
+}
+
+// ddbc#184: a returned connection is reused after a check; at most maxPoolSize are open, and
+// getConnection waits for one, then fails
+unittest {
+	auto driver = new PoolTestDriver;
+	auto pool = new ConnectionPoolDataSourceImpl(driver, "test", null, 2, 600, 0);
+	auto c1 = pool.getConnection();
+	c1.close();
+	assert(c1.isClosed() && pool.idleConnections == 1);
+	auto c2 = pool.getConnection(); // c1's connection, checked with a query
+	assert(driver.opened == 1 && driver.queries == 1 && driver.lastQuery == "SELECT 1");
+	auto c3 = pool.getConnection();
+	assert(driver.opened == 2 && pool.activeConnections == 2);
+	assertThrown!SQLException(pool.getConnection()); // the limit, and no waiting
+	c3.close();
+	pool.getConnection().close();
+	c2.close();
+	assert(driver.opened == 2 && driver.open == 2 && pool.idleConnections == 2);
+	pool.close(); // closes the idle connections
+	assert(driver.open == 0);
+	assertThrown!SQLException(pool.getConnection());
+}
+
+// ddbc#184: a connection that fails its check is closed (not leaked) and replaced; the
+// driver's ConnectionValidator replaces the test query, which is Oracle's form for PL/SQL
+unittest {
+	auto driver = new PoolTestDriver;
+	driver.dialect = DialectType.PLSQL;
+	auto pool = new ConnectionPoolDataSourceImpl(driver, "test", null, 3);
+	pool.getConnection().close();
+	driver.valid = false;
+	pool.getConnection().close();
+	assert(driver.lastQuery == "SELECT 1 FROM DUAL");
+	assert(driver.opened == 2 && driver.closedCount == 1 && driver.open == 1);
+
+	driver = new PoolTestDriver;
+	driver.validates = true;
+	pool = new ConnectionPoolDataSourceImpl(driver, "test", null, 3);
+	pool.getConnection().close();
+	pool.getConnection().close();
+	assert(driver.opened == 1 && driver.queries == 0);
+	driver.valid = false;
+	pool.getConnection().close();
+	assert(driver.opened == 2 && driver.closedCount == 1 && driver.queries == 0);
+}
+
+// ddbc#184: getConnection waits for a connection to be returned; threads share the pool safely
+unittest {
+	import core.thread : Thread;
+	import core.time : msecs;
+
+	auto driver = new PoolTestDriver;
+	auto pool = new ConnectionPoolDataSourceImpl(driver, "test", null, 1, 600, 10);
+	auto held = pool.getConnection();
+	auto releaser = new Thread({ Thread.sleep(100.msecs); held.close(); });
+	releaser.start();
+	pool.getConnection().close(); // waits for the other thread
+	releaser.join();
+	assert(driver.opened == 1);
+
+	driver = new PoolTestDriver;
+	pool = new ConnectionPoolDataSourceImpl(driver, "test", null, 3, 600, 30);
+	shared int failures;
+	Thread[] threads;
+	foreach (t; 0 .. 8)
+		threads ~= new Thread({
+			foreach (i; 0 .. 200) {
+				try {
+					auto c = pool.getConnection();
+					c.createStatement().close();
+					c.close();
+				} catch (Exception e)
+					failures.atomicOp!"+="(1);
+			}
+		});
+	foreach (t; threads)
+		t.start();
+	foreach (t; threads)
+		t.join();
+	assert(failures == 0 && driver.maxOpen <= 3 && driver.opened <= 3);
+	assert(pool.activeConnections == 0 && pool.idleConnections == driver.open);
+}
+
+// ddbc#184: invalid limits
+unittest {
+	assertThrown!SQLException(new ConnectionPoolDataSourceImpl(new PoolTestDriver, "test", null, 0));
+	assertThrown!SQLException(new ConnectionPoolDataSourceImpl(new PoolTestDriver, "test", null, 1, -1));
+	assertThrown!SQLException(new ConnectionPoolDataSourceImpl(new PoolTestDriver, "test", null, 1, 600, -1));
+}
+
+// ddbc#184 review: a returned connection is reset (an open transaction rolled back, the initial
+// auto-commit restored) or closed if that fails; the wrapper can't be used after close(); an
+// exception that isn't a database error in the check reaches the caller
+unittest {
+	auto driver = new PoolTestDriver;
+	auto pool = new ConnectionPoolDataSourceImpl(driver, "test", null, 2);
+	auto c = pool.getConnection();
+	c.setAutoCommit(false);
+	c.close();
+	assertThrown!SQLException(c.createStatement());
+	assertThrown!SQLException(c.getAutoCommit());
+	assert(driver.rollbacks == 1);
+	c = pool.getConnection();
+	assert(driver.opened == 1 && c.getAutoCommit()); // the same connection, auto-commit restored
+	c.close();
+	assert(driver.rollbacks == 1); // nothing to roll back with auto-commit on
+
+	c = pool.getConnection();
+	c.setAutoCommit(false);
+	driver.failRollback = true;
+	c.close(); // the reset fails: the connection is closed, not kept
+	assert(driver.closedCount == 1 && driver.open == 0 && pool.idleConnections == 0);
+	driver.failRollback = false;
+
+	pool.getConnection().close();
+	driver.interrupt = true;
+	assertThrown!Exception(pool.getConnection()); // the exception, not a new connection
+	assert(driver.opened == 2 && driver.open == 0 && pool.activeConnections == 0);
+	driver.interrupt = false;
+	pool.getConnection().close();
+	assert(driver.opened == 3);
+}
