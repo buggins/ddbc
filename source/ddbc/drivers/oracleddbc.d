@@ -174,6 +174,10 @@ version (USE_ORACLE)
         assert(o.user == "scott" && o.password == "tiger" && o.fetchSize == 500 && autoCommit);
         o = optionsFromUrl("oracle://[::1]/XE", ["user": "app", "auto_commit": "false"], autoCommit);
         assert(o.host == "::1" && o.serviceName == "XE" && o.user == "app" && !autoCommit && !o.autoCommit);
+        // the I/O mode: `io_mode`, or `io` for short, as in every native driver
+        import dbwire.io.backend : IoMode;
+        assert(optionsFromUrl("oracle://h/S", ["io_mode": "vibe"], autoCommit).ioMode == IoMode.vibe);
+        assert(optionsFromUrl("oracle://h/S", ["io": "auto"], autoCommit).ioMode == IoMode.auto_);
         bool failed;
         try
             optionsFromUrl("oracle://db", ["no_such_option": "1"], autoCommit);

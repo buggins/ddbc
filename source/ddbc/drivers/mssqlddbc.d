@@ -16,7 +16,7 @@
  * the ODBC driver otherwise). The port defaults to 1433; `host,port` (the ODBC form) works too.
  * Parameters are the options of mssql-native connection strings (`encrypt`,
  * `trust_server_certificate`, `app_name`, `connect_timeout`, `receive_timeout`, `packet_size`,
- * `io`, `tls_ca_file`, ...), plus the ODBC names of existing `sqlserver://` URLs: `username`,
+ * `io_mode`, `tls_ca_file`, ...), plus the ODBC names of existing `sqlserver://` URLs: `username`,
  * `uid`, `pwd`, `encrypt=yes|no`, `trust_server_certificate=yes|no`; `driver` and `dsn` are
  * ignored.
  *
@@ -192,6 +192,10 @@ version (USE_MSSQL)
         assert(o.host == "localhost" && o.port == 1433 && o.database == "sales" && o.appName == "report");
         o = optionsFromUrl("mssql://[::1]:1444/", null);
         assert(o.host == "::1" && o.port == 1444);
+        // the I/O mode: `io_mode`, or `io` for short, as in every native driver
+        import dbwire.io.backend : IoMode;
+        assert(optionsFromUrl("mssql://h", ["io_mode": "vibe"]).ioMode == IoMode.vibe);
+        assert(optionsFromUrl("mssql://h", ["io": "phobos"]).ioMode == IoMode.phobos);
         bool failed;
         try
             optionsFromUrl("mssql://db\\SQLEXPRESS", null);

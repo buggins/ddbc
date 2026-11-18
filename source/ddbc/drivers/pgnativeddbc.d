@@ -201,6 +201,10 @@ version (USE_PGNATIVE)
         assert(o.hosts == [PG.HostPort("h1", 5432), PG.HostPort("h2", 6000)] && !autoCommit);
         o = optionsFromUrl("postgres://[::1]/x", ["sslmode": "verify-full"], autoCommit);
         assert(o.host == "::1" && o.sslMode == PG.SslMode.verifyFull);
+        // the I/O mode: `io_mode`, or `io` for short, as in every native driver
+        import dbwire.io.backend : IoMode;
+        assert(optionsFromUrl("postgresql://h/db", ["io_mode": "vibe"], autoCommit).ioMode == IoMode.vibe);
+        assert(optionsFromUrl("postgresql://h/db", ["io": "phobos"], autoCommit).ioMode == IoMode.phobos);
         bool failed;
         try
             optionsFromUrl("postgresql://db", ["no_such_option": "1"], autoCommit);
