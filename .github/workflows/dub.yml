@@ -57,8 +57,25 @@ jobs:
           ## Windows/Linux only, as stated at the top of this file.
           - { os: macos-15-intel, compiler: dmd-latest }
           - { os: macos-15-intel, compiler: ldc-latest }
+          ## ubuntu-latest (Ubuntu 26.04) has libxml2.so.16 only: the binaries of LDC 1.40 and older
+          ## need libxml2.so.2 and don't start there, so they run on ubuntu-22.04 (the oldest image
+          ## GitHub offers); DMD and LDC 1.41+ run on ubuntu-latest
+          - { os: ubuntu-22.04, compiler: ldc-1.40.1 }
+          - { os: ubuntu-22.04, compiler: ldc-1.39.0 }
+          - { os: ubuntu-22.04, compiler: ldc-1.38.0 }
+          - { os: ubuntu-22.04, compiler: ldc-1.33.0 }
+          - { os: ubuntu-22.04, compiler: ldc-1.32.2 }
+          - { os: ubuntu-22.04, compiler: ldc-1.28.1 }
+          - { os: ubuntu-22.04, compiler: ldc-1.27.1 }
         exclude:
           - { os: ubuntu-latest, compiler: dmd-2.107.1 }
+          - { os: ubuntu-latest, compiler: ldc-1.40.1 }
+          - { os: ubuntu-latest, compiler: ldc-1.39.0 }
+          - { os: ubuntu-latest, compiler: ldc-1.38.0 }
+          - { os: ubuntu-latest, compiler: ldc-1.33.0 }
+          - { os: ubuntu-latest, compiler: ldc-1.32.2 }
+          - { os: ubuntu-latest, compiler: ldc-1.28.1 }
+          - { os: ubuntu-latest, compiler: ldc-1.27.1 }
           - { os: windows-latest, compiler: dmd-2.098.1 }
           - { os: windows-latest, compiler: dmd-2.097.2 }
 
