@@ -30,6 +30,11 @@
  *        rest of that result set into memory first.)
  *   $(LI Prepared statement parameters (`?`) are sent as typed server-side query parameters; the
  *        type follows the setter (`setInt` -> `Int32`, `setSysTime` -> `DateTime64(7, 'UTC')`, ...).)
+ *   $(LI Dates and times are sent as `Date32`, `DateTime` and `DateTime64`. `Date32` and `DateTime64`
+ *        hold 1900-01-01 to 2299-12-31; the server would silently clamp values outside that range, so
+ *        `setDate`, `setDateTime` and `setSysTime` reject them with `SQLException`. `setDateTime` sends
+ *        `DateTime` (1970 to 2106) when the value fits, otherwise `DateTime64(0)`: store such values in
+ *        `DateTime64` columns, since a `DateTime` column can't hold them (the server wraps them around).)
  * )
  *
  * Copyright: Copyright 2026
@@ -127,6 +132,75 @@ version (USE_CLICKHOUSE)
         assert(fromClickHouseType("Nullable(Time)") == SqlType.TIME);
         assert(fromClickHouseType("Time64(3)") == SqlType.TIME);
         assert(fromClickHouseType("Point") == SqlType.OTHER);
+    }
+
+    /// Parses exactly `hh:mm:ss`, optionally followed by `.` and fraction digits, which are dropped.
+    private bool parseTimeOfDayText(const(char)[] s, out TimeOfDay result) @safe pure
+    {
+        static bool twoDigits(const(char)[] s, size_t pos, int max, out int value)
+        {
+            const a = s[pos], b = s[pos + 1];
+            if (a < '0' || a > '9' || b < '0' || b > '9')
+                return false;
+            value = (a - '0') * 10 + (b - '0');
+            return value <= max;
+        }
+
+        if (s.length < 8 || s[2] != ':' || s[5] != ':')
+            return false;
+        int h, m, sec;
+        if (!twoDigits(s, 0, 23, h) || !twoDigits(s, 3, 59, m) || !twoDigits(s, 6, 59, sec))
+            return false;
+        if (s.length > 8)
+        {
+            if (s[8] != '.' || s.length == 9)
+                return false;
+            foreach (c; s[9 .. $])
+                if (c < '0' || c > '9')
+                    return false;
+        }
+        result = TimeOfDay(h, m, sec);
+        return true;
+    }
+
+    @safe pure unittest
+    {
+        TimeOfDay t;
+        assert(parseTimeOfDayText("23:59:58", t) && t == TimeOfDay(23, 59, 58));
+        assert(parseTimeOfDayText("00:00:00", t) && t == TimeOfDay(0, 0, 0));
+        assert(parseTimeOfDayText("09:30:05.250", t) && t == TimeOfDay(9, 30, 5));
+        assert(parseTimeOfDayText("09:30:05.123456789", t) && t == TimeOfDay(9, 30, 5));
+        assert(!parseTimeOfDayText("", t));
+        assert(!parseTimeOfDayText("9:30:05", t));
+        assert(!parseTimeOfDayText(" 09:30:05", t));
+        assert(!parseTimeOfDayText("09:30:05 ", t));
+        assert(!parseTimeOfDayText("09:30:05.", t));
+        assert(!parseTimeOfDayText("09:30:05.2x", t));
+        assert(!parseTimeOfDayText("24:00:00", t));
+        assert(!parseTimeOfDayText("12:60:00", t));
+        assert(!parseTimeOfDayText("12:00:60", t));
+        assert(!parseTimeOfDayText("093005", t));
+        assert(!parseTimeOfDayText("\xff\xfe:30:05", t));
+    }
+
+    /// `text` in single quotes for an error message, if it is short printable ASCII; otherwise a placeholder.
+    private string quoteForMessage(const(char)[] text) @safe pure
+    {
+        if (text.length > 32)
+            return "(longer than 32 characters)";
+        foreach (char c; text) // code units: no UTF decoding, which could throw
+            if (c < ' ' || c > '~')
+                return "(non-printable)";
+        return "'" ~ text.idup ~ "'";
+    }
+
+    @safe pure unittest
+    {
+        assert(quoteForMessage("12:00") == "'12:00'");
+        assert(quoteForMessage("a\nb") == "(non-printable)");
+        assert(quoteForMessage("\xff") == "(non-printable)");
+        char[40] long_ = 'x';
+        assert(quoteForMessage(long_[]) == "(longer than 32 characters)");
     }
 
     /// The ClickHouse type used for `NULL` parameters of the given `SqlType`.
@@ -762,22 +836,38 @@ version (USE_CLICKHOUSE)
 
             const utc = x.toUTC();
             const dt = cast(DateTime) utc;
+            checkDateRange(parameterIndex, dt.date);
             setParam(parameterIndex, "DateTime64(7, 'UTC')", format("%04d-%02d-%02d %02d:%02d:%02d.%07d",
                     dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second, utc.fracSecs.total!"hnsecs"));
         }
 
-        /// Sent as `DateTime`, interpreted in the server timezone.
+        /++
+        Sent as `DateTime`, interpreted in the server timezone. Values that `DateTime` can't hold (before 1970
+        or after 2106, with a day of margin for the server timezone) are sent as `DateTime64(0)`; `DateTime`
+        keeps index use and `DateTime` arithmetic on older servers (23.8 has no `DateTime - DateTime64`).
+        +/
         override void setDateTime(int parameterIndex, DateTime x)
         {
             import std.format : format;
 
-            setParam(parameterIndex, "DateTime", format("%04d-%02d-%02d %02d:%02d:%02d", x.year, x.month, x.day,
+            checkDateRange(parameterIndex, x.date);
+            const fitsDateTime = x.date >= Date(1970, 1, 2) && x.date <= Date(2106, 2, 6);
+            setParam(parameterIndex, fitsDateTime ? "DateTime" : "DateTime64(0)", format("%04d-%02d-%02d %02d:%02d:%02d", x.year, x.month, x.day,
                     x.hour, x.minute, x.second));
         }
 
         override void setDate(int parameterIndex, Date x)
         {
+            checkDateRange(parameterIndex, x);
             setParam(parameterIndex, "Date32", x.toISOExtString());
+        }
+
+        /// `Date32` and `DateTime64` hold 1900-01-01 to 2299-12-31; the server clamps other values silently.
+        private void checkDateRange(int parameterIndex, Date d)
+        {
+            enforce!SQLException(d >= Date(1900, 1, 1) && d <= Date(2299, 12, 31), "Parameter "
+                    ~ to!string(parameterIndex) ~ ": " ~ d.toISOExtString() ~ " is outside the dates ClickHouse holds"
+                    ~ " (1900-01-01 to 2299-12-31)");
         }
 
         /// Sent as a `String` `hh:mm:ss`.
@@ -1261,8 +1351,9 @@ version (USE_CLICKHOUSE)
             return lastIsNull ? Date.init : translate(c.getDate(rowInBlock));
         }
 
-        /// The time of day of a `DateTime` value, or a `Time`/`Time64` value from 00:00:00 to 23:59:59
-        /// (fractional seconds are dropped).
+        /// The time of day of a `DateTime` value, of a `Time`/`Time64` value from 00:00:00 to 23:59:59
+        /// (fractional seconds are dropped), or of `String` text `hh:mm:ss[.fff]` as `setTime` writes it
+        /// (fractional seconds are dropped here too).
         override TimeOfDay getTime(int columnIndex)
         {
             import std.algorithm.searching : startsWith;
@@ -1270,7 +1361,18 @@ version (USE_CLICKHOUSE)
             auto c = column(columnIndex);
             if (lastIsNull)
                 return TimeOfDay.init;
-            if (baseClickHouseType(c.typeName).startsWith("Time"))
+            const type = baseClickHouseType(c.typeName);
+            if (type == "String" || type.startsWith("FixedString("))
+            {
+                // Servers before 25.6 have no Time type: a time of day is stored as text
+                const text = translate(c.getString(rowInBlock));
+                TimeOfDay t;
+                if (!parseTimeOfDayText(text, t))
+                    throw new SQLException("Value " ~ quoteForMessage(text) ~ " of column '" ~ c.name
+                            ~ "' is not a time of day (hh:mm:ss)");
+                return t;
+            }
+            if (type.startsWith("Time"))
             {
                 const span = translate(c.getDuration(rowInBlock));
                 if (span < Duration.zero || span >= 24.hours)
