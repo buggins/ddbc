@@ -1,7 +1,7 @@
 module ddbc.ddbctest;
 
 import std.conv : to;
-import std.datetime : Date, DateTime;
+import std.datetime : Date, DateTime, TimeOfDay;
 import std.datetime.systime : SysTime, Clock;
 import std.format;
 import std.process: environment;
@@ -94,6 +94,44 @@ class SQLiteTest : DdbcTestFixture {
             count++;
         }
         assert(count == 2);
+    }
+
+    @Test // https://github.com/buggins/ddbc/issues/199
+    public void testTimeOfDayRoundTrip() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+        stmt.executeUpdate("CREATE TABLE times (id INTEGER PRIMARY KEY, t TEXT)"); // a new in-memory database per test
+
+        PreparedStatement ins = conn.prepareStatement("INSERT INTO times (id, t) VALUES (?, ?)");
+        scope(exit) ins.close();
+        ins.setInt(1, 1);
+        ins.setTime(2, TimeOfDay(23, 59, 58));
+        ins.executeUpdate();
+        ins.setInt(1, 2);
+        ins.setVariant(2, Variant(TimeOfDay(0, 0, 1)));
+        ins.executeUpdate();
+        // written by setTime before ddbc 0.14.2
+        stmt.executeUpdate("INSERT INTO times (id, t) VALUES (3, '073005')");
+
+        // stored as HH:MM:SS, which SQLite's time functions understand
+        ddbc.core.ResultSet rs = stmt.executeQuery("SELECT t, time(t) FROM times ORDER BY id");
+        scope(exit) rs.close();
+        assertTrue(rs.next());
+        assertEquals("23:59:58", rs.getString(1));
+        assertEquals("23:59:58", rs.getString(2));
+        assertEquals(TimeOfDay(23, 59, 58), rs.getTime(1));
+        assertTrue(rs.next());
+        assertEquals(TimeOfDay(0, 0, 1), rs.getTime(1));
+        assertTrue(rs.next());
+        assertEquals(TimeOfDay(7, 30, 5), rs.getTime(1));
+        assertFalse(rs.next());
+
+        // only getTime reads the old form: other 6-digit text is not a date
+        ddbc.core.ResultSet rs2 = stmt.executeQuery("SELECT '073005', '246000'");
+        scope(exit) rs2.close();
+        assertTrue(rs2.next());
+        assertThrown!SQLException(rs2.getDateTime(1));
+        assertThrown!SQLException(rs2.getTime(2));
     }
 }
 

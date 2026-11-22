@@ -799,8 +799,9 @@ version(USE_SQLITE) {
         override void setDate(int parameterIndex, Date x) {
             setString(parameterIndex, x.toISOString());
         }
+        /// Stored as text `HH:MM:SS`, which SQLite's date and time functions understand.
         override void setTime(int parameterIndex, TimeOfDay x) {
-            setString(parameterIndex, x.toISOString());
+            setString(parameterIndex, x.toISOExtString());
         }
         override void setVariant(int parameterIndex, Variant x) {
             if (auto d = x.peek!Decimal) {
@@ -1138,6 +1139,9 @@ version(USE_SQLITE) {
             if (s is null)
                 return dt;
             try {
+                // HHMMSS: how setTime wrote times before ddbc 0.14.2
+                if (s.length == 6 && s.representation.all!(c => c >= '0' && c <= '9'))
+                    return TimeOfDay.fromISOString(s);
                 return fromResultSet(s).timeOfDay;
             } catch (Throwable e) {
                 throw new SQLException("Cannot convert string to TimeOfDay - " ~ s);
