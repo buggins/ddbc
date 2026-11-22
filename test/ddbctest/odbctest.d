@@ -130,6 +130,44 @@ version(USE_ODBC) {
             assertFalse(rs.next());
         }
 
+        // Parameters get a column size and their binding is checked (#198: Access rejects size 0)
+        @Test
+        public void testStringAndBinaryParameters() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("INSERT INTO typed_values (id, label) VALUES (1, 'plain'), (2, 'other')");
+
+            PreparedStatement like = conn.prepareStatement("SELECT id FROM typed_values WHERE label LIKE ? ORDER BY id");
+            scope(exit) like.close();
+            like.setString(1, "%lai%");
+            ddbc.core.ResultSet rs = like.executeQuery();
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            assertFalse(rs.next());
+            rs.close();
+
+            import std.array : replicate;
+            PreparedStatement ps = conn.prepareStatement(
+                "SELECT CASE WHEN ? = '' THEN 1 ELSE 0 END, LEN(?), DATALENGTH(?), DATALENGTH(?), DATALENGTH(?), "
+                ~ "DATALENGTH(?)");
+            scope(exit) ps.close();
+            ps.setString(1, "");
+            ps.setString(2, replicate("x", 9000)); // above 8000: varchar(max)
+            ps.setUbytes(3, [1, 0, 2]); // a zero byte doesn't end binary data
+            ps.setUbytes(4, []);
+            ps.setUbytes(5, new ubyte[9000]); // above 8000: varbinary(max)
+            ps.setString(6, "a\0b"); // an embedded NUL doesn't end the string
+            ddbc.core.ResultSet rs2 = ps.executeQuery();
+            scope(exit) rs2.close();
+            assertTrue(rs2.next());
+            assertEquals(1, rs2.getInt(1));
+            assertEquals(9000L, rs2.getLong(2));
+            assertEquals(3, rs2.getInt(3));
+            assertEquals(0, rs2.getInt(4));
+            assertEquals(9000, rs2.getInt(5));
+            assertEquals(3, rs2.getInt(6));
+        }
+
         // NUMERIC, UNIQUEIDENTIFIER, XML and getters that convert (#150)
         @Test
         public void testNumericGuidXmlAndConversions() {

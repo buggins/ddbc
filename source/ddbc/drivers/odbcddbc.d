@@ -75,6 +75,24 @@ version (USE_ODBC)
     import odbc.sqlext;
     import odbc.sqltypes;
 
+    // Functions with `SQLLEN`/`SQLULEN` arguments, declared with the types of the ODBC headers. These are
+    // 64-bit in 64-bit ODBC (Windows and unixODBC), but the odbc package (1.0.0) declares them as 32-bit
+    // `SQLINTEGER`, or as `SQLUINTEGER`, which it defines as `ushort`. A driver then writes 8 bytes into a
+    // 4-byte variable (SQLRowCount), or, on 64-bit Windows where these arguments are passed on the stack,
+    // reads garbage in their upper bits. These declarations shadow the imported ones within this module.
+    private extern (Windows) SQLRETURN SQLBindParameter(SQLHSTMT hstmt, SQLUSMALLINT ipar, SQLSMALLINT fParamType,
+            SQLSMALLINT fCType, SQLSMALLINT fSqlType, size_t cbColDef, SQLSMALLINT ibScale,
+            SQLPOINTER rgbValue, ptrdiff_t cbValueMax, ptrdiff_t* pcbValue) nothrow @nogc;
+    // ditto
+    private extern (Windows) SQLRETURN SQLRowCount(SQLHSTMT StatementHandle, ptrdiff_t* RowCount) nothrow @nogc;
+    // ditto
+    private extern (Windows) SQLRETURN SQLGetData(SQLHSTMT StatementHandle, SQLUSMALLINT ColumnNumber,
+            SQLSMALLINT TargetType, SQLPOINTER TargetValue, ptrdiff_t BufferLength,
+            ptrdiff_t* StrLen_or_Ind) nothrow @nogc;
+
+    // A non-null pointer for empty binary parameters: some drivers reject a null value pointer.
+    private __gshared ubyte[1] emptyParameterData;
+
     /*private SQLRETURN check(lazy SQLRETURN fn, SQLHANDLE h, SQLSMALLINT t,
             string file = __FILE__, size_t line = __LINE__)
     {
@@ -770,7 +788,7 @@ version (USE_ODBC)
             lock();
             scope (exit)
                 unlock();
-            int rowsAffected = 0;
+            ptrdiff_t rowsAffected = 0; // an SQLLEN
 
             trace(query);
 
@@ -780,7 +798,7 @@ version (USE_ODBC)
 
                 checkstmt!SQLRowCount(stmt, &rowsAffected);
 
-                return rowsAffected;
+                return cast(int) rowsAffected;
             }
             catch (Exception e)
             {
@@ -934,11 +952,11 @@ version (USE_ODBC)
             {
                 T val;
 
-                // An SQLLEN (pointer-sized), although the bindings declare the pointer as SQLINTEGER*:
+                // An SQLLEN (pointer-sized), as in our SQLGetData declaration:
                 // a 64-bit driver writes 8 bytes here
                 ptrdiff_t nullCheck = 0;
 
-                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), &val, 0, cast(SQLINTEGER*) &nullCheck);
+                checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), &val, 0, &nullCheck);
 
                 if (nullCheck == SQL_NULL_DATA)
                     return Variant();
@@ -963,7 +981,7 @@ version (USE_ODBC)
                 {
                     ptrdiff_t len = 0; // an SQLLEN (pointer-sized), see above
                     if (checkstmt!SQLGetData(stmt, this.nr, TypeToCIdentifier!(T), buf.ptr,
-                            cast(int)(buf.length * E.sizeof), cast(SQLINTEGER*) &len) == SQL_NO_DATA)
+                            cast(ptrdiff_t)(buf.length * E.sizeof), &len) == SQL_NO_DATA)
                         break; // all parts read
                     if (len == SQL_NULL_DATA)
                         return Variant();
@@ -1151,9 +1169,9 @@ version (USE_ODBC)
 
                 checkstmt!SQLExecute(stmt);
 
-                int rowsAffected = 0;
+                ptrdiff_t rowsAffected = 0; // an SQLLEN
                 checkstmt!SQLRowCount(stmt, &rowsAffected);
-                return rowsAffected;
+                return cast(int) rowsAffected;
             }
             catch (Throwable e)
             {
@@ -1174,7 +1192,7 @@ version (USE_ODBC)
             {
                 checkstmt!SQLExecute(stmt);
 
-                int rowsAffected = 0;
+                ptrdiff_t rowsAffected = 0; // an SQLLEN
                 checkstmt!SQLRowCount(stmt, &rowsAffected);
 
                 checkstmt!SQLExecDirect(stmt,
@@ -1183,7 +1201,7 @@ version (USE_ODBC)
                 bind();
                 fetch();
                 insertId = getColumn(1).value;
-                return rowsAffected;
+                return cast(int) rowsAffected;
             }
             catch (Throwable e)
             {
@@ -1238,7 +1256,7 @@ version (USE_ODBC)
             void[] data;
             /// Length/indicator for SQLBindParameter: SQL_NULL_DATA for a NULL. It must stay
             /// valid until the statement is executed; `params` is not reallocated after prepare.
-            /// An SQLLEN (pointer-sized), although the bindings declare the pointer as `SQLINTEGER*`.
+            /// An SQLLEN (pointer-sized), as in our SQLBindParameter declaration.
             ptrdiff_t indicator;
         }
 
@@ -1253,20 +1271,35 @@ version (USE_ODBC)
 
             auto param = &params[parameterIndex - 1];
 
-            static if (is(T == char[])) 
-            param.data = cast(void[]) (x ~ '\0');
+            // ColumnSize: the length of character and binary data, at least 1, since some drivers, such
+            // as Microsoft Access's, reject 0. Above 8000 it is 0: SQL Server's driver rejects larger
+            // sizes, and binds 0 as varchar(max)/varbinary(max) (SQL_LONGVARCHAR would give the legacy
+            // text type, which LEN() and comparisons reject). Other types don't use it.
+            size_t columnSize = 0;
+            static if (isArray!(T)) {
+                if (x.length <= 8000)
+                    columnSize = x.length == 0 ? 1 : x.length;
+                // the length goes in the indicator, so an embedded zero doesn't end the value
+                param.indicator = cast(ptrdiff_t) x.length;
+            }
+            static if (is(T == char[]))
+                param.data = cast(void[]) (x ~ '\0');
             else static if (isArray!(T))
-                param.data = cast(void[]) x;
+                param.data = x.length == 0 ? cast(void[]) emptyParameterData[0 .. 0] : cast(void[]) x;
             else
                 param.data = cast(void[])[x];
             param.bindType = TypeToCIdentifier!(T);
-            param.dbtype = ctypeToSQLType(TypeToCIdentifier!(T));
+            // binary data as the variable-length type: SQL_BINARY is fixed-length
+            param.dbtype = param.bindType == SQL_C_BINARY ? SQL_VARBINARY : ctypeToSQLType(TypeToCIdentifier!(T));
+            static if (!isArray!(T))
+                param.indicator = cast(ptrdiff_t) param.data.length; // the driver knows the size from the C type
 
-            
-
-            SQLBindParameter(stmt, cast(ushort) parameterIndex, SQL_PARAM_INPUT,
-                    param.bindType, param.dbtype, 0, 0, param.data.ptr,
-                    cast(int) param.data.length, null);
+            try
+                checkstmt!SQLBindParameter(stmt, cast(ushort) parameterIndex, SQL_PARAM_INPUT,
+                        param.bindType, param.dbtype, columnSize, 0, param.data.ptr,
+                        cast(ptrdiff_t) param.data.length, &param.indicator);
+            catch (Exception e)
+                throw new SQLException(e);
         }
 
         override void setFloat(int parameterIndex, float x)
@@ -1433,8 +1466,11 @@ version (USE_ODBC)
             param.bindType = SQL_C_CHAR;
             param.dbtype = SQL_VARCHAR;
             param.indicator = SQL_NULL_DATA;
-            SQLBindParameter(stmt, cast(ushort) parameterIndex, SQL_PARAM_INPUT, param.bindType, param.dbtype, 1, 0,
-                    null, 0, cast(SQLINTEGER*) &param.indicator);
+            try
+                checkstmt!SQLBindParameter(stmt, cast(ushort) parameterIndex, SQL_PARAM_INPUT, param.bindType,
+                        param.dbtype, 1, 0, null, 0, &param.indicator);
+            catch (Exception e)
+                throw new SQLException(e);
         }
 
         override string toString() {
