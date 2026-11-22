@@ -271,6 +271,77 @@ version(USE_CLICKHOUSE) {
             }
         }
 
+        @Test
+        public void testTimeOfDayAsText() {
+            // A time of day stored as String (ClickHouse before 25.6 has no Time type) reads back with getTime
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            ResultSet rs = stmt.executeQuery("SELECT '09:30:05' AS s, toFixedString('23:59:59', 8) AS f, "
+                ~ "CAST(NULL AS Nullable(String)) AS n, 'noon' AS bad, '24:00:00' AS late, "
+                ~ "toLowCardinality('12:00:01') AS lc, CAST('06:07:08' AS Nullable(String)) AS nn, "
+                ~ "toFixedString('01:02:03', 10) AS padded, '09:30:05.250' AS frac, ' 09:30:05' AS spaced, "
+                ~ "unhex('FF3A30303A3030') AS invalid");
+            scope(exit) rs.close();
+            assertTrue(rs.next());
+            assertEquals(TimeOfDay(9, 30, 5), rs.getTime(1));
+            assertEquals(TimeOfDay(23, 59, 59), rs.getTime(2));
+            assertEquals(TimeOfDay.init, rs.getTime(3));
+            assertTrue(rs.wasNull());
+            assertThrown!SQLException(rs.getTime(4));
+            assertThrown!SQLException(rs.getTime(5));
+            assertEquals(TimeOfDay(12, 0, 1), rs.getTime(6));
+            assertEquals(TimeOfDay(6, 7, 8), rs.getTime(7));
+            assertFalse(rs.wasNull());
+            assertEquals(TimeOfDay(1, 2, 3), rs.getTime(8)); // the zero padding is not part of the text
+            assertEquals(TimeOfDay(9, 30, 5), rs.getTime(9)); // fractional seconds are dropped
+            assertThrown!SQLException(rs.getTime(10));
+            assertThrown!SQLException(rs.getTime(11)); // not valid UTF-8: still an SQLException
+
+            // the round trip through a parameter, as setTime binds it
+            PreparedStatement ps = conn.prepareStatement("SELECT ? AS t");
+            scope(exit) ps.close();
+            ps.setTime(1, TimeOfDay(7, 5, 0));
+            ResultSet rs2 = ps.executeQuery();
+            scope(exit) rs2.close();
+            assertTrue(rs2.next());
+            assertEquals(TimeOfDay(7, 5, 0), rs2.getTime(1));
+        }
+
+        @Test
+        public void testDateRange() {
+            // Dates and times are sent as Date32 and DateTime64: 1900 to 2299, not DateTime's 1970 to 2106
+            PreparedStatement ps = conn.prepareStatement("SELECT ? AS dt, ? AS d, ? AS st");
+            scope(exit) ps.close();
+            ps.setDateTime(1, DateTime(1960, 5, 1, 10, 0, 0));
+            ps.setDate(2, Date(1900, 1, 1));
+            ps.setSysTime(3, SysTime(DateTime(2299, 12, 31, 23, 59, 59), UTC()));
+            ResultSet rs = ps.executeQuery();
+            scope(exit) rs.close();
+            assertTrue(rs.next());
+            assertEquals(DateTime(1960, 5, 1, 10, 0, 0), rs.getDateTime(1));
+            assertEquals(Date(1900, 1, 1), rs.getDate(2));
+            assertEquals(SysTime(DateTime(2299, 12, 31, 23, 59, 59), UTC()), rs.getSysTime(3));
+
+            // the server would clamp values outside the range: they are rejected
+            assertThrown!SQLException(ps.setDateTime(1, DateTime.init)); // year 1
+            assertThrown!SQLException(ps.setDate(2, Date(1899, 12, 31)));
+            assertThrown!SQLException(ps.setSysTime(3, SysTime(DateTime(2300, 1, 1), UTC())));
+
+            // Values DateTime holds are still sent as DateTime: DateTime arithmetic works on 23.8 (no
+            // DateTime - DateTime64 there) and filters on DateTime keys use the index
+            PreparedStatement types = conn.prepareStatement("SELECT toTypeName(?), toInt64(now() - ?) > 0, toTypeName(?)");
+            scope(exit) types.close();
+            types.setDateTime(1, DateTime(2000, 1, 1, 0, 0, 0));
+            types.setDateTime(2, DateTime(2000, 1, 1, 0, 0, 0));
+            types.setDateTime(3, DateTime(1960, 5, 1, 10, 0, 0));
+            ResultSet rt = types.executeQuery();
+            scope(exit) rt.close();
+            assertTrue(rt.next());
+            assertEquals("DateTime", rt.getString(1));
+            assertTrue(rt.getBoolean(2));
+            assertEquals("DateTime64(0)", rt.getString(3));
+        }
+
         /// Whether the server knows the setting `name` (JSON as text needs ClickHouse 24.10).
         private bool hasSetting(string name) {
             Statement stmt = conn.createStatement();
