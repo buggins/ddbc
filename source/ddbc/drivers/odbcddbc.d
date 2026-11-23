@@ -148,6 +148,63 @@ version (USE_ODBC)
         return SysTime(dt, hnsecs(fraction), zone);
     }
 
+    /// Parses `hh:mm:ss` with optional fractional digits, which are dropped: SQL Server's `time`
+    /// (SQL_SS_TIME2) is read as text such as `23:59:58.1234567`. Trailing blanks (CHAR columns) are
+    /// ignored.
+    /// Throws: `DateTimeException` if the text has another format.
+    private TimeOfDay parseTimeText(string text)
+    {
+        import std.ascii : isDigit;
+        import std.datetime.date : DateTimeException;
+        import std.string : stripRight;
+
+        text = text.stripRight(" ");
+
+        if (text.length < 8 || (text.length > 8 && (text[8] != '.' || text.length == 9
+                || !text[9 .. $].all!isDigit)))
+            throw new DateTimeException("Invalid time text: " ~ text);
+        return TimeOfDay.fromISOExtString(text[0 .. 8]);
+    }
+
+    /// Parses `yyyy-mm-dd`, optionally followed by a space or `T` and a time: anything after the space
+    /// or `T` is ignored, not checked.
+    /// Throws: `DateTimeException` if the text has another format.
+    private Date parseDateText(string text)
+    {
+        import std.datetime.date : DateTimeException;
+
+        if (text.length < 10 || (text.length > 10 && text[10] != ' ' && text[10] != 'T'))
+            throw new DateTimeException("Invalid date text: " ~ text);
+        return Date.fromISOExtString(text[0 .. 10]);
+    }
+
+    unittest
+    {
+        import std.exception : assertThrown;
+
+        assert(parseDateText("2026-11-23") == Date(2026, 11, 23));
+        assert(parseDateText("2026-11-23 12:34:56 +02:00") == Date(2026, 11, 23));
+        assert(parseDateText("2026-11-23T12:34:56") == Date(2026, 11, 23));
+        assertThrown(parseDateText("2026-11-2"));
+        assertThrown(parseDateText("2026-11-23X"));
+        assertThrown(parseDateText("2026-13-01"));
+        assertThrown(parseDateText("noon"));
+    }
+
+    unittest
+    {
+        import std.exception : assertThrown;
+
+        assert(parseTimeText("23:59:58") == TimeOfDay(23, 59, 58));
+        assert(parseTimeText("07:05:00.1234567") == TimeOfDay(7, 5, 0));
+        assertThrown(parseTimeText("7:05:00"));
+        assertThrown(parseTimeText("07:05:00."));
+        assertThrown(parseTimeText("07:05:00.12a"));
+        assert(parseTimeText("07:05:00  ") == TimeOfDay(7, 5, 0)); // CHAR(10)
+        assertThrown(parseTimeText(" 07:05:00"));
+        assertThrown(parseTimeText("24:00:00"));
+    }
+
     unittest
     {
         import core.time : hnsecs, hours, minutes;
@@ -242,6 +299,29 @@ version (USE_ODBC)
         while (ret == SQL_SUCCESS);
         //debug stderr.writefln("%s:%s:%s %s", file, line, fn, message);
         throw new Exception(message, file, line);
+    }
+
+    // The SQLSTATEs of the diagnostic records of `handle` (after a call failed).
+    private string[] diagStates(SQLHANDLE handle, SQLSMALLINT type)
+    {
+        string[] states;
+        for (short i = 1;; i++)
+        {
+            SQLCHAR[6] state; // 5 characters and a NUL
+            SQLINTEGER errorCode;
+            SQLSMALLINT textLen;
+            if (!SQL_SUCCEEDED(SQLGetDiagRec(type, handle, i, state.ptr, &errorCode, null, 0, &textLen)))
+                return states;
+            states ~= fromStringz(cast(char*) state.ptr).idup;
+        }
+    }
+
+    // Whether an SQLSTATE means that a call failed itself, rather than a statement it ran: a connection
+    // error (08xxx), a driver manager error (IMxxx), a function sequence error or a timeout.
+    private bool isCallFailure(string state)
+    {
+        return state.startsWith("08") || state.startsWith("IM") || state == "HY010" || state == "HYT00"
+            || state == "HYT01";
     }
 
     enum Namedd
@@ -472,10 +552,15 @@ version (USE_ODBC)
 
         void closeUnclosedStatements()
         {
+            // each statement frees its handle even if closing its result fails (ODBCStatement.close), and
+            // a failure doesn't keep the others open: the connection frees their handles anyway
             ODBCStatement[] list = activeStatements.dup;
             foreach (stmt; list)
             {
-                stmt.close();
+                try
+                    stmt.close();
+                catch (Exception e)
+                    warning("Closing a statement failed: " ~ e.msg);
             }
         }
 
@@ -608,13 +693,18 @@ version (USE_ODBC)
 
         override void close()
         {
-            checkClosed();
-
+            // closing twice does nothing, as for statements and results
             lock();
             scope (exit)
                 unlock();
+            if (closed)
+                return;
             try
             {
+                // statements first: their handles are freed with the connection, and their results may
+                // still be closed later (pods closes its range's result in a destructor). A statement
+                // that fails to close doesn't keep the connection open (closeUnclosedStatements).
+                closeUnclosedStatements();
                 SQLDisconnect(conn);
                 SQLFreeHandle(SQL_HANDLE_DBC, conn);
                 conn = null;
@@ -622,7 +712,7 @@ version (USE_ODBC)
                 henv = null;
                 closed = true;
             }
-            catch (Throwable e)
+            catch (Exception e) // an Error propagates unchanged
             {
                 throw new SQLException(e);
             }
@@ -845,6 +935,7 @@ version (USE_ODBC)
                 // SQL_INVALID_HANDLE
                 // SQL_NEED_DATA
                 // SQL_NO_DATA_FOUND
+                closeResultSet(); // a statement has one result at a time, as in JDBC
                 checkstmt!SQLExecDirect(stmt, cast(SQLCHAR*) toStringz(query), SQL_NTS);
                 bind();
                 resultSet = new ODBCResultSet(this);
@@ -852,6 +943,7 @@ version (USE_ODBC)
             }
             catch (Exception e)
             {
+                SQLFreeStmt(stmt, SQL_CLOSE); // a cursor opened before the failure
                 throw new SQLException(e.msg ~ " - while execution of query " ~ query,
                         e.file, e.line);
             }
@@ -869,9 +961,15 @@ version (USE_ODBC)
 
             try
             {
-                checkstmt!SQLExecDirect(stmt, cast(SQLCHAR*) toStringz(query), SQL_NTS);
-
-                checkstmt!SQLRowCount(stmt, &rowsAffected);
+                closeResultSet();
+                try
+                {
+                    checkstmt!SQLExecDirect(stmt, cast(SQLCHAR*) toStringz(query), SQL_NTS);
+                    checkstmt!SQLRowCount(stmt, &rowsAffected);
+                }
+                catch (Exception e)
+                    finishBatch(e); // throws e
+                finishBatch();
 
                 return cast(int) rowsAffected;
             }
@@ -896,6 +994,8 @@ version (USE_ODBC)
 
                 checkstmt!SQLExecDirect(stmt,
                         cast(SQLCHAR*) toStringz(`SELECT SCOPE_IDENTITY()`), SQL_NTS);
+                scope (exit)
+                    SQLFreeStmt(stmt, SQL_CLOSE); // its cursor, also if reading the id fails
 
                 bind();
                 fetch();
@@ -911,21 +1011,26 @@ version (USE_ODBC)
 
         override void close()
         {
-            checkClosed();
+            // closing twice does nothing, as for results: Connection.close closes its statements.
+            // Checked under the lock, the connection's, which Connection.close holds.
             lock();
             scope (exit)
                 unlock();
+            if (closed)
+                return;
             try
             {
+                // the handle is freed and the statement closed even if closing the result fails
+                scope (exit)
+                {
+                    SQLFreeHandle(SQL_HANDLE_STMT, stmt);
+                    stmt = null;
+                    closed = true;
+                    conn.onStatementClosed(this);
+                }
                 closeResultSet();
-
-                SQLFreeHandle(SQL_HANDLE_STMT, stmt);
-                stmt = null;
-                closed = true;
-                conn.onStatementClosed(this);
-
             }
-            catch (Throwable e)
+            catch (Exception e) // an Error propagates unchanged, also through Connection.close
             {
                 throw new SQLException(e);
             }
@@ -938,6 +1043,77 @@ version (USE_ODBC)
                 resultSet.onStatementClosed();
                 resultSet = null;
             }
+            // close the cursor, so the statement can run another query even if not all rows were read;
+            // also one without a ResultSet (executeUpdate of SQL that returns rows, an exception after
+            // executing). It does nothing when no cursor is open.
+            SQLFreeStmt(stmt, SQL_CLOSE);
+        }
+
+        /*
+         * After executeUpdate: reads the remaining results of a batch, then closes the cursor. All of them
+         * are read, also after an error (SQL Server runs the rest of a batch after most errors), so that an
+         * error of a later statement is reported, and no result stays pending: that would keep a connection
+         * without MARS busy, and with some drivers discarding results could cancel statements not yet run.
+         * Then the first error is thrown: `error` (the execute call's, if it failed), else the first one of
+         * a later statement, with the message of a later call failure (a lost connection) added.
+         *
+         * It stops early when the call itself fails (isCallFailure, in any diagnostic record), when the
+         * driver doesn't implement SQLMoreResults (IM001: then there is one result only), and after
+         * maxErrorsInARow errors in a row, in case a driver reports an error without moving on.
+         *
+         * When the execute call itself failed, the driver manager may answer SQLMoreResults with SQL_NO_DATA
+         * on its own (the statement is back in its prepared or allocated state). msodbcsql runs the whole
+         * batch before it returns that error, so nothing is lost there (checked); with a driver that
+         * returns the error before running the rest, the later results may be lost.
+         */
+        private void finishBatch(Exception error = null)
+        {
+            enum maxErrorsInARow = 1000;
+            scope (exit)
+                SQLFreeStmt(stmt, SQL_CLOSE);
+            // the execute call itself failed (its diagnostics are still on the handle): nothing more to read
+            if (error !is null && diagStates(stmt, SQL_HANDLE_STMT).any!(st => isCallFailure(st)))
+                throw error;
+            int errorsInARow = 0;
+            string callFailure; // after `error`
+            for (;;)
+            {
+                const ret = SQLMoreResults(stmt);
+                if (ret == SQL_SUCCESS || ret == SQL_SUCCESS_WITH_INFO)
+                {
+                    errorsInARow = 0;
+                    continue;
+                }
+                if (ret != SQL_ERROR)
+                    break; // SQL_NO_DATA: the end; SQL_INVALID_HANDLE, ...: nothing more can be read
+                const states = diagStates(stmt, SQL_HANDLE_STMT);
+                if (states.canFind("IM001"))
+                    break;
+                const failed = states.any!(st => isCallFailure(st));
+                if (error is null || failed)
+                {
+                    Exception e;
+                    if (states.length == 0)
+                        e = new Exception("SQLMoreResults failed without diagnostics");
+                    else
+                    {
+                        try
+                            extractError("SQLMoreResults", stmt, SQL_HANDLE_STMT, __FILE__, __LINE__);
+                        catch (Exception x)
+                            e = x;
+                    }
+                    if (error is null)
+                        error = e;
+                    else
+                        callFailure = e.msg;
+                }
+                if (states.length == 0 || failed || ++errorsInARow >= maxErrorsInARow)
+                    break;
+            }
+            if (error !is null && callFailure.length)
+                throw new Exception(error.msg ~ "\nThen: " ~ callFailure, error.file, error.line, error);
+            if (error !is null)
+                throw error;
         }
 
     private:
@@ -1239,11 +1415,16 @@ version (USE_ODBC)
 
             try
             {
-
-                checkstmt!SQLExecute(stmt);
-
+                closeResultSet();
                 ptrdiff_t rowsAffected = 0; // an SQLLEN
-                checkstmt!SQLRowCount(stmt, &rowsAffected);
+                try
+                {
+                    checkstmt!SQLExecute(stmt);
+                    checkstmt!SQLRowCount(stmt, &rowsAffected);
+                }
+                catch (Exception e)
+                    finishBatch(e); // throws e
+                finishBatch();
                 return cast(int) rowsAffected;
             }
             catch (Throwable e)
@@ -1263,13 +1444,21 @@ version (USE_ODBC)
 
             try
             {
-                checkstmt!SQLExecute(stmt);
-
+                closeResultSet();
                 ptrdiff_t rowsAffected = 0; // an SQLLEN
-                checkstmt!SQLRowCount(stmt, &rowsAffected);
+                try
+                {
+                    checkstmt!SQLExecute(stmt);
+                    checkstmt!SQLRowCount(stmt, &rowsAffected);
+                }
+                catch (Exception e)
+                    finishBatch(e); // throws e
+                finishBatch();
 
                 checkstmt!SQLExecDirect(stmt,
                         cast(SQLCHAR*) toStringz(`SELECT SCOPE_IDENTITY()`), SQL_NTS);
+                scope (exit)
+                    SQLFreeStmt(stmt, SQL_CLOSE); // its cursor, also if reading the id fails
 
                 bind();
                 fetch();
@@ -1293,6 +1482,7 @@ version (USE_ODBC)
 
             try
             {
+                closeResultSet();
                 checkstmt!SQLExecute(stmt);
                 bind();
                 resultSet = new ODBCResultSet(this);
@@ -1300,6 +1490,7 @@ version (USE_ODBC)
             }
             catch (Throwable e)
             {
+                SQLFreeStmt(stmt, SQL_CLOSE); // a cursor opened before the failure
                 throw new SQLException(e);
             }
         }
@@ -1591,6 +1782,7 @@ version (USE_ODBC)
 
         bool _hasRows;
         bool _isLastRow;
+        bool afterLast; // next() returned false: the cursor is closed (ODBCStatement.fetch)
 
         ODBCStatement.ColumnInfo[string] colsByName;
 
@@ -1669,11 +1861,21 @@ version (USE_ODBC)
 
         override void close()
         {
-            checkClosed();
+            // closing twice does nothing, as in JDBC: the statement closes its result when it runs
+            // another query, and the caller may still close it afterwards. Checked under the lock; first
+            // without it, so closing a closed result takes no lock (pods closes its range's result in a
+            // destructor, which may run in a GC finalizer).
+            if (closed)
+                return;
             lock();
             scope (exit)
                 unlock();
-            stmt.closeResultSet();
+            if (closed)
+                return;
+            // a safety check: an older result is already closed (closeResultSet), and must not close the
+            // current one
+            if (stmt.resultSet is this)
+                stmt.closeResultSet();
             closed = true;
         }
 
@@ -1716,8 +1918,13 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            if (!stmt.fetch())
+            if (afterLast)
                 return false;
+            if (!stmt.fetch())
+            {
+                afterLast = true;
+                return false;
+            }
 
             currentRowIndex++;
             return true;
@@ -1933,6 +2140,10 @@ version (USE_ODBC)
         /// keep their offset. A date is midnight UTC.
         override SysTime getSysTime(int columnIndex)
         {
+            checkClosed();
+            lock();
+            scope (exit)
+                unlock();
             auto column = stmt.getColumn(columnIndex);
             Variant v = column.value;
             if (!v.hasValue) {
@@ -1954,6 +2165,10 @@ version (USE_ODBC)
 
         override DateTime getDateTime(int columnIndex)
         {
+            checkClosed();
+            lock();
+            scope (exit)
+                unlock();
             Variant v = stmt.getColumn(columnIndex).value;
             if (!v.hasValue) {
                 return cast(DateTime) Clock.currTime();
@@ -1972,6 +2187,10 @@ version (USE_ODBC)
             throw new SQLException("Cannot convert '" ~ v.toString() ~ "' to DateTime");
         }
 
+        /// The date of a date or timestamp; for DATETIMEOFFSET, the date at its own offset. A value
+        /// read as text (CHAR, VARCHAR) is parsed: `yyyy-mm-dd`, then optionally a space or `T` and
+        /// anything, such as a time. (`getDateTime` and `getSysTime` don't parse text.)
+        /// NULL gives `Date.init`, as in the native SQL Server driver.
         override Date getDate(int columnIndex)
         {
             checkClosed();
@@ -1979,9 +2198,28 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(Date);
+            auto v = stmt.getColumn(columnIndex).value;
+            lastIsNull = !v.hasValue;
+            if (lastIsNull)
+                return Date.init;
+            if (auto d = v.peek!(Date))
+                return *d;
+            if (auto dt = v.peek!(DateTime))
+                return dt.date;
+            if (auto st = v.peek!(SysTime))
+                return (cast(DateTime) *st).date;
+            if (auto s = v.peek!(string)) {
+                try
+                    return parseDateText(*s);
+                catch (Exception e) // DateTimeException; UTFException for text that isn't UTF-8
+                    throw new SQLException("Cannot convert '" ~ *s ~ "' to Date");
+            }
+            throw new SQLException("Cannot convert column " ~ to!string(columnIndex) ~ " to Date");
         }
 
+        /// The time of a time or timestamp column, without fractional seconds; for DATETIMEOFFSET, the
+        /// time at its own offset. SQL Server's `time` is read as text and parsed. NULL gives
+        /// `TimeOfDay.init`, as in the native SQL Server driver.
         override TimeOfDay getTime(int columnIndex)
         {
             checkClosed();
@@ -1989,7 +2227,23 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value.get!(TimeOfDay);
+            auto v = stmt.getColumn(columnIndex).value;
+            lastIsNull = !v.hasValue;
+            if (lastIsNull)
+                return TimeOfDay.init;
+            if (auto t = v.peek!(TimeOfDay))
+                return *t;
+            if (auto dt = v.peek!(DateTime))
+                return dt.timeOfDay;
+            if (auto st = v.peek!(SysTime))
+                return (cast(DateTime) *st).timeOfDay;
+            if (auto s = v.peek!(string)) {
+                try
+                    return parseTimeText(*s);
+                catch (Exception e) // DateTimeException; UTFException for text that isn't UTF-8
+                    throw new SQLException("Cannot convert '" ~ *s ~ "' to TimeOfDay");
+            }
+            throw new SQLException("Cannot convert column " ~ to!string(columnIndex) ~ " to TimeOfDay");
         }
 
         override Variant getVariant(int columnIndex)
@@ -2013,6 +2267,10 @@ version (USE_ODBC)
 
         override bool isNull(int columnIndex)
         {
+            checkClosed();
+            lock();
+            scope (exit)
+                unlock();
             return stmt.getColumn(columnIndex).isNull();
         }
 

@@ -80,12 +80,17 @@ version(USE_ODBC) {
         }
     }
 
+    // the SQL Server of the ODBC type tests (don't specify a database!)
+    private string sqlServerTypesUrl() {
+        return "odbc://localhost,%s?user=SA,password=MSbbk4k77JKH88g54,trust_server_certificate=yes,driver=ODBC Driver 18 for SQL Server".format(environment.get("MSSQL_PORT", "1433"));
+    }
+
     class SqlServerTypesTest : DdbcTestFixture {
         mixin UnitTest;
 
         this() {
             super(
-                "odbc://localhost,%s?user=SA,password=MSbbk4k77JKH88g54,trust_server_certificate=yes,driver=ODBC Driver 18 for SQL Server".format(environment.get("MSSQL_PORT", "1433")), // don't specify database!
+                sqlServerTypesUrl(),
                 "CREATE TABLE typed_values (id INT PRIMARY KEY, flag BIT NULL, amount DECIMAL(12, 2) NULL, "
                     ~ "title NVARCHAR(100) NULL, code NCHAR(4) NULL, label VARCHAR(50) NULL)",
                 "DROP TABLE IF EXISTS typed_values"
@@ -178,7 +183,7 @@ version(USE_ODBC) {
             auto withFraction = SysTime(DateTime(2026, 11, 23, 12, 34, 56), hnsecs(1234567), UTC());
             auto wholeSeconds = SysTime(DateTime(2026, 11, 23, 12, 34, 56), UTC());
             PreparedStatement ps = conn.prepareStatement("SELECT ?, CAST(? AS DATETIME), ?, ?, ?, "
-                ~ "CONVERT(VARCHAR(8), ?, 108), CAST('2026-11-23 12:34:56.1234567 +02:00' AS DATETIMEOFFSET), "
+                ~ "?, CAST('2026-11-23 12:34:56.1234567 +02:00' AS DATETIMEOFFSET), "
                 ~ "CAST('2026-11-23 12:34:56 -03:30' AS DATETIMEOFFSET), ?, CAST(NULL AS DATETIMEOFFSET)");
             scope(exit) ps.close();
             ps.setSysTime(1, withFraction);
@@ -202,7 +207,7 @@ version(USE_ODBC) {
             assertEquals(Date(2026, 11, 23), rs.getDate(5));
             assertEquals(DateTime(2026, 11, 23, 0, 0, 0), rs.getDateTime(5)); // a date at midnight
             assertEquals(SysTime(DateTime(2026, 11, 23, 0, 0, 0), UTC()), rs.getSysTime(5));
-            assertEquals("23:59:58", rs.getString(6));
+            assertEquals(TimeOfDay(23, 59, 58), rs.getTime(6));
             // DATETIMEOFFSET: the point in time, whatever the client's time zone; getDateTime gives
             // the date and time at the value's offset
             assertEquals(SysTime(DateTime(2026, 11, 23, 10, 34, 56), hnsecs(1234567), UTC()), rs.getSysTime(7));
@@ -232,8 +237,7 @@ version(USE_ODBC) {
             assertEquals(DateTime(2026, 11, 23, 13, 34, 56), stored.getDateTime(1)); // in UTC
             assertEquals(berlin, stored.getSysTime(2)); // the timestamp parameter is UTC: +00:00
             Variant dto = stored.getVariant(2);
-            assertFalse(stored.next()); // to the end: close() leaves the cursor open (#208)
-            stored.close();
+            stored.close(); // before the last row: closes the cursor (#208)
             ins.setInt(1, 2);
             ins.setNull(2, ddbc.core.SqlType.DATETIME);
             ins.setVariant(3, dto);
@@ -242,6 +246,166 @@ version(USE_ODBC) {
             scope(exit) copied.close();
             assertTrue(copied.next());
             assertEquals(berlin, copied.getSysTime(1));
+        }
+
+        // getDate and getTime: conversions and NULL; closing a result before its end (#208)
+        @Test
+        public void testDateAndTimeGetters() {
+            import std.datetime : TimeOfDay;
+
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            ddbc.core.ResultSet rs = stmt.executeQuery("SELECT CAST('23:59:58.1234567' AS TIME), "
+                ~ "CAST('2026-11-23 12:34:56.5' AS DATETIME2), CAST('2026-11-23 12:34:56 +02:00' AS DATETIMEOFFSET), "
+                ~ "CAST(NULL AS DATE), CAST(NULL AS TIME), CAST('2026-11-23' AS DATE), CAST('noon' AS VARCHAR(10))");
+            assertTrue(rs.next());
+            assertEquals(TimeOfDay(23, 59, 58), rs.getTime(1)); // SQL Server's time is read as text
+            assertEquals("23:59:58.1234567", rs.getString(1));
+            assertFalse(rs.wasNull());
+            assertEquals(Date(2026, 11, 23), rs.getDate(2));
+            assertEquals(TimeOfDay(12, 34, 56), rs.getTime(2));
+            assertEquals(Date(2026, 11, 23), rs.getDate(3)); // at the value's offset
+            assertEquals(TimeOfDay(12, 34, 56), rs.getTime(3));
+            assertEquals(Date.init, rs.getDate(4));
+            assertTrue(rs.wasNull());
+            assertEquals("23:59:58.1234567", rs.getString(1));
+            assertEquals(TimeOfDay.init, rs.getTime(5));
+            assertTrue(rs.wasNull());
+            assertEquals(Date(2026, 11, 23), rs.getDate(6));
+            assertThrown!SQLException(rs.getTime(6));
+            assertThrown!SQLException(rs.getTime(7));
+            assertThrown!SQLException(rs.getDate(7));
+            rs.close();
+
+            // a result closed before its last row: the statement can run the next query
+            enum rowsQuery = "SELECT n FROM (VALUES (1), (2), (3)) AS v(n) ORDER BY n";
+            foreach (i; 0 .. 2) {
+                ddbc.core.ResultSet rows = stmt.executeQuery(rowsQuery);
+                assertTrue(rows.next());
+                assertEquals(1, rows.getInt(1));
+                rows.close();
+            }
+            // a result left open: the next query closes it; closing it later leaves the new one open
+            ddbc.core.ResultSet first = stmt.executeQuery(rowsQuery);
+            assertTrue(first.next());
+            ddbc.core.ResultSet second = stmt.executeQuery(rowsQuery);
+            assertThrown!SQLException(first.next());
+            first.close(); // already closed: does nothing
+            assertTrue(second.next());
+            assertEquals(1, second.getInt(1));
+            assertEquals(0, stmt.executeUpdate("DELETE FROM typed_values WHERE id = -1")); // closes `second`
+            assertThrown!SQLException(second.next());
+
+            // a date sent as text
+            ddbc.core.ResultSet text = stmt.executeQuery("SELECT '2026-11-23', '2026-11-23 12:34:56'");
+            scope(exit) text.close();
+            assertTrue(text.next());
+            assertEquals(Date(2026, 11, 23), text.getDate(1));
+            assertEquals(Date(2026, 11, 23), text.getDate(2));
+            assertThrown!SQLException(text.getTime(2)); // not a time
+            text.close();
+
+            // SQL that returns rows through executeUpdate leaves no cursor open
+            stmt.executeUpdate("SELECT 1");
+            ddbc.core.ResultSet after = stmt.executeQuery("SELECT CAST('23:59:58' AS CHAR(10))");
+            assertTrue(after.next());
+            assertEquals(TimeOfDay(23, 59, 58), after.getTime(1)); // blank-padded
+            // a result the next query closed doesn't read the new query's columns
+            ddbc.core.ResultSet replaced = stmt.executeQuery(rowsQuery);
+            assertThrown!SQLException(after.isNull(1));
+            assertThrown!SQLException(after.getSysTime(1));
+            replaced.close();
+        }
+
+        // closing the connection closes its statements and results; closing them again does nothing
+        @Test
+        public void testCloseAfterConnectionClose() {
+            import ddbc.common : createConnection;
+
+            Connection other = createConnection(sqlServerTypesUrl());
+            scope(exit) other.close(); // if an assertion fails
+            Statement stmt = other.createStatement();
+            ddbc.core.ResultSet rs = stmt.executeQuery("SELECT n FROM (VALUES (1), (2)) AS v(n)");
+            assertTrue(rs.next());
+            other.close();
+            rs.close();
+            stmt.close();
+            stmt.close();
+            other.close();
+        }
+
+        // executeUpdate reads all results of a batch: an error in a later statement throws (#208)
+        @Test
+        public void testUpdateBatchErrors() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("CREATE TABLE #batch (id INT PRIMARY KEY)");
+            assertEquals(1, stmt.executeUpdate("INSERT INTO #batch VALUES (1); INSERT INTO #batch VALUES (2)"));
+            assertThrown!SQLException(stmt.executeUpdate(
+                "INSERT INTO #batch VALUES (3); INSERT INTO #batch VALUES (1)"));
+            PreparedStatement ps = conn.prepareStatement("INSERT INTO #batch VALUES (?); INSERT INTO #batch VALUES (2)");
+            scope(exit) ps.close();
+            ps.setInt(1, 4);
+            assertThrown!SQLException(ps.executeUpdate());
+            Variant id;
+            ps.setInt(1, 5);
+            assertThrown!SQLException(ps.executeUpdate(id));
+            // the first statement fails, or one in the middle: the later ones run too (a constraint
+            // violation doesn't end a SQL Server batch), and none of their results stays pending, which
+            // would keep the connection (without MARS) busy for another statement
+            Statement other = conn.createStatement();
+            scope(exit) other.close();
+            int count() {
+                ddbc.core.ResultSet rs = other.executeQuery("SELECT COUNT(*) FROM #batch");
+                scope(exit) rs.close();
+                assertTrue(rs.next());
+                return rs.getInt(1);
+            }
+            assertThrown!SQLException(stmt.executeUpdate(
+                "INSERT INTO #batch VALUES (1); INSERT INTO #batch VALUES (6)"));
+            assertEquals(6, count());
+            assertThrown!SQLException(stmt.executeUpdate(
+                "INSERT INTO #batch VALUES (7); INSERT INTO #batch VALUES (1); INSERT INTO #batch VALUES (8)"));
+            assertEquals(8, count());
+            ps.setInt(1, 1); // fails first, then 2 fails too
+            assertThrown!SQLException(ps.executeUpdate());
+            assertEquals(8, count());
+            // the statements after a failure aren't cancelled, even when they run longer
+            assertThrown!SQLException(stmt.executeUpdate(
+                "INSERT INTO #batch VALUES (1); WAITFOR DELAY '00:00:01'; INSERT INTO #batch VALUES (9)"));
+            assertEquals(9, count());
+            assertThrown!SQLException(stmt.executeUpdate("INSERT INTO #batch VALUES (10); INSERT INTO #batch VALUES (1); "
+                ~ "WAITFOR DELAY '00:00:01'; INSERT INTO #batch VALUES (11)"));
+            assertEquals(11, count());
+
+            ddbc.core.ResultSet rs = other.executeQuery("SELECT COUNT(*) FROM #batch");
+            scope(exit) rs.close();
+            assertTrue(rs.next());
+            assertFalse(rs.next());
+            assertFalse(rs.next()); // again, after the cursor was closed
+        }
+
+        // executeUpdate with an insert id doesn't leave a cursor open (#208). The id itself: #210
+        @Test
+        public void testInsertIdLeavesNoCursor() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("CREATE TABLE #ids (id INT IDENTITY(1, 1), x INT)");
+            Variant id;
+            assertEquals(1, stmt.executeUpdate("INSERT INTO #ids (x) VALUES (10)", id));
+            ddbc.core.ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM #ids");
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+            rs.close();
+
+            PreparedStatement ps = conn.prepareStatement("INSERT INTO #ids (x) VALUES (?)");
+            scope(exit) ps.close();
+            ps.setInt(1, 20);
+            assertEquals(1, ps.executeUpdate(id));
+            ddbc.core.ResultSet count = stmt.executeQuery("SELECT COUNT(*) FROM #ids");
+            scope(exit) count.close();
+            assertTrue(count.next());
+            assertEquals(2, count.getInt(1));
         }
 
         // NUMERIC, UNIQUEIDENTIFIER, XML and getters that convert (#150)
