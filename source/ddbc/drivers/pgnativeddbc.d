@@ -399,10 +399,7 @@ version (USE_PGNATIVE)
          */
         this(string url, string[string] params)
         {
-            string[string] all;
-            foreach (k, v; params)
-                all[k] = v;
-            extractParamsFromURL(url, all);
+            string[string] all = mergeUrlParams(url, params);
             auto options = optionsFromUrl(url, all, autoCommit);
             try
             {

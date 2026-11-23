@@ -14,9 +14,9 @@
         "frontend": ">=2.097"
     },
     "dependencies": {
-        "dbwire:types": "~>0.9.8",
-        "dbwire:io": "~>0.9.8",
-        "dbwire:client": "~>0.9.8"
+        "dbwire:types": "~>0.9.9",
+        "dbwire:io": "~>0.9.9",
+        "dbwire:client": "~>0.9.9"
     },
     "systemDependencies": "Depending on configuration: PostgreSQL client library (libpq; on Windows, libpq.dll from a PostgreSQL installation in PATH), SQLite v3, ODBC",
     "configurations": [
