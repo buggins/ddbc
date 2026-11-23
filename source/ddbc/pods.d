@@ -976,7 +976,7 @@ string getColumnTypeDatasetReadCodeByName(T, string m)() {
         case NULLABLE_DATE_TYPE:
             return `Nullable!Date(r.getDate("` ~ m ~ `"))`;
         case NULLABLE_TIME_TYPE:
-            return `Nullable!Time(r.getTime("` ~ m ~ `"))`;
+            return `Nullable!TimeOfDay(r.getTime("` ~ m ~ `"))`;
         case NULLABLE_SYSTIME_TYPE:
             return `Nullable!SysTime(r.getSysTime("` ~ m ~ `"))`;
         case NULLABLE_DATETIME_TYPE:
@@ -1129,7 +1129,14 @@ struct select(T, fieldList...) if (__traits(isPOD, T)) {
     mixin(getAllColumnsReadCode!(T, fieldList));
     return false;
   }
+  /// Closes the result. In a GC finalizer (a range kept in a collected object) it does nothing: the
+  /// result and its statement may already be finalized, so the result stays open until its statement or
+  /// connection is closed (#211).
   ~this() {
+    import core.memory : GC;
+
+    if (GC.inFinalizer)
+      return;
     if (r)
       r.close();
   }
@@ -1458,7 +1465,12 @@ struct select(Args...)  {//if (isSupportedSimpleTypeRefList!Args())
         _copyFunction();
         return false;
     }
+    /// Closes the result, except in a GC finalizer (see `select`'s destructor, #211).
     ~this() {
+        import core.memory : GC;
+
+        if (GC.inFinalizer)
+            return;
         if (r)
             r.close();
     }
