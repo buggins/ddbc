@@ -238,7 +238,7 @@ public:
             activeStatements ~= stmt;
             return stmt;
         } catch (Throwable e) {
-            throw new SQLException(e.msg ~ " while execution of query " ~ sql);
+            throw new SQLException(e.msg ~ " while execution of query " ~ sql, e);
         }
     }
 
@@ -441,7 +441,7 @@ public:
     	    resultSet = new MySQLResultSet(this, results, createMetadata(conn.getConnection().resultFieldDescriptions));
         	return resultSet;
 		} catch (Throwable e) {
-            throw new SQLException(e.msg ~ " - while execution of query " ~ queryString);
+            throw new SQLException(e.msg ~ " - while execution of query " ~ queryString, e);
         }
 	}
     override int executeUpdate(string query) {
@@ -456,7 +456,7 @@ public:
 			rowsAffected = exec(conn.getConnection(), query);
 	        return cast(int)rowsAffected;
 		} catch (Throwable e) {
-			throw new SQLException(e.msg ~ " - while execution of query " ~ query);
+			throw new SQLException(e.msg ~ " - while execution of query " ~ query, e);
 		}
     }
 	override int executeUpdate(string query, out Variant insertId) {
@@ -468,7 +468,7 @@ public:
     		insertId = Variant(conn.getConnection().lastInsertID);
     		return cast(int)rowsAffected;
         } catch (Throwable e) {
-            throw new SQLException(e.msg ~ " - while execution of query " ~ query);
+            throw new SQLException(e.msg ~ " - while execution of query " ~ query, e);
         }
 	}
 	override void close() {

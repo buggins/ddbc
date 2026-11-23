@@ -383,14 +383,16 @@ Decimal parseDecimal(string text) {
 			return Decimal.fromString(trimmed);
 		const mantissa = Decimal.fromString(trimmed[0 .. e]);
 		const exponentText = trimmed[e + 1 .. $];
-		enforce!SQLException(exponentText.length > 0 && exponentText.length <= 6,
-				"Cannot parse '" ~ text ~ "' as a decimal number");
+		enforce!SQLException(exponentText.length > 0,
+				"Cannot parse '" ~ text ~ "' as a decimal number: no exponent digits");
+		enforce!SQLException(exponentText.length <= 6,
+				"Cannot parse '" ~ text ~ "' as a decimal number: exponent too long");
 		const exponent = to!int(exponentText);
 		return Decimal(mantissa.unscaled, mantissa.scale - exponent);
 	} catch (DbException e) {
 		throw new SQLException("Cannot parse '" ~ text ~ "' as a decimal number: " ~ e.msg, e);
 	} catch (ConvException e) {
-		throw new SQLException("Cannot parse '" ~ text ~ "' as a decimal number", e);
+		throw new SQLException("Cannot parse '" ~ text ~ "' as a decimal number: " ~ e.msg, e);
 	}
 }
 
@@ -402,6 +404,11 @@ unittest {
 	assert(parseDecimal("2.50e1") == Decimal.fromString("25"));
 	foreach (bad; ["", "abc", "1e", "1e+", "nan", "inf", "1e999", "1.5.5"])
 		assertThrown!SQLException(parseDecimal(bad), bad);
+	// the message says why (#216)
+	enum prefix = "Cannot parse '1eX' as a decimal number: ";
+	const message = collectExceptionMsg(parseDecimal("1eX"));
+	assert(message.startsWith(prefix) && message.length > prefix.length, message);
+	assert(collectExceptionMsg(parseDecimal("1e1234567")).endsWith(": exponent too long"));
 }
 
 class ResultSetImpl : ddbc.core.ResultSet {
@@ -860,9 +867,7 @@ string[string] mergeUrlParams(ref string url, const string[string] params, bool 
         try {
             return normalizeIoModeKey(source, ignoreKeyCase);
         } catch (ClientException e) {
-            auto error = new SQLException(name ~ ": " ~ e.msg);
-            error.next = e; // the cause
-            throw error;
+            throw new SQLException(name ~ ": " ~ e.msg, e);
         }
     }
 

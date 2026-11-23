@@ -51,8 +51,19 @@ class SQLException : Exception {
     this(string msg, string stateString, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); _stateString = stateString; }
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
     this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, causedBy, f, l); }
-    this(string msg, Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, causedBy, f, l); }
-    this(string msg, string stateString, Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, causedBy, f, l); _stateString = stateString; }
+    this(string msg, Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(msg, causedBy, f, l); }
+    this(string msg, string stateString, Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(msg, causedBy, f, l); _stateString = stateString; }
+}
+
+// The message given is kept, the cause is chained (#216)
+unittest {
+    auto cause = new Exception("cause");
+    auto e = new SQLException("context: cause", cause);
+    assert(e.msg == "context: cause" && e.next is cause);
+    e = new SQLException("with state", "08001", cause);
+    assert(e.msg == "with state" && e.next is cause && e._stateString == "08001");
+    e = new SQLException(cause);
+    assert(e.msg == "cause" && e.next is cause);
 }
 
 class SQLWarning {

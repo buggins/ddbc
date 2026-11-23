@@ -71,7 +71,7 @@ version (USE_ORACLE)
         catch (SQLException e)
             throw e;
         catch (DbException e)
-            throw new SQLException(context.length ? e.msg ~ " - while executing " ~ context : e.msg);
+            throw new SQLException(context.length ? e.msg ~ " - while executing " ~ context : e.msg, e);
     }
 
     /**
@@ -161,7 +161,7 @@ version (USE_ORACLE)
         try
             return OR.ConnectionOptions.fromParams(p);
         catch (DbException e)
-            throw new SQLException(e.msg);
+            throw new SQLException(e.msg, e);
     }
 
     unittest
@@ -371,7 +371,7 @@ version (USE_ORACLE)
                 ora = new OR.Connection(options);
             }
             catch (DbException e)
-                throw new SQLException(e.msg);
+                throw new SQLException(e.msg, e);
         }
 
         /// The underlying oracle-native connection, for features ddbc does not cover (e.g. LOB locators, array DML).
