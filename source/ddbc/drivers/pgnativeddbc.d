@@ -72,7 +72,7 @@ version (USE_PGNATIVE)
         catch (SQLException e)
             throw e;
         catch (DbException e)
-            throw new SQLException(context.length ? e.msg ~ " - while executing " ~ context : e.msg);
+            throw new SQLException(context.length ? e.msg ~ " - while executing " ~ context : e.msg, e);
     }
 
     /**
@@ -165,7 +165,7 @@ version (USE_PGNATIVE)
         try
             return PG.ConnectionOptions.fromParams(p);
         catch (DbException e)
-            throw new SQLException(e.msg);
+            throw new SQLException(e.msg, e);
     }
 
     private bool parseFlag(string key, string value)
@@ -407,7 +407,7 @@ version (USE_PGNATIVE)
                 pg = new PG.Connection(options);
             }
             catch (DbException e)
-                throw new SQLException(e.msg);
+                throw new SQLException(e.msg, e);
         }
 
         /// The underlying postgresql-native connection, for features ddbc does not cover (COPY, LISTEN/NOTIFY, arrays).

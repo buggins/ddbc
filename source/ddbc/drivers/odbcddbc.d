@@ -769,7 +769,7 @@ version (USE_ODBC)
             }
             catch (Throwable e)
             {
-                throw new SQLException(e.msg ~ " while execution of query " ~ sql);
+                throw new SQLException(e.msg ~ " while execution of query " ~ sql, e);
             }
         }
 
@@ -944,7 +944,7 @@ version (USE_ODBC)
             catch (Exception e)
             {
                 SQLFreeStmt(stmt, SQL_CLOSE); // a cursor opened before the failure
-                throw new SQLException(e.msg ~ " - while execution of query " ~ query,
+                throw new SQLException(e.msg ~ " - while execution of query " ~ query, e,
                         e.file, e.line);
             }
         }
@@ -975,7 +975,7 @@ version (USE_ODBC)
             }
             catch (Exception e)
             {
-                throw new SQLException(e.msg ~ " While executing query: '" ~ query ~ "'", e.file, e.line);
+                throw new SQLException(e.msg ~ " While executing query: '" ~ query ~ "'", e, e.file, e.line);
             }
         }
 
@@ -1003,9 +1003,11 @@ version (USE_ODBC)
 
                 return rowsAffected;
             }
+            catch (SQLException e) // already names the query
+                throw e;
             catch (Throwable e)
             {
-                throw new SQLException(e.msg ~ " - while execution of query " ~ query);
+                throw new SQLException(e.msg ~ " - while execution of query " ~ query, e);
             }
         }
 

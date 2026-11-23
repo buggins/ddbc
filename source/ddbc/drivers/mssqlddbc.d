@@ -70,7 +70,7 @@ version (USE_MSSQL)
         catch (SQLException e)
             throw e;
         catch (DbException e)
-            throw new SQLException(context.length ? e.msg ~ " - while executing " ~ context : e.msg);
+            throw new SQLException(context.length ? e.msg ~ " - while executing " ~ context : e.msg, e);
     }
 
     /**
@@ -177,7 +177,7 @@ version (USE_MSSQL)
         try
             return MS.ConnectionOptions.fromParams(p);
         catch (DbException e)
-            throw new SQLException(e.msg);
+            throw new SQLException(e.msg, e);
     }
 
     unittest
@@ -436,7 +436,7 @@ version (USE_MSSQL)
                 ms = new MS.Connection(options);
             }
             catch (DbException e)
-                throw new SQLException(e.msg);
+                throw new SQLException(e.msg, e);
         }
 
         /// The underlying mssql-native connection, for features ddbc does not cover (e.g. bulk inserts).
