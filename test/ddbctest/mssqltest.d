@@ -329,6 +329,30 @@ version (USE_MSSQL) {
             super(msSqlUrl());
         }
 
+        /// The URL's `io` overrides the properties' `io_mode`, as any key (buggins/dbwire#95).
+        @Test
+        public void testIoModeKeysMerge() {
+            auto other = createConnection(msSqlUrl() ~ ",io=phobos", ["io_mode": "vibe"]);
+            scope(exit) other.close();
+            Statement stmt = other.createStatement();
+            scope(exit) stmt.close();
+            ResultSet rs = stmt.executeQuery("SELECT 1");
+            scope(exit) rs.close();
+            assertTrue(rs.next());
+            // the properties' `io` is checked under its own name, although the URL's `io_mode` overrides it
+            import std.algorithm.searching : canFind, startsWith;
+
+            SQLException error;
+            try {
+                createConnection(msSqlUrl() ~ ",io_mode=phobos", ["io": "fibers"]).close(); // if not refused
+            } catch (SQLException e) {
+                error = e;
+            }
+            assertTrue(error !is null);
+            assertTrue(error.msg.startsWith("connection properties: ") && error.msg.canFind("'fibers'")
+                    && error.msg.canFind("'io'"));
+        }
+
         /// `sqlserver://` URLs in the ODBC form open the native driver too.
         @Test
         public void testSqlServerUrl() {

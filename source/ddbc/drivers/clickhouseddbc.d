@@ -304,10 +304,7 @@ version (USE_CLICKHOUSE)
         {
             import std.uri : encodeComponent;
 
-            string[string] all;
-            foreach (k, v; params)
-                all[k] = v;
-            extractParamsFromURL(url, all);
+            string[string] all = mergeUrlParams(url, params);
             string dsn = url;
             string separator = "?";
             foreach (k, v; all)

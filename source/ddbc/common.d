@@ -835,6 +835,78 @@ private unittest {
 	assert(params["driver"] == "FreeTDS");
 }
 
+/++
+Merges a connection's properties and the parameters of its URL, which win, as the native drivers
+(ClickHouse, SQL Server, Oracle, PostgreSQL) do. The I/O mode keys of each source, `io_mode` and its
+short form `io`, are first made a single `io_mode` key (dbwire's `normalizeIoModeKey`,
+buggins/dbwire#95), so that the URL's `io` overrides the properties' `io_mode` like any other key.
+
+Params:
+    url = the URL; its parameters are removed from it, as by `extractParamsFromURL`
+    params = the connection properties
+    ignoreKeyCase = whether the driver's keys ignore case (Oracle), so that `IO_MODE` is the same key
+
+Returns: the merged parameters.
+
+Throws: `SQLException`, its message starting with the source (`URL: ` or `connection properties: `),
+for an invalid `io` value (checked even if the other source overrides it) or a source giving two
+different modes. A single `io_mode` is checked by the driver, after merging.
++/
+string[string] mergeUrlParams(ref string url, const string[string] params, bool ignoreKeyCase = false) {
+    import dbwire.client.dsn : normalizeIoModeKey;
+    import dbwire.exception : ClientException;
+
+    string[string] normalized(const string[string] source, string name) {
+        try {
+            return normalizeIoModeKey(source, ignoreKeyCase);
+        } catch (ClientException e) {
+            auto error = new SQLException(name ~ ": " ~ e.msg);
+            error.next = e; // the cause
+            throw error;
+        }
+    }
+
+    string[string] fromUrl;
+    extractParamsFromURL(url, fromUrl);
+    string[string] all = normalized(params, "connection properties");
+    foreach (key, value; normalized(fromUrl, "URL"))
+        all[key] = value;
+    return all;
+}
+
+private unittest {
+	string url = "ddbc:sqlserver://h:1433/db?io=vibe,user=u";
+	auto all = mergeUrlParams(url, ["io_mode": "phobos", "user": "props", "password": "p"]);
+	assert(url == "sqlserver://h:1433/db");
+	// the URL's io overrides the properties' io_mode, as any key
+	assert(all == ["io_mode": "vibe", "user": "u", "password": "p"]);
+
+	url = "oracle://h/S?IO=vibe";
+	assert(mergeUrlParams(url, ["Io_Mode": "phobos"], true) == ["io_mode": "vibe"]);
+	url = "oracle://h/S?IO=vibe";
+	assert(mergeUrlParams(url, ["Io_Mode": "phobos"]) == ["Io_Mode": "phobos", "IO": "vibe"]); // other keys
+
+	// one source giving two modes, or an invalid io: reported under the key given
+	url = "sqlserver://h?io=vibe,io_mode=phobos";
+	assertThrown!SQLException(mergeUrlParams(url, null));
+	// ddbc's prefix names the source, then dbwire's message (only its key and values checked here),
+	// with dbwire's exception as the cause
+	import dbwire.exception : ClientException;
+
+	url = "sqlserver://h";
+	auto error = collectException!SQLException(mergeUrlParams(url, ["io": "fibers"]));
+	assert(error !is null && cast(ClientException) error.next !is null);
+	assert(error.msg.startsWith("connection properties: ") && error.msg.canFind("'fibers'")
+			&& error.msg.canFind("'io'"), error.msg);
+	url = "sqlserver://h?io=vibe,io_mode=phobos";
+	error = collectException!SQLException(mergeUrlParams(url, null));
+	assert(error !is null && error.msg.startsWith("URL: ") && error.msg.canFind("'vibe'")
+			&& error.msg.canFind("'phobos'"), error.msg);
+	// an invalid io_mode that the URL overrides doesn't matter (the connector checks the result)
+	url = "sqlserver://h?io=vibe";
+	assert(mergeUrlParams(url, ["io_mode": "fibers"]) == ["io_mode": "vibe"]);
+}
+
 /// sets user and password parameters in parameter map
 public void setUserAndPassword(ref string[string] params, string username, string password) {
     params["user"] = username;
