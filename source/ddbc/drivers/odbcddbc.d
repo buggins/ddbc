@@ -26,6 +26,8 @@ import std.conv;
 import std.datetime : Date, DateTime, TimeOfDay;
 import std.datetime.date;
 import std.datetime.systime;
+import std.datetime.timezone : UTC;
+import core.time : Duration;
 import std.exception : enforce;
 static if (__traits(compiles, (){ import std.logger; } )) {
     import std.logger;
@@ -92,6 +94,79 @@ version (USE_ODBC)
 
     // A non-null pointer for empty binary parameters: some drivers reject a null value pointer.
     private __gshared ubyte[1] emptyParameterData;
+
+    // SQL_TIMESTAMP_STRUCT as in the ODBC headers. The odbc package (1.0.0) declares `fraction` as
+    // `SQLUINTEGER`, which it defines as `ushort`, so its struct has 14 bytes instead of 16: a driver
+    // reading or writing a timestamp went 2 bytes past the variable, and the fraction lost its upper
+    // bits. This declaration shadows the imported one within this module.
+    private struct SQL_TIMESTAMP_STRUCT
+    {
+        SQLSMALLINT year;
+        SQLUSMALLINT month;
+        SQLUSMALLINT day;
+        SQLUSMALLINT hour;
+        SQLUSMALLINT minute;
+        SQLUSMALLINT second;
+        uint fraction; // nanoseconds
+    }
+
+    static assert(SQL_TIMESTAMP_STRUCT.sizeof == 16);
+
+    // SQL Server's DATETIMEOFFSET (msodbcsql.h). Read as SQL_C_TYPE_TIMESTAMP, the driver converts it
+    // to the client's local time zone; its own C type, which keeps the offset, needs ODBC 3.80. So it
+    // is read as text, `yyyy-mm-dd hh:mm:ss[.fffffff] {+|-}hh:mm`.
+    private enum short SQL_SS_TIMESTAMPOFFSET = -155;
+
+    /// Parses DATETIMEOFFSET text into a SysTime in a time zone with the value's offset.
+    /// Throws: `DateTimeException` or `ConvException` if the text has another format.
+    private SysTime parseDateTimeOffset(string text)
+    {
+        import core.time : hnsecs, minutes;
+        import std.ascii : isDigit;
+        import std.datetime.date : DateTimeException;
+        import std.datetime.timezone : SimpleTimeZone;
+        import std.string : lastIndexOf;
+
+        const space = text.lastIndexOf(' ');
+        if (space < 19 || text[10] != ' ' || text.length - space != 7
+                || (text[space + 1] != '+' && text[space + 1] != '-') || text[space + 4] != ':'
+                || !isDigit(text[space + 2]) || !isDigit(text[space + 3])
+                || !isDigit(text[space + 5]) || !isDigit(text[space + 6]))
+            throw new DateTimeException("Invalid DATETIMEOFFSET text: " ~ text);
+        auto dt = DateTime.fromISOExtString(text[0 .. 10] ~ "T" ~ text[11 .. 19]);
+        long fraction = 0; // hnsecs
+        const digits = text[19 .. space];
+        if (digits.length > 0) {
+            if (digits[0] != '.' || digits.length < 2 || digits.length > 8 || !digits[1 .. $].all!isDigit)
+                throw new DateTimeException("Invalid DATETIMEOFFSET text: " ~ text);
+            fraction = to!long(digits[1 .. $]);
+            foreach (i; digits.length - 1 .. 7)
+                fraction *= 10;
+        }
+        const offset = to!int(text[space + 2 .. space + 4]) * 60 + to!int(text[space + 5 .. $]);
+        auto zone = new immutable SimpleTimeZone(minutes(text[space + 1] == '-' ? -offset : offset));
+        return SysTime(dt, hnsecs(fraction), zone);
+    }
+
+    unittest
+    {
+        import core.time : hnsecs, hours, minutes;
+        import std.exception : assertThrown;
+
+        auto t = parseDateTimeOffset("2026-11-23 12:34:56.1234567 +02:00");
+        assert(t == SysTime(DateTime(2026, 11, 23, 10, 34, 56), hnsecs(1234567), UTC()));
+        assert(t.utcOffset == hours(2));
+        assert(parseDateTimeOffset("2026-11-23 12:34:56 -03:30")
+                == SysTime(DateTime(2026, 11, 23, 16, 4, 56), UTC()));
+        assert(parseDateTimeOffset("2026-11-23 12:34:56.5 +00:00").fracSecs == hnsecs(5_000_000));
+        assertThrown(parseDateTimeOffset("2026-11-23 12:34:56"));
+        assertThrown(parseDateTimeOffset("2026-11-23 12:34:56. +02:00"));
+        assertThrown(parseDateTimeOffset("2026-11-23 12:34:56.123456789 +02:00"));
+        assertThrown(parseDateTimeOffset("2026-11-23 12:34:56 02:00:0"));
+        assertThrown(parseDateTimeOffset("2026-11-23 12:34:56.-5 +02:00"));
+        assertThrown(parseDateTimeOffset("2026-11-23X12:34:56 +02:00"));
+        assertThrown(parseDateTimeOffset("2026-11-23 12:34:56 +-2:00"));
+    }
 
     /*private SQLRETURN check(lazy SQLRETURN fn, SQLHANDLE h, SQLSMALLINT t,
             string file = __FILE__, size_t line = __LINE__)
@@ -916,6 +991,8 @@ version (USE_ODBC)
             short nullAble;
 
             Variant value;
+            /// The fractional seconds of a timestamp `value` (a `DateTime`), for `getSysTime`.
+            Duration fracSecs;
 
             this(int nr)
             {
@@ -1006,23 +1083,17 @@ version (USE_ODBC)
                     return Variant(data);
             }
 
-            Variant readValue(T)() if (is(T == SysTime))
+            // DATETIMEOFFSET: a SysTime in a time zone with the value's offset
+            Variant readDateTimeOffset()
             {
-                auto val = readValue!(SQL_TIMESTAMP_STRUCT);
-
-                if (val.type == typeid(SQL_TIMESTAMP_STRUCT))
-                {
-                    auto s = val.get!(SQL_TIMESTAMP_STRUCT);
-                    import core.time : nsecs;
-                    import std.datetime.timezone : UTC;
-                    //writefln("%s-%s-%s %s:%s:%s.%s", s.year, s.month, s.day, s.hour, s.minute, s.second, s.fraction);
-                    return Variant(SysTime(
-                        DateTime(s.year, s.month, s.day, s.hour, s.minute, s.second),
-                        nsecs(s.fraction),
-                        UTC()
-                        ));
-                }
-                return Variant();
+                auto text = readValue!(char[]);
+                if (!text.hasValue)
+                    return text;
+                // a format we don't know (another driver) stays text, so the row can still be read
+                try
+                    return Variant(parseDateTimeOffset(text.get!string));
+                catch (Exception e)
+                    return text;
             }
 
             Variant readValue(T)() if (is(T == DateTime))
@@ -1031,7 +1102,9 @@ version (USE_ODBC)
 
                 if (val.type == typeid(SQL_TIMESTAMP_STRUCT))
                 {
+                    import core.time : nsecs;
                     auto s = val.get!(SQL_TIMESTAMP_STRUCT);
+                    fracSecs = nsecs(s.fraction);
                     return Variant(DateTime(s.year, s.month, s.day, s.hour, s.minute, s.second));
                 }
                 return Variant();
@@ -1091,7 +1164,7 @@ version (USE_ODBC)
                 case SQL_TYPE_DATE: return readValue!(Date);
                 case SQL_TYPE_TIME: return readValue!(TimeOfDay);
                 case SQL_TYPE_TIMESTAMP: return readValue!(DateTime);
-                case -155: return readValue!(SysTime); // DATETIMEOFFSET
+                case SQL_SS_TIMESTAMPOFFSET: return readDateTimeOffset();
                 case SQL_GUID: return readValue!(char[]); // the driver formats it as a UUID string
 
                 default:
@@ -1276,12 +1349,29 @@ version (USE_ODBC)
             // sizes, and binds 0 as varchar(max)/varbinary(max) (SQL_LONGVARCHAR would give the legacy
             // text type, which LEN() and comparisons reject). Other types don't use it.
             size_t columnSize = 0;
+            // DecimalDigits: the fractional digits of a timestamp
+            short decimalDigits = 0;
             static if (isArray!(T)) {
                 if (x.length <= 8000)
                     columnSize = x.length == 0 ? 1 : x.length;
                 // the length goes in the indicator, so an embedded zero doesn't end the value
                 param.indicator = cast(ptrdiff_t) x.length;
             }
+            // Temporal types: ColumnSize is the length of the value as text, DecimalDigits the fractional
+            // digits of a timestamp. SQL Server refuses a fraction with more digits than DecimalDigits
+            // (22008), so a timestamp with a fraction gets 7 digits, SysTime's resolution (100 ns); the
+            // server converts it to the column's precision. Without a fraction it is 19 and 0 digits,
+            // which drivers without fractional seconds (Access) accept.
+            static if (is(T == SQL_TIMESTAMP_STRUCT)) {
+                if (x.fraction != 0) {
+                    columnSize = 27;
+                    decimalDigits = 7;
+                } else
+                    columnSize = 19;
+            } else static if (is(T == SQL_DATE_STRUCT))
+                columnSize = 10;
+            else static if (is(T == SQL_TIME_STRUCT))
+                columnSize = 8;
             static if (is(T == char[]))
                 param.data = cast(void[]) (x ~ '\0');
             else static if (isArray!(T))
@@ -1296,7 +1386,7 @@ version (USE_ODBC)
 
             try
                 checkstmt!SQLBindParameter(stmt, cast(ushort) parameterIndex, SQL_PARAM_INPUT,
-                        param.bindType, param.dbtype, columnSize, 0, param.data.ptr,
+                        param.bindType, param.dbtype, columnSize, decimalDigits, param.data.ptr,
                         cast(ptrdiff_t) param.data.length, &param.indicator);
             catch (Exception e)
                 throw new SQLException(e);
@@ -1378,10 +1468,19 @@ version (USE_ODBC)
             bindParam(parameterIndex, x.dup);
         }
 
-        // todo: handle timezone
+        /++
+        Sent as a timestamp in UTC, as the native SQL Server driver does; `getSysTime` reads timestamps
+        as UTC. (Before ddbc 0.14.4 the date and time in `x`'s own time zone were sent.) A value with
+        fractional seconds is sent with 7 digits (100 ns), as `datetime2(7)` on SQL Server, and the
+        server converts it to the column's type. Note that SQL Server compares a legacy `datetime`
+        column (1/300 s steps) with such a value exactly, so `12:34:56.123` read from a `datetime`
+        column doesn't equal the stored `12:34:56.1233333...` in a `WHERE`.
+        +/
         override void setSysTime(int parameterIndex, SysTime x) {
-            bindParam(parameterIndex, SQL_TIMESTAMP_STRUCT(x.year, x.month,
-            x.day, x.hour, x.minute, x.second, to!ushort(x.fracSecs.total!"msecs"))); // msecs, usecs, or hnsecs
+            const utc = x.toUTC();
+            // `fraction` is in nanoseconds
+            bindParam(parameterIndex, SQL_TIMESTAMP_STRUCT(utc.year, utc.month, utc.day, utc.hour,
+                    utc.minute, utc.second, cast(uint)(utc.fracSecs.total!"hnsecs" * 100)));
         }
 
         override void setDateTime(int parameterIndex, DateTime x)
@@ -1437,6 +1536,8 @@ version (USE_ODBC)
                 setString(parameterIndex, x.get!(string));
             else if (x.type == typeid(DateTime))
                 setDateTime(parameterIndex, x.get!(DateTime));
+            else if (x.type == typeid(SysTime))
+                setSysTime(parameterIndex, x.get!(SysTime));
             else if (x.type == typeid(Date))
                 setDate(parameterIndex, x.get!(Date));
             else if (x.type == typeid(TimeOfDay))
@@ -1828,15 +1929,25 @@ version (USE_ODBC)
             throw new SQLException("Cannot convert column " ~ to!string(columnIndex) ~ " to " ~ T.stringof);
         }
 
+        /// Timestamps are read as UTC, as `setSysTime` writes them; DATETIMEOFFSET (SQL Server) values
+        /// keep their offset. A date is midnight UTC.
         override SysTime getSysTime(int columnIndex)
         {
-            Variant v = stmt.getColumn(columnIndex).value;
-            if (v.peek!(SysTime) is null) {
+            auto column = stmt.getColumn(columnIndex);
+            Variant v = column.value;
+            if (!v.hasValue) {
                 return Clock.currTime();
             }
 
             if (v.convertsTo!(SysTime)) {
                 return v.get!(SysTime);
+            }
+            // a timestamp column, read as DateTime: in UTC, as setSysTime writes it
+            if (auto dt = v.peek!(DateTime)) {
+                return SysTime(*dt, column.fracSecs, UTC());
+            }
+            if (auto d = v.peek!(Date)) {
+                return SysTime(DateTime(*d), UTC()); // midnight
             }
             throw new SQLException("Cannot convert '" ~ v.toString() ~ "' to SysTime");
         }
@@ -1844,12 +1955,19 @@ version (USE_ODBC)
         override DateTime getDateTime(int columnIndex)
         {
             Variant v = stmt.getColumn(columnIndex).value;
-            if (v.peek!(DateTime) is null) {
+            if (!v.hasValue) {
                 return cast(DateTime) Clock.currTime();
             }
 
             if (v.convertsTo!(DateTime)) {
                 return v.get!(DateTime);
+            }
+            // DATETIMEOFFSET, read as SysTime: its date and time at its own offset
+            if (auto st = v.peek!(SysTime)) {
+                return cast(DateTime) *st;
+            }
+            if (auto d = v.peek!(Date)) {
+                return DateTime(*d); // midnight
             }
             throw new SQLException("Cannot convert '" ~ v.toString() ~ "' to DateTime");
         }

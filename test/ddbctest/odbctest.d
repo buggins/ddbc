@@ -168,6 +168,82 @@ version(USE_ODBC) {
             assertEquals(3, rs2.getInt(6));
         }
 
+        // SysTime fractions and temporal parameter sizes (#204)
+        @Test
+        public void testTemporalParameters() {
+            import core.time : hnsecs, hours;
+            import std.datetime : TimeOfDay;
+            import std.datetime.timezone : SimpleTimeZone, UTC;
+
+            auto withFraction = SysTime(DateTime(2026, 11, 23, 12, 34, 56), hnsecs(1234567), UTC());
+            auto wholeSeconds = SysTime(DateTime(2026, 11, 23, 12, 34, 56), UTC());
+            PreparedStatement ps = conn.prepareStatement("SELECT ?, CAST(? AS DATETIME), ?, ?, ?, "
+                ~ "CONVERT(VARCHAR(8), ?, 108), CAST('2026-11-23 12:34:56.1234567 +02:00' AS DATETIMEOFFSET), "
+                ~ "CAST('2026-11-23 12:34:56 -03:30' AS DATETIMEOFFSET), ?, CAST(NULL AS DATETIMEOFFSET)");
+            scope(exit) ps.close();
+            ps.setSysTime(1, withFraction);
+            ps.setSysTime(2, withFraction);
+            ps.setSysTime(3, wholeSeconds);
+            ps.setDateTime(4, DateTime(2026, 11, 23, 1, 2, 3));
+            ps.setDate(5, Date(2026, 11, 23));
+            ps.setTime(6, TimeOfDay(23, 59, 58));
+            // another time zone: sent in UTC
+            ps.setSysTime(7, SysTime(DateTime(2026, 11, 23, 14, 34, 56), hnsecs(1234567),
+                new immutable SimpleTimeZone(hours(2))));
+            ddbc.core.ResultSet rs = ps.executeQuery();
+            scope(exit) rs.close();
+            assertTrue(rs.next());
+            assertEquals(withFraction, rs.getSysTime(1)); // 100 ns resolution, both ways
+            assertEquals(DateTime(2026, 11, 23, 12, 34, 56), rs.getDateTime(1));
+            assertEquals(SysTime(DateTime(2026, 11, 23, 12, 34, 56), hnsecs(1230000), UTC()),
+                rs.getSysTime(2)); // datetime keeps 1/300 s
+            assertEquals(wholeSeconds, rs.getSysTime(3));
+            assertEquals(DateTime(2026, 11, 23, 1, 2, 3), rs.getDateTime(4));
+            assertEquals(Date(2026, 11, 23), rs.getDate(5));
+            assertEquals(DateTime(2026, 11, 23, 0, 0, 0), rs.getDateTime(5)); // a date at midnight
+            assertEquals(SysTime(DateTime(2026, 11, 23, 0, 0, 0), UTC()), rs.getSysTime(5));
+            assertEquals("23:59:58", rs.getString(6));
+            // DATETIMEOFFSET: the point in time, whatever the client's time zone; getDateTime gives
+            // the date and time at the value's offset
+            assertEquals(SysTime(DateTime(2026, 11, 23, 10, 34, 56), hnsecs(1234567), UTC()), rs.getSysTime(7));
+            assertEquals(hours(2), rs.getSysTime(7).utcOffset);
+            assertEquals(DateTime(2026, 11, 23, 12, 34, 56), rs.getDateTime(7));
+            assertEquals(SysTime(DateTime(2026, 11, 23, 16, 4, 56), UTC()), rs.getSysTime(8));
+            assertEquals(DateTime(2026, 11, 23, 12, 34, 56), rs.getDateTime(8));
+            assertEquals(withFraction, rs.getSysTime(9));
+            assertTrue(rs.isNull(10));
+            assertFalse(rs.next());
+
+            // stored in a table, and a DATETIMEOFFSET passed on through getVariant/setVariant
+            auto berlin = SysTime(DateTime(2026, 11, 23, 14, 34, 56), hnsecs(1234567),
+                new immutable SimpleTimeZone(hours(1)));
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("CREATE TABLE #times (id INT, d2 DATETIME2(7), dto DATETIMEOFFSET(7))");
+            PreparedStatement ins = conn.prepareStatement("INSERT INTO #times VALUES (?, ?, ?)");
+            scope(exit) ins.close();
+            ins.setInt(1, 1);
+            ins.setSysTime(2, berlin);
+            ins.setSysTime(3, berlin);
+            assertEquals(1, ins.executeUpdate());
+            ddbc.core.ResultSet stored = stmt.executeQuery("SELECT d2, dto FROM #times");
+            assertTrue(stored.next());
+            assertEquals(berlin, stored.getSysTime(1));
+            assertEquals(DateTime(2026, 11, 23, 13, 34, 56), stored.getDateTime(1)); // in UTC
+            assertEquals(berlin, stored.getSysTime(2)); // the timestamp parameter is UTC: +00:00
+            Variant dto = stored.getVariant(2);
+            assertFalse(stored.next()); // to the end: close() leaves the cursor open (#208)
+            stored.close();
+            ins.setInt(1, 2);
+            ins.setNull(2, ddbc.core.SqlType.DATETIME);
+            ins.setVariant(3, dto);
+            assertEquals(1, ins.executeUpdate());
+            ddbc.core.ResultSet copied = stmt.executeQuery("SELECT dto FROM #times WHERE id = 2");
+            scope(exit) copied.close();
+            assertTrue(copied.next());
+            assertEquals(berlin, copied.getSysTime(1));
+        }
+
         // NUMERIC, UNIQUEIDENTIFIER, XML and getters that convert (#150)
         @Test
         public void testNumericGuidXmlAndConversions() {
