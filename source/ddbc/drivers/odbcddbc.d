@@ -296,7 +296,7 @@ version (USE_ODBC)
                         cast(int) i, errorCode, fromStringz(msg.ptr)).idup;
             }
         }
-        while (ret == SQL_SUCCESS);
+        while (SQL_SUCCEEDED(ret)); // SQL_SUCCESS_WITH_INFO: a message longer than the buffer, cut
         //debug stderr.writefln("%s:%s:%s %s", file, line, fn, message);
         throw new Exception(message, file, line);
     }
@@ -691,9 +691,16 @@ version (USE_ODBC)
             //writeln("MySQLConnection() connection created");
         }
 
+        /**
+         * Closes the statements, rolls back an open transaction and disconnects. Closing twice does nothing,
+         * as for statements and results.
+         *
+         * Throws: `SQLException` if disconnecting fails. The connection is closed anyway (its statements are
+         * already), but its ODBC handles stay allocated, since a connected handle can't be freed, and the
+         * server session may stay open until the server ends it (#212).
+         */
         override void close()
         {
-            // closing twice does nothing, as for statements and results
             lock();
             scope (exit)
                 unlock();
@@ -705,17 +712,67 @@ version (USE_ODBC)
                 // still be closed later (pods closes its range's result in a destructor). A statement
                 // that fails to close doesn't keep the connection open (closeUnclosedStatements).
                 closeUnclosedStatements();
-                SQLDisconnect(conn);
+                // its statements are gone: the connection is closed even if disconnecting fails, rather
+                // than half closed, and closing it again does nothing
+                closed = true;
+                if (auto error = disconnect()) // the handles of a connected DBC can't be freed: they stay
+                {
+                    auto failed = new SQLException("Disconnecting failed, the server session may stay open: "
+                            ~ error.msg);
+                    failed.next = error; // the cause
+                    throw failed;
+                }
                 SQLFreeHandle(SQL_HANDLE_DBC, conn);
                 conn = null;
                 SQLFreeHandle(SQL_HANDLE_ENV, henv);
                 henv = null;
-                closed = true;
             }
+            catch (SQLException e)
+                throw e;
             catch (Exception e) // an Error propagates unchanged
             {
                 throw new SQLException(e);
             }
+        }
+
+        /*
+         * SQLDisconnect, checked (#212): with auto-commit off and a transaction open it fails (25000), so the
+         * transaction is rolled back first, as the server would do when the session ends, and the disconnect
+         * is tried again, also if the rollback failed (msodbcsql disconnects after the server ended the session,
+         * checked with KILL; a failed rollback is logged then). Returns the error if the second
+         * disconnect fails too, with the rollback's error if it failed, else null. SQL_SUCCESS_WITH_INFO
+         * (01002) means disconnected, with an error.
+         */
+        private Exception disconnect()
+        {
+            Exception diagnostics(string fn)
+            {
+                Exception error;
+                try
+                    extractError(fn, conn, SQL_HANDLE_DBC, __FILE__, __LINE__);
+                catch (Exception e)
+                    error = e;
+                return error;
+            }
+
+            Exception rollbackError;
+            SQLRETURN ret = SQLDisconnect(conn);
+            if (ret == SQL_ERROR && diagStates(conn, SQL_HANDLE_DBC).canFind("25000"))
+            {
+                if (!SQL_SUCCEEDED(SQLEndTran(cast(short) SQL_HANDLE_DBC, conn, cast(short) SQL_ROLLBACK)))
+                    rollbackError = diagnostics("SQLEndTran");
+                ret = SQLDisconnect(conn);
+            }
+            if (SQL_SUCCEEDED(ret))
+            {
+                if (rollbackError !is null)
+                    warning("Rolling back before disconnecting failed: " ~ rollbackError.msg);
+                return null;
+            }
+            auto error = diagnostics("SQLDisconnect");
+            if (rollbackError !is null)
+                return new Exception(error.msg ~ "\nRollback: " ~ rollbackError.msg, error.file, error.line, rollbackError);
+            return error;
         }
 
         override void commit()
@@ -1140,6 +1197,9 @@ version (USE_ODBC)
 
         ColumnInfo getColumn(int nr)
         {
+            if (nr < 1 || nr > cols.length) // an SQLException, not a RangeError (#212)
+                throw new SQLException("Column index " ~ to!string(nr) ~ (cols.length
+                        ? " is out of range (1 to " ~ to!string(cols.length) ~ ")" : ": the result has no columns"));
             return cols[nr - 1];
         }
 
@@ -1364,6 +1424,13 @@ version (USE_ODBC)
         this(ODBCConnection conn, string query)
         {
             super(conn);
+            // the connection only knows statements that were created: free the handle if preparing fails (#212)
+            scope (failure)
+            {
+                SQLFreeHandle(SQL_HANDLE_STMT, stmt);
+                stmt = null;
+                closed = true;
+            }
             this.query = query;
             try
             {

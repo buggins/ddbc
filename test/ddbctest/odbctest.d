@@ -334,6 +334,77 @@ version(USE_ODBC) {
             other.close();
         }
 
+        // closing a connection with a transaction open rolls it back and ends the session (#212)
+        @Test
+        public void testCloseWithOpenTransaction() {
+            import core.thread : Thread;
+            import core.time : msecs;
+            import ddbc.common : createConnection;
+
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            // if the transaction stayed open, its locks would block these statements: fail instead of waiting
+            stmt.executeUpdate("SET LOCK_TIMEOUT 5000");
+            scope(exit) stmt.executeUpdate("SET LOCK_TIMEOUT -1");
+            stmt.executeUpdate("DROP TABLE IF EXISTS ddbc_close_tx; CREATE TABLE ddbc_close_tx (i INT)");
+            scope(exit) stmt.executeUpdate("DROP TABLE IF EXISTS ddbc_close_tx");
+
+            Connection other = createConnection(sqlServerTypesUrl());
+            scope(exit) other.close(); // if an assertion fails
+            other.setAutoCommit(false);
+            Statement os = other.createStatement();
+            // the session, and its login time, so that a new session reusing the id doesn't count
+            ddbc.core.ResultSet spid = os.executeQuery("SELECT @@SPID, CONVERT(VARCHAR(30), login_time, 126) "
+                    ~ "FROM sys.dm_exec_sessions WHERE session_id = @@SPID");
+            assertTrue(spid.next());
+            const session = spid.getInt(1);
+            const loginTime = spid.getString(2);
+            spid.close();
+            // if the transaction stayed open (a regression), end the session, so its locks don't stay; only
+            // while it may still exist, so that a new session reusing the id isn't killed
+            bool sessionMayExist = true;
+            scope(failure) if (sessionMayExist) stmt.executeUpdate("KILL " ~ to!string(session));
+            os.executeUpdate("INSERT INTO ddbc_close_tx VALUES (1)");
+            other.close(); // SQLDisconnect fails with 25000 before the rollback
+            assertTrue(other.isClosed());
+
+            int sessions = 1; // sys.dm_exec_sessions shows other sessions with VIEW SERVER STATE (SA has it)
+            foreach (attempt; 0 .. 50) { // the server ends the session right after the disconnect
+                ddbc.core.ResultSet rs = stmt.executeQuery(
+                        "SELECT COUNT(*) FROM sys.dm_exec_sessions WHERE session_id = " ~ to!string(session)
+                        ~ " AND CONVERT(VARCHAR(30), login_time, 126) = '" ~ loginTime ~ "'");
+                assertTrue(rs.next());
+                sessions = rs.getInt(1);
+                sessionMayExist = sessions != 0;
+                rs.close();
+                if (sessions == 0)
+                    break;
+                Thread.sleep(100.msecs);
+            }
+            assertEquals(0, sessions);
+            ddbc.core.ResultSet rows = stmt.executeQuery("SELECT COUNT(*) FROM ddbc_close_tx");
+            scope(exit) rows.close();
+            assertTrue(rows.next());
+            assertEquals(0, rows.getInt(1)); // rolled back
+        }
+
+        // a bad column index is an SQLException, not a RangeError (#212). (A failed prepare frees its handle
+        // too, but msodbcsql only prepares when executing: neither a syntax error, a missing table nor an
+        // unbalanced escape makes prepareStatement fail, so that isn't tested here.)
+        @Test
+        public void testBadColumnIndex() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            ddbc.core.ResultSet rs = stmt.executeQuery("SELECT 1, 2");
+            scope(exit) rs.close();
+            assertTrue(rs.next());
+            assertThrown!SQLException(rs.getInt(0));
+            assertThrown!SQLException(rs.getInt(3));
+            assertThrown!SQLException(rs.isNull(0));
+            assertThrown!SQLException(rs.getString(99));
+            assertEquals(2, rs.getInt(2));
+        }
+
         // executeUpdate reads all results of a batch: an error in a later statement throws (#208)
         @Test
         public void testUpdateBatchErrors() {
