@@ -249,6 +249,66 @@ class SQLitePodTest : DdbcTestFixture {
         assertEquals(1, u.id, "a proper value is now assigned based on the database value");
     }
 
+    // NULL columns give null Nullables, through select (by index) and get (by name); a Nullable!TimeOfDay
+    // field compiles in get (#211)
+    @Test
+    public void testNullableFields() {
+        static struct Opt {
+            long id;
+            Nullable!int n;
+            Nullable!double x;
+            Nullable!Date d;
+            Nullable!TimeOfDay t;
+            Nullable!long big;
+            Nullable!DateTime at;
+        }
+
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+        stmt.executeUpdate("CREATE TABLE opt (id INTEGER PRIMARY KEY, n INT, x REAL, d DATE, t TIME, big BIGINT, "
+                ~ "at DATETIME)");
+        scope(exit) stmt.executeUpdate("DROP TABLE opt");
+        stmt.executeUpdate("INSERT INTO opt VALUES (1, NULL, NULL, NULL, NULL, NULL, NULL), "
+                ~ "(2, 5, 1.5, '2026-11-23', '12:34:56', 5000000000, '2026-11-23 12:34:56')");
+
+        void check(Opt o) {
+            if (o.id == 1) {
+                assertTrue(o.n.isNull && o.x.isNull && o.d.isNull && o.t.isNull && o.big.isNull && o.at.isNull);
+            } else {
+                assertEquals(5, o.n.get);
+                assertEquals(1.5, o.x.get);
+                assertEquals(Date(2026, 11, 23), o.d.get);
+                assertEquals(TimeOfDay(12, 34, 56), o.t.get);
+                assertEquals(5_000_000_000L, o.big.get);
+                assertEquals(DateTime(2026, 11, 23, 12, 34, 56), o.at.get);
+            }
+        }
+
+        int rows;
+        foreach (o; stmt.select!Opt.orderBy("id")) {
+            check(o);
+            rows++;
+        }
+        ddbc.core.ResultSet rs = stmt.executeQuery("SELECT id, n, x, d, t, big, at FROM opt ORDER BY id");
+        scope(exit) rs.close();
+        while (rs.next()) {
+            check(get!Opt(rs));
+            rows++;
+        }
+        assertEquals(4, rows);
+
+        // into variables: select(sql, args)
+        long id;
+        Nullable!TimeOfDay t;
+        foreach (ref row; stmt.select!()("SELECT id, t FROM opt ORDER BY id", id, t)) {
+            assertEquals(id == 1, t.isNull);
+            if (id == 2)
+                assertEquals(TimeOfDay(12, 34, 56), t.get);
+            rows++;
+        }
+        assertEquals(6, rows);
+    }
+
     @Test // Test for: https://github.com/buggins/ddbc/issues/89
     public void testInsertingPodWithZeroDefinedId() {
         Statement stmt = conn.createStatement();
