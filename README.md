@@ -22,7 +22,7 @@ ddbc's drivers are compiled in by dub configurations. An application picks one w
 `dub.json`:
 
 ```json
-"dependencies": { "ddbc": "~>0.14" },
+"dependencies": { "ddbc": "~>0.15.0" },
 "subConfigurations": { "ddbc": "PGNATIVE" }
 ```
 
@@ -114,6 +114,13 @@ int main(string[] args) {
     return 0;
 }
 ```
+
+### NULL values
+
+A NULL reads as the getter type's default (`0`, a null string or array, `Decimal.init`, `SysTime.init`,
+`DateTime.init`, ...) with `wasNull()` true: check `wasNull()` (or `isNull(column)`) to tell a NULL from a real
+value. Before ddbc 0.15, `getSysTime` and `getDateTime` returned the current time for a NULL in the MySQL, libpq,
+ODBC and SQLite drivers (#86, #226).
 
 ### Exact decimals
 
