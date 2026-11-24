@@ -3,6 +3,7 @@ module ddbc.ddbctest;
 import std.conv : to;
 import std.datetime : Date, DateTime, TimeOfDay;
 import std.datetime.systime : SysTime, Clock;
+import std.datetime.timezone : UTC;
 import std.format;
 import std.process: environment;
 import std.variant;
@@ -94,6 +95,109 @@ class SQLiteTest : DdbcTestFixture {
             count++;
         }
         assert(count == 2);
+    }
+
+    @Test // https://github.com/buggins/ddbc/issues/201
+    public void testDateRoundTrip() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+        stmt.executeUpdate("CREATE TABLE dates (id INTEGER PRIMARY KEY, d TEXT, dt TEXT)");
+
+        PreparedStatement ins = conn.prepareStatement("INSERT INTO dates (id, d, dt) VALUES (?, ?, ?)");
+        scope(exit) ins.close();
+        ins.setInt(1, 1);
+        ins.setDate(2, Date(2019, 9, 15));
+        ins.setDateTime(3, DateTime(2019, 9, 15, 15, 18, 51));
+        ins.executeUpdate();
+        ins.setInt(1, 2);
+        ins.setVariant(2, Variant(Date(2026, 1, 2)));
+        ins.setVariant(3, Variant(DateTime(2026, 1, 2, 3, 4, 5)));
+        ins.executeUpdate();
+        // written by setDate/setDateTime before ddbc 0.15
+        stmt.executeUpdate("INSERT INTO dates (id, d, dt) VALUES (3, '20190915', '20190915T151851')");
+
+        // stored as YYYY-MM-DD[ HH:MM:SS], which SQLite's date functions understand
+        ddbc.core.ResultSet rs = stmt.executeQuery("SELECT d, date(d), dt, datetime(dt) FROM dates ORDER BY id");
+        scope(exit) rs.close();
+        assertTrue(rs.next());
+        assertEquals("2019-09-15", rs.getString(1));
+        assertEquals("2019-09-15", rs.getString(2));
+        assertEquals("2019-09-15 15:18:51", rs.getString(3));
+        assertEquals("2019-09-15 15:18:51", rs.getString(4));
+        assertEquals(Date(2019, 9, 15), rs.getDate(1));
+        assertEquals(DateTime(2019, 9, 15, 0, 0, 0), rs.getDateTime(1));
+        assertEquals(DateTime(2019, 9, 15, 15, 18, 51), rs.getDateTime(3));
+        assertEquals(Date(2019, 9, 15), rs.getDate(3)); // the date of a timestamp
+        assertTrue(rs.next());
+        assertEquals(Date(2026, 1, 2), rs.getDate(1));
+        assertEquals(DateTime(2026, 1, 2, 3, 4, 5), rs.getDateTime(3));
+        assertTrue(rs.next()); // the old forms are still read
+        assertEquals(Date(2019, 9, 15), rs.getDate(1));
+        assertEquals(DateTime(2019, 9, 15, 0, 0, 0), rs.getDateTime(1));
+        assertEquals(SysTime(DateTime(2019, 9, 15, 0, 0, 0), UTC()), rs.getSysTime(1));
+        assertEquals(DateTime(2019, 9, 15, 15, 18, 51), rs.getDateTime(3));
+        assertEquals(Date(2019, 9, 15), rs.getDate(3));
+        assertFalse(rs.next());
+    }
+
+    @Test // https://github.com/buggins/ddbc/issues/201
+    public void testDateReadForms() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+        stmt.executeUpdate("CREATE TABLE date_forms (id INTEGER PRIMARY KEY, v TEXT)");
+        stmt.executeUpdate("INSERT INTO date_forms (id, v) VALUES "
+            ~ "(1, '2019-09-15T23:30:00+02:00'), (2, '2019-09-15T01:30:00.250-05:00'), (3, '2019-09-15T15:18:51Z'), "
+            ~ "(4, '20190915'), (5, '15:18'), (6, '15:18:51.500'), (7, '2019-Sep-15 15:18:51'), "
+            ~ "(8, '2019-09-15'), (9, '2019-Mar-31 01:30:00.500'), (10, '2019-09-15 23:30:00+02:00'), "
+            ~ "(11, '20190915T151851-05:00')");
+
+        ddbc.core.ResultSet rs = stmt.executeQuery("SELECT v FROM date_forms ORDER BY id");
+        scope(exit) rs.close();
+        // the date and time of a timestamp with an offset, as written (not converted to UTC or local time)
+        assertTrue(rs.next());
+        assertEquals(Date(2019, 9, 15), rs.getDate(1));
+        assertEquals(DateTime(2019, 9, 15, 23, 30, 0), rs.getDateTime(1));
+        assertEquals(TimeOfDay(23, 30, 0), rs.getTime(1));
+        assertTrue(rs.next());
+        assertEquals(Date(2019, 9, 15), rs.getDate(1));
+        assertEquals(DateTime(2019, 9, 15, 1, 30, 0), rs.getDateTime(1));
+        assertTrue(rs.next());
+        assertEquals(Date(2019, 9, 15), rs.getDate(1));
+        assertEquals(DateTime(2019, 9, 15, 15, 18, 51), rs.getDateTime(1));
+        assertEquals(TimeOfDay(15, 18, 51), rs.getTime(1));
+        // YYYYMMDD (setDate before ddbc 0.15): a date, not a time of day
+        assertTrue(rs.next());
+        assertEquals(Date(2019, 9, 15), rs.getDate(1));
+        assertEquals(DateTime(2019, 9, 15, 0, 0, 0), rs.getDateTime(1));
+        assertEquals(SysTime(DateTime(2019, 9, 15, 0, 0, 0), UTC()), rs.getSysTime(1));
+        assertThrown!SQLException(rs.getTime(1));
+        // a time of day alone has no date
+        assertTrue(rs.next());
+        assertEquals(TimeOfDay(15, 18, 0), rs.getTime(1));
+        assertThrown!SQLException(rs.getDate(1));
+        assertTrue(rs.next());
+        assertEquals(TimeOfDay(15, 18, 51), rs.getTime(1));
+        assertThrown!SQLException(rs.getDate(1));
+        assertTrue(rs.next());
+        assertEquals(Date(2019, 9, 15), rs.getDate(1));
+        // a date alone (setDate's form): not a time of day, like the old YYYYMMDD
+        assertTrue(rs.next());
+        assertEquals(DateTime(2019, 9, 15, 0, 0, 0), rs.getDateTime(1));
+        assertThrown!SQLException(rs.getTime(1));
+        // no offset: getDateTime and getTime never read it as local time, where a daylight saving gap (e.g.
+        // Europe/Lisbon at 01:00 on that day) would move it to 02:30. Such fractions aren't read yet, so this
+        // throws; once #225 reads them, expect 01:30 here. (getSysTime still reads this form as local time: #225.)
+        assertTrue(rs.next());
+        assertThrown!SQLException(rs.getDateTime(1));
+        assertThrown!SQLException(rs.getTime(1));
+        // SQLite's form with a space before the time, and the old basic form, with an offset
+        assertTrue(rs.next());
+        assertEquals(DateTime(2019, 9, 15, 23, 30, 0), rs.getDateTime(1));
+        assertEquals(SysTime(DateTime(2019, 9, 15, 21, 30, 0), UTC()), rs.getSysTime(1));
+        assertTrue(rs.next());
+        assertEquals(Date(2019, 9, 15), rs.getDate(1));
+        assertEquals(TimeOfDay(15, 18, 51), rs.getTime(1));
+        assertFalse(rs.next());
     }
 
     @Test // https://github.com/buggins/ddbc/issues/199

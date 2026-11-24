@@ -103,9 +103,18 @@ version(USE_SQLITE) {
             if(match(sqliteString, r"\d{4}-\D{3}-\d{2}.*")) {
                 return SysTime.fromSimpleString(sqliteString);
             } else if(match(sqliteString, r".*[\+|\-]\d{1,2}:\d{1,2}|.*Z")) {
-                return sqliteString.canFind('-') ?
-                    SysTime.fromISOExtString(sqliteString) :
-                    SysTime.fromISOString(sqliteString);
+                // the extended form by a '-' in its date (after a year's sign), not by any '-': an offset has
+                // one too (#201)
+                import std.string : indexOfAny, strip;
+                const text = sqliteString.strip; // the Phobos parsers allow surrounding whitespace
+                immutable sep = text.indexOfAny("T ");
+                if (sep > 0 && text[1 .. sep].canFind('-')) {
+                    // SQLite writes a space between the date and the time; Phobos wants a 'T'
+                    if (text[sep] == ' ')
+                        return SysTime.fromISOExtString(text[0 .. sep] ~ "T" ~ text[sep + 1 .. $]);
+                    return SysTime.fromISOExtString(text);
+                }
+                return SysTime.fromISOString(text);
             } else {
                 return SysTime(fromResultSet(sqliteString), UTC());
             }
@@ -113,6 +122,89 @@ version(USE_SQLITE) {
             // Let the exception fall to the throw statement below
         }
         throw new DateTimeException(format("Unknown SQLite DATETIME string: %s", sqliteString));
+    }
+
+    /// `YYYYMMDD`: how `setDate` wrote dates before ddbc 0.15 (#201). Only the date and timestamp getters read it,
+    /// so `getTime` doesn't take such a date for midnight.
+    private bool isLegacyDate(S)(in S s) @safe pure nothrow @nogc
+        if (isSomeString!S) {
+        return s.length == 8 && s.representation.all!(c => c >= '0' && c <= '9');
+    }
+
+    /// Whether the text starts with a date: `YYYY-MM-DD`, `YYYY-MMM-DD`, or `YYYYMMDDT` (how `setDateTime` wrote
+    /// timestamps before ddbc 0.15). A time of day alone doesn't.
+    private bool hasDatePart(S)(in S s) @safe pure nothrow @nogc
+        if (isSomeString!S) {
+        static bool digits(in S part) {
+            return part.representation.all!(c => c >= '0' && c <= '9');
+        }
+        if (s.length > 10 && digits(s[0 .. 4]) && s[4] == '-')
+            return true;
+        return s.length > 9 && digits(s[0 .. 8]) && s[8] == 'T';
+    }
+
+    /// Whether the text ends with `Z` or has a `±HH:MM` offset after its date part.
+    private bool hasOffset(S)(in S s) @safe pure nothrow @nogc
+        if (isSomeString!S) {
+        if (s.length > 0 && s[$ - 1] == 'Z')
+            return true;
+        // the date's own '-' are within the first 11 characters
+        return s.length > 11 && s[11 .. $].representation.any!(c => c == '+' || c == '-');
+    }
+
+    /// Whether the text is a date alone: `YYYY-MM-DD` or `YYYY-MMM-DD`.
+    private bool isDateOnly(S)(in S s) @safe pure nothrow @nogc
+        if (isSomeString!S) {
+        return (s.length == 10 && s[4] == '-' && s[7] == '-') || (s.length == 11 && s[4] == '-' && s[8] == '-');
+    }
+
+    /// The date and time as written (#201). A timestamp with an offset or `Z` keeps its own clock time: it isn't
+    /// converted to UTC or local time. Text without one is parsed without any time zone, so that no daylight
+    /// saving rule can move it.
+    private DateTime writtenDateTime(S)(in S s) @safe
+        if (isSomeString!S) {
+        if (hasDatePart(s) && hasOffset(s))
+            return cast(DateTime) parseSysTime(s);
+        return fromResultSet(s);
+    }
+
+    private static unittest {
+        assert(isLegacyDate("20190915"));
+        assert(!isLegacyDate("15:18:51"));
+        assert(hasDatePart("2019-09-15 15:18:51"));
+        assert(hasDatePart("2019-Sep-15 15:18:51"));
+        assert(hasDatePart("20190915T151851"));
+        assert(hasDatePart("2019-09-15T15:18:51.500+02:00"));
+        assert(!hasDatePart("15:18"));
+        assert(!hasDatePart("15:18:51.500"));
+        assert(!hasDatePart("15:18:51+02:00"));
+        assert(!hasDatePart("2019-09-15")); // a plain date: getDate parses it directly
+
+        assert(hasOffset("2019-09-15T15:18:51Z"));
+        assert(hasOffset("2019-09-15T15:18:51.250-05:00"));
+        assert(hasOffset("20190915T151851+02:00"));
+        assert(!hasOffset("2019-09-15 15:18:51"));
+        assert(!hasOffset("2019-Sep-15 15:18:51.500"));
+        assert(isDateOnly("2019-09-15"));
+        assert(isDateOnly("2019-Sep-15"));
+        assert(!isDateOnly("15:18:51.5"));
+        assert(writtenDateTime("2019-09-15T23:30:00+02:00") == DateTime(2019, 9, 15, 23, 30, 0));
+        assert(writtenDateTime("2019-09-15 15:18:51") == DateTime(2019, 9, 15, 15, 18, 51));
+        assert(writtenDateTime("2019-09-15 15:18:51.12Z") == DateTime(2019, 9, 15, 15, 18, 51));
+        assert(writtenDateTime("2019-09-15 23:30:00+02:00") == DateTime(2019, 9, 15, 23, 30, 0));
+        assert(writtenDateTime("20190915T151851-05:00") == DateTime(2019, 9, 15, 15, 18, 51));
+        assert(parseSysTime("2019-09-15 23:30:00+02:00") == SysTime(DateTime(2019, 9, 15, 21, 30, 0), UTC()));
+        // years beyond 9999 and before 1, as setSysTime writes them
+        assert(parseSysTime("+10000-01-01T00:00:00Z") == SysTime(DateTime(10000, 1, 1), UTC()));
+        assert(parseSysTime("-0001-01-01T00:00:00Z") == SysTime(DateTime(-1, 1, 1), UTC()));
+        // the basic form with a signed year (SysTime.toISOString; setSysTime doesn't write it)
+        assert(parseSysTime("+100000101T000000Z") == SysTime(DateTime(10000, 1, 1), UTC()));
+        // surrounding whitespace, which the Phobos parsers allow
+        assert(parseSysTime(" 2019-09-15T15:18:51Z") == SysTime(DateTime(2019, 9, 15, 15, 18, 51), UTC()));
+        assert(parseSysTime(" 2019-09-15 15:18:51Z ") == SysTime(DateTime(2019, 9, 15, 15, 18, 51), UTC()));
+
+        import std.exception : assertThrown;
+        assertThrown!DateTimeException(fromResultSet("20190915")); // not a time of day (#201)
     }
 
     /// Converts from a selection of the standard SQLite time formats into a DateTime object.
@@ -793,11 +885,15 @@ version(USE_SQLITE) {
             setString(parameterIndex, x.toISOExtString());
         }
 
+        /// Stored as text `YYYY-MM-DD HH:MM:SS`, which SQLite's date and time functions understand, in the form
+        /// of `CURRENT_TIMESTAMP`. Before ddbc 0.15 it was `YYYYMMDDTHHMMSS`, which the getters still read (#201).
         override void setDateTime(int parameterIndex, DateTime x) {
-            setString(parameterIndex, x.toISOString());
+            setString(parameterIndex, x.date.toISOExtString() ~ " " ~ x.timeOfDay.toISOExtString());
         }
+        /// Stored as text `YYYY-MM-DD`, which SQLite's date functions understand. Before ddbc 0.15 it was
+        /// `YYYYMMDD`, which the getters still read (#201).
         override void setDate(int parameterIndex, Date x) {
-            setString(parameterIndex, x.toISOString());
+            setString(parameterIndex, x.toISOExtString());
         }
         /// Stored as text `HH:MM:SS`, which SQLite's date and time functions understand.
         override void setTime(int parameterIndex, TimeOfDay x) {
@@ -1097,6 +1193,8 @@ version(USE_SQLITE) {
             if (s is null)
                 return Clock.currTime();
             try {
+                if (isLegacyDate(s))
+                    return SysTime(DateTime(Date.fromISOString(s), TimeOfDay()), UTC());
                 return parseSysTime(s);
             } catch (Throwable e) {
                 throw new SQLException("Cannot convert '" ~ s ~ "' to SysTime");
@@ -1108,7 +1206,9 @@ version(USE_SQLITE) {
             if (s is null)
                 return cast(DateTime) Clock.currTime();
             try {
-                return fromResultSet(s);
+                if (isLegacyDate(s))
+                    return DateTime(Date.fromISOString(s), TimeOfDay());
+                return writtenDateTime(s);
             } catch (Throwable e) {
                 throw new SQLException("Cannot convert '" ~ s ~ "' to DateTime");
             }
@@ -1119,19 +1219,23 @@ version(USE_SQLITE) {
             if (s is null)
                 return dt;
             try {
-                // date is likely to be either YYYY-MM-DD or YYYY-MMM-DD.
-                // In D we can easily handle the following x3 formats:
-                final switch (s.length) {
+                switch (s.length) {
                     case 8:
-                        return Date.fromISOString(s); // ISO: YYYYMMDD
+                        return Date.fromISOString(s); // YYYYMMDD: how setDate wrote dates before ddbc 0.15
                     case 10:
-                        return Date.fromISOExtString(s); // ISO extended: YYYY-MM-DD
+                        return Date.fromISOExtString(s); // YYYY-MM-DD
                     case 11:
                         return Date.fromSimpleString(s); // YYYY-MMM-DD
+                    default:
+                        // the date of a timestamp, as written (#201); a time of day alone has no date
+                        if (hasDatePart(s))
+                            return writtenDateTime(s).date;
+                        break;
                 }
             } catch (Throwable e) {
                 throw new SQLException("Cannot convert string to Date - " ~ s);
             }
+            throw new SQLException("Cannot convert string to Date - " ~ s);
         }
         override TimeOfDay getTime(int columnIndex) {
             string s = getString(columnIndex);
@@ -1142,7 +1246,10 @@ version(USE_SQLITE) {
                 // HHMMSS: how setTime wrote times before ddbc 0.14.2
                 if (s.length == 6 && s.representation.all!(c => c >= '0' && c <= '9'))
                     return TimeOfDay.fromISOString(s);
-                return fromResultSet(s).timeOfDay;
+                // a date alone has no time of day, in the old form or the new one (#201)
+                if (isLegacyDate(s) || isDateOnly(s))
+                    throw new DateTimeException("not a time of day: " ~ s);
+                return writtenDateTime(s).timeOfDay;
             } catch (Throwable e) {
                 throw new SQLException("Cannot convert string to TimeOfDay - " ~ s);
             }
