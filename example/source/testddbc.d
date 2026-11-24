@@ -404,21 +404,13 @@ int main(string[] args)
 	i = 0;
 	rs = stmt.executeQuery("SELECT id, name, comment, ts FROM ddbct1 WHERE ts IS NULL");
 	while (rs.next()) {
-		SysTime now = Clock.currTime();
-		DateTime dtNow = cast(DateTime) now;
-		// if the column on the table is NULL ddbc will create a DateTime using Clock.currTime()
-		// https://github.com/buggins/ddbc/issues/86
-		assert(rs.getDateTime(4).year == dtNow.year);
-		assert(rs.getDateTime(4).month == dtNow.month);
-		assert(rs.getDateTime(4).day == dtNow.day);
-		assert(rs.getDateTime(4).hour == dtNow.hour);
-		writeln(" - id: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\t" ~ to!string(rs.getDateTime(4)));
-		
-		// ddbc should also allow you to retrive the timestamp as a SysTime (defaulting UTC if no zone info given)
-		assert(rs.getSysTime(4).year == now.year);
-		assert(rs.getSysTime(4).month == now.month);
-		assert(rs.getSysTime(4).day == now.day);
-		//assert(rs.getSysTime(4).hour == now.hour);
+		// a NULL timestamp reads as DateTime.init / SysTime.init, with wasNull() true. From 2019 (#86) until
+		// ddbc 0.15 (#226), the MySQL, libpq, ODBC and SQLite drivers returned the current time instead.
+		assert(rs.getDateTime(4) == DateTime.init, par.driver ~ ": a NULL ts read as " ~ to!string(rs.getDateTime(4)));
+		assert(rs.wasNull(), par.driver ~ ": wasNull() false after getDateTime on a NULL");
+		writeln(" - id: " ~ to!string(rs.getLong(1)) ~ "\t" ~ rs.getString(2) ~ "\tNULL");
+		assert(rs.getSysTime(4) == SysTime.init, par.driver ~ ": a NULL ts read as a SysTime other than .init");
+		assert(rs.wasNull(), par.driver ~ ": wasNull() false after getSysTime on a NULL");
 		i++;
 	}
 	assert(2 == i, "There should be 2 results but instead there was " ~ to!string(i));
@@ -434,7 +426,7 @@ int main(string[] args)
     ps2.setUlong(1, 1);
     auto prs = ps2.executeQuery();
     while (prs.next()) {
-        writeln(" - id: " ~ to!string(prs.getLong(1)) ~ "\t" ~ prs.getString(2) ~ "\t" ~ prs.getString(3) ~ "\t" ~ to!string(prs.getDateTime(4)));
+        writeln(" - id: " ~ to!string(prs.getLong(1)) ~ "\t" ~ prs.getString(2) ~ "\t" ~ prs.getString(3) ~ "\t" ~ (prs.isNull(4) ? "NULL" : to!string(prs.getDateTime(4))));
     }
 
 	writeln("\n > Testing basic POD support");
