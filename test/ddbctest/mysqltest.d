@@ -1,7 +1,7 @@
 module ddbc.mysqltest;
 
 import std.conv : to;
-import std.datetime : Date, DateTime;
+import std.datetime : Date, DateTime, TimeOfDay;
 import std.datetime.systime : SysTime, Clock;
 import std.format;
 import std.process: environment;
@@ -28,6 +28,23 @@ version(USE_MYSQL) {
                 "CREATE TABLE `my_first_test` (`id` INTEGER AUTO_INCREMENT PRIMARY KEY, `name` VARCHAR(255) NOT NULL)",
                 "DROP TABLE IF EXISTS `my_first_test`"
             );
+        }
+
+        @Test // https://github.com/buggins/ddbc/issues/226
+        public void testNullTimestamp() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            ddbc.core.ResultSet rs = stmt.executeQuery("SELECT CAST(NULL AS DATETIME), CAST(NULL AS DATE), CAST(NULL AS TIME)");
+            scope(exit) rs.close();
+            assertTrue(rs.next());
+            assertEquals(SysTime.init, rs.getSysTime(1)); // not the current time
+            assertTrue(rs.wasNull());
+            assertEquals(DateTime.init, rs.getDateTime(1));
+            assertTrue(rs.wasNull());
+            assertEquals(Date.init, rs.getDate(2));
+            assertTrue(rs.wasNull());
+            assertEquals(TimeOfDay.init, rs.getTime(3));
+            assertTrue(rs.wasNull());
         }
 
         @Test

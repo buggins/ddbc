@@ -97,6 +97,30 @@ class SQLiteTest : DdbcTestFixture {
         assert(count == 2);
     }
 
+    @Test // https://github.com/buggins/ddbc/issues/226
+    public void testNullTimestamp() {
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+        ddbc.core.ResultSet rs = stmt.executeQuery("SELECT NULL, ''");
+        scope(exit) rs.close();
+        assertTrue(rs.next());
+        assertEquals(SysTime.init, rs.getSysTime(1)); // not the current time
+        assertTrue(rs.wasNull());
+        assertEquals(DateTime.init, rs.getDateTime(1));
+        assertTrue(rs.wasNull());
+        assertEquals(Date.init, rs.getDate(1));
+        assertTrue(rs.wasNull());
+        assertEquals(TimeOfDay.init, rs.getTime(1));
+        assertTrue(rs.wasNull());
+        // empty text reads as .init too, but isn't NULL
+        assertEquals(SysTime.init, rs.getSysTime(2));
+        assertFalse(rs.wasNull());
+        assertEquals(DateTime.init, rs.getDateTime(2));
+        assertEquals(Date.init, rs.getDate(2));
+        assertEquals(TimeOfDay.init, rs.getTime(2));
+        assertFalse(rs.wasNull());
+    }
+
     @Test // https://github.com/buggins/ddbc/issues/201
     public void testDateRoundTrip() {
         Statement stmt = conn.createStatement();

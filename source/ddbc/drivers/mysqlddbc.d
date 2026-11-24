@@ -1174,8 +1174,8 @@ public:
         scope(exit) unlock();
         
         immutable string s = getString(columnIndex);
-        if (s is null)
-            return Clock.currTime();
+        if (lastIsNull)
+            return SysTime.init; // NULL (#226)
         try {
             import ddbc.drivers.utils : parseSysTime;
             return parseSysTime(s);
@@ -1190,7 +1190,7 @@ public:
 		scope(exit) unlock();
 		Variant v = getValue(columnIndex);
 		if (lastIsNull)
-			return cast(DateTime) Clock.currTime();
+			return DateTime.init; // NULL (#226)
 		if (v.convertsTo!(DateTime)) {
 			return v.get!DateTime();
 		}
