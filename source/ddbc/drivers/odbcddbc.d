@@ -2129,7 +2129,8 @@ version (USE_ODBC)
                 unlock();
 
             auto val = stmt.getColumn(columnIndex).value;
-            if (!val.hasValue)
+            lastIsNull = !val.hasValue;
+            if (lastIsNull)
                 return cast(Type)null;
             else
                 return val.get!(Type);
@@ -2215,8 +2216,9 @@ version (USE_ODBC)
                 unlock();
             auto column = stmt.getColumn(columnIndex);
             Variant v = column.value;
-            if (!v.hasValue) {
-                return Clock.currTime();
+            lastIsNull = !v.hasValue;
+            if (lastIsNull) {
+                return SysTime.init; // NULL (#226)
             }
 
             if (v.convertsTo!(SysTime)) {
@@ -2239,8 +2241,9 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
             Variant v = stmt.getColumn(columnIndex).value;
-            if (!v.hasValue) {
-                return cast(DateTime) Clock.currTime();
+            lastIsNull = !v.hasValue;
+            if (lastIsNull) {
+                return DateTime.init; // NULL (#226)
             }
 
             if (v.convertsTo!(DateTime)) {
@@ -2322,7 +2325,9 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            return stmt.getColumn(columnIndex).value;
+            Variant v = stmt.getColumn(columnIndex).value;
+            lastIsNull = !v.hasValue; // a NULL is an empty Variant (#226)
+            return v;
         }
 
         override bool wasNull()

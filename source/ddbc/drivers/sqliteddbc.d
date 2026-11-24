@@ -28,7 +28,7 @@ version(USE_SQLITE) {
     import std.conv;
     import std.datetime : Date, DateTime, TimeOfDay;
     import std.datetime.date;
-    import std.datetime.systime : SysTime, Clock;
+    import std.datetime.systime : SysTime;
     import std.datetime.timezone : UTC;
     import std.exception : enforce;
     static if (__traits(compiles, (){ import std.logger; } )) {
@@ -1188,10 +1188,14 @@ version(USE_SQLITE) {
             return cast(string)res;
         }
 
+        /// NULL and empty text read as `SysTime.init` (#226).
         override SysTime getSysTime(int columnIndex) {
+            checkClosed();
+            lock();
+            scope(exit) unlock(); // the whole getter: getString sets lastIsNull, read below
             immutable string s = getString(columnIndex);
-            if (s is null)
-                return Clock.currTime();
+            if (lastIsNull || s.length == 0)
+                return SysTime.init;
             try {
                 if (isLegacyDate(s))
                     return SysTime(DateTime(Date.fromISOString(s), TimeOfDay()), UTC());
@@ -1201,10 +1205,14 @@ version(USE_SQLITE) {
             }
         }
 
+        /// NULL and empty text read as `DateTime.init` (#226).
         override DateTime getDateTime(int columnIndex) {
+            checkClosed();
+            lock();
+            scope(exit) unlock(); // the whole getter: getString sets lastIsNull, read below
             string s = getString(columnIndex);
-            if (s is null)
-                return cast(DateTime) Clock.currTime();
+            if (lastIsNull || s.length == 0)
+                return DateTime.init;
             try {
                 if (isLegacyDate(s))
                     return DateTime(Date.fromISOString(s), TimeOfDay());
@@ -1213,10 +1221,14 @@ version(USE_SQLITE) {
                 throw new SQLException("Cannot convert '" ~ s ~ "' to DateTime");
             }
         }
+        /// NULL and empty text read as `Date.init`.
         override Date getDate(int columnIndex) {
+            checkClosed();
+            lock();
+            scope(exit) unlock(); // the whole getter: getString sets lastIsNull, read below
             string s = getString(columnIndex);
             Date dt;
-            if (s is null)
+            if (lastIsNull || s.length == 0)
                 return dt;
             try {
                 switch (s.length) {
@@ -1237,10 +1249,14 @@ version(USE_SQLITE) {
             }
             throw new SQLException("Cannot convert string to Date - " ~ s);
         }
+        /// NULL and empty text read as `TimeOfDay.init`.
         override TimeOfDay getTime(int columnIndex) {
+            checkClosed();
+            lock();
+            scope(exit) unlock(); // the whole getter: getString sets lastIsNull, read below
             string s = getString(columnIndex);
             TimeOfDay dt;
-            if (s is null)
+            if (lastIsNull || s.length == 0)
                 return dt;
             try {
                 // HHMMSS: how setTime wrote times before ddbc 0.14.2

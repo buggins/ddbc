@@ -342,10 +342,18 @@ interface DataSetReader {
 	/// The value as an exact decimal; a NULL reads as `Decimal.init` (zero), with `wasNull()` true.
 	Decimal getDecimal(int columnIndex);
 	string getString(int columnIndex);
+	/// A NULL reads as `SysTime.init`, `DateTime.init`, `Date.init` or `TimeOfDay.init`, with `wasNull()` true
+	/// (before ddbc 0.15, `getSysTime` and `getDateTime` returned the current time in some drivers, #226). The
+	/// SQLite driver, which stores dates and times as text, also reads empty text as `.init` (`wasNull()` false).
 	SysTime getSysTime(int columnIndex);
+	/// ditto
 	DateTime getDateTime(int columnIndex);
+	/// ditto
 	Date getDate(int columnIndex);
+	/// ditto
 	TimeOfDay getTime(int columnIndex);
+	/// A NULL reads as `Variant(null)` or as an empty `Variant` (`hasValue` false), depending on the driver;
+	/// `wasNull()` is true either way.
 	Variant getVariant(int columnIndex);
 	bool isNull(int columnIndex);
 	bool wasNull();
@@ -411,10 +419,18 @@ interface ResultSet : DataSetReader {
 	float getFloat(int columnIndex);
 	Decimal getDecimal(int columnIndex);
 	string getString(int columnIndex);
+    /// A NULL reads as `Variant(null)` or as an empty `Variant` (`hasValue` false), depending on the driver;
+    /// `wasNull()` is true either way.
     Variant getVariant(int columnIndex);
+	/// A NULL reads as `SysTime.init`, `DateTime.init`, `Date.init` or `TimeOfDay.init`, with `wasNull()` true
+	/// (before ddbc 0.15, `getSysTime` and `getDateTime` returned the current time in some drivers, #226). The
+	/// SQLite driver, which stores dates and times as text, also reads empty text as `.init` (`wasNull()` false).
 	SysTime getSysTime(int columnIndex);
+	/// ditto
 	DateTime getDateTime(int columnIndex);
+	/// ditto
 	Date getDate(int columnIndex);
+	/// ditto
 	TimeOfDay getTime(int columnIndex);
 
     bool isNull(int columnIndex);
@@ -437,10 +453,15 @@ interface ResultSet : DataSetReader {
 	float getFloat(string columnName);
 	Decimal getDecimal(string columnName);
     string getString(string columnName);
+	/// As the column-index overloads, also for NULL.
 	SysTime getSysTime(string columnName);
+	/// ditto
 	DateTime getDateTime(string columnName);
+	/// ditto
 	Date getDate(string columnName);
+	/// ditto
 	TimeOfDay getTime(string columnName);
+	/// ditto
 	Variant getVariant(string columnName);
 
     /// to iterate through all rows in result set
