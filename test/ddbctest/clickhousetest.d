@@ -393,6 +393,33 @@ version(USE_CLICKHOUSE) {
         }
 
         @Test
+        public void testStringParametersAreEscaped() {
+            // the server reads String parameters as escaped text; values must arrive unchanged (#233)
+            PreparedStatement select = conn.prepareStatement("SELECT ?, length(?)");
+            scope(exit) select.close();
+            foreach (value; [`\N`, `a\tb`, `\xFF`, `C:\dir\`, "line\nnext", "tab\tcr\rnul\0end", "it's \"x\" ?", ""]) {
+                select.setString(1, value);
+                select.setString(2, value);
+                ResultSet rs = select.executeQuery();
+                scope(exit) rs.close();
+                assertTrue(rs.next());
+                assertEquals(value, rs.getString(1));
+                assertEquals(cast(long) value.length, rs.getLong(2));
+            }
+
+            ubyte[] bytes;
+            foreach (b; 0 .. 256)
+                bytes ~= cast(ubyte) b;
+            select.setUbytes(1, bytes);
+            select.setBytes(2, cast(byte[]) bytes);
+            ResultSet rs = select.executeQuery();
+            scope(exit) rs.close();
+            assertTrue(rs.next());
+            assertTrue(rs.getUbytes(1) == bytes);
+            assertEquals(256L, rs.getLong(2));
+        }
+
+        @Test
         public void testTransactionsAreNotSupported() {
             assertTrue(conn.getAutoCommit());
             conn.setAutoCommit(true);
