@@ -29,7 +29,10 @@
  *        behind. Running another statement on the connection while a result set is open reads the
  *        rest of that result set into memory first.)
  *   $(LI Prepared statement parameters (`?`) are sent as typed server-side query parameters; the
- *        type follows the setter (`setInt` -> `Int32`, `setSysTime` -> `DateTime64(7, 'UTC')`, ...).)
+ *        type follows the setter (`setInt` -> `Int32`, `setSysTime` -> `DateTime64(7, 'UTC')`, ...).
+ *        String and byte values arrive unchanged, any byte included: the driver escapes them for the
+ *        server's escaped text format. Before ddbc 0.15.1 they were sent as they were, so backslash
+ *        sequences such as `\N` or `\xFF` were decoded by the server, and a newline or tab failed (#233).)
  *   $(LI Dates and times are sent as `Date32`, `DateTime` and `DateTime64`. `Date32` and `DateTime64`
  *        hold 1900-01-01 to 2299-12-31; the server would silently clamp values outside that range, so
  *        `setDate`, `setDateTime` and `setSysTime` reject them with `SQLException`. `setDateTime` sends
@@ -181,6 +184,78 @@ version (USE_CLICKHOUSE)
         assert(!parseTimeOfDayText("12:00:60", t));
         assert(!parseTimeOfDayText("093005", t));
         assert(!parseTimeOfDayText("\xff\xfe:30:05", t));
+    }
+
+    /// `value` in ClickHouse's escaped text format, the form in which the server reads a `String` query parameter
+    /// (#233): a backslash, NUL, newline, carriage return and tab become `\\`, `\0`, `\n`, `\r` and `\t`. Unescaped,
+    /// the server decodes backslash sequences in the value (`\N` becomes an empty string; NULL only in a Nullable
+    /// type), and a newline or tab ends it. Returns a `string` `value` itself when nothing needs escaping; copies once
+    /// otherwise.
+    private string escapeParameterText(C)(C[] value) @safe pure nothrow
+    if (is(immutable C == immutable char))
+    {
+        static bool special(char c) @safe pure nothrow @nogc
+        {
+            return c == '\\' || c == '\0' || c == '\n' || c == '\r' || c == '\t';
+        }
+
+        size_t start = 0;
+        while (start < value.length && !special(value[start]))
+            start++;
+        if (start == value.length)
+        {
+            static if (is(C == immutable char))
+                return value;
+            else
+                return value.idup;
+        }
+        string res;
+        res.reserve(value.length + 16);
+        res ~= value[0 .. start];
+        foreach (char c; value[start .. $]) // code units: binary values needn't be valid UTF-8
+        {
+            switch (c)
+            {
+            case '\\':
+                res ~= `\\`;
+                break;
+            case '\0':
+                res ~= `\0`;
+                break;
+            case '\n':
+                res ~= `\n`;
+                break;
+            case '\r':
+                res ~= `\r`;
+                break;
+            case '\t':
+                res ~= `\t`;
+                break;
+            default:
+                res ~= c;
+            }
+        }
+        return res;
+    }
+
+    @safe pure nothrow unittest
+    {
+        assert(escapeParameterText("") == "");
+        assert(escapeParameterText("it's \"x\" ?") == "it's \"x\" ?");
+        assert(escapeParameterText(`\N`) == `\\N`);
+        assert(escapeParameterText("C:\\dir\n\t\r\0end") == `C:\\dir\n\t\r\0end`);
+        assert(escapeParameterText("\xff\xfe") == "\xff\xfe");
+        const clean = "nothing to escape";
+        assert(escapeParameterText(clean) is clean);
+        assert(escapeParameterText("abc\ndef") == `abc\ndef`);
+        char[] buffer = "a\tb".dup;
+        const copied = escapeParameterText(buffer);
+        buffer[0] = 'x';
+        assert(copied == `a\tb`);
+        char[] plain = "ab".dup;
+        const copiedPlain = escapeParameterText(plain);
+        plain[0] = 'x';
+        assert(copiedPlain == "ab");
     }
 
     /// `text` in single quotes for an error message, if it is short printable ASCII; otherwise a placeholder.
@@ -623,7 +698,9 @@ version (USE_CLICKHOUSE)
         {
             bool set;
             string type; // ClickHouse type of the parameter
-            string value; // value in ClickHouse text format; "\N" is NULL
+            // value as the server reads it: String values through escapeParameterText, other types as plain text
+            // that needs no escaping (numbers, dates, ...), and a bare "\N" for NULL
+            string value;
         }
 
         string[] parts; // the query split at the placeholders
@@ -771,7 +848,7 @@ version (USE_CLICKHOUSE)
 
         override void setBytes(int parameterIndex, byte[] x)
         {
-            setParam(parameterIndex, "String", cast(string) x.idup);
+            setParam(parameterIndex, "String", escapeParameterText(cast(const(char)[]) x));
         }
 
         override void setUlong(int parameterIndex, ulong x)
@@ -796,7 +873,7 @@ version (USE_CLICKHOUSE)
 
         override void setUbytes(int parameterIndex, ubyte[] x)
         {
-            setParam(parameterIndex, "String", cast(string) x.idup);
+            setParam(parameterIndex, "String", escapeParameterText(cast(const(char)[]) x));
         }
 
         /// Sent as `Decimal(P, S)` with the smallest precision that holds the value
@@ -823,7 +900,7 @@ version (USE_CLICKHOUSE)
             if (x is null)
                 setNull(parameterIndex, SqlType.VARCHAR);
             else
-                setParam(parameterIndex, "String", x);
+                setParam(parameterIndex, "String", escapeParameterText(x));
         }
 
         /// Sent as `DateTime64(7, 'UTC')`: the exact point in time.
