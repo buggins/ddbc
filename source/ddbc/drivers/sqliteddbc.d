@@ -30,7 +30,7 @@ version(USE_SQLITE) {
     import std.datetime.date;
     import std.datetime.systime : SysTime;
     import std.datetime.timezone : UTC;
-    import std.exception : enforce;
+    import std.exception : collectException, enforce;
     static if (__traits(compiles, (){ import std.logger; } )) {
         import std.logger;
     } else {
@@ -358,6 +358,57 @@ version(USE_SQLITE) {
                 throw new SQLException("Connection is already closed");
         }
 
+        bool beginFailed; // the driver's BEGIN after a COMMIT or ROLLBACK failed: no transaction, nothing lost
+
+        /// Why there is no transaction, for the errors that refuse statements.
+        string transactionLostMessage() {
+            return beginFailed ? "the driver couldn't start the next transaction; call rollback() to continue"
+                : transactionLostText;
+        }
+
+        enum transactionLostText = "SQLite rolled back the transaction after an error (or a COMMIT or ROLLBACK "
+            ~ "statement ended it); call rollback() to continue";
+
+        /// With auto-commit off the driver keeps a transaction open; true when SQLite has none (#243): it rolls back
+        /// by itself after some errors (SQLITE_FULL, SQLITE_IOERR, SQLITE_NOMEM, SQLITE_INTERRUPT, ...), and a
+        /// statement would then run in auto-commit mode.
+        bool transactionLost() {
+            return !autocommit && sqlite3_get_autocommit(conn) != 0;
+        }
+
+        /// Called with the lock held before a statement runs.
+        void checkTransaction() {
+            if (transactionLost())
+                throw new SQLException("Can't run statements: " ~ transactionLostMessage);
+        }
+
+        /// The exception for a failed statement, saying so when SQLite rolled the transaction back.
+        SQLException failure(string msg) {
+            if (transactionLost())
+                msg ~= " - " ~ transactionLostMessage;
+            return new SQLException(msg);
+        }
+
+        /// Runs the driver's own transaction statements (BEGIN, COMMIT, ROLLBACK), bypassing checkTransaction.
+        /// `after` names a statement that already succeeded (e.g. "COMMIT" before a BEGIN): an error then says so,
+        /// instead of reporting a lost transaction.
+        void execInternal(string sql, string after = null) {
+            char* errmsg;
+            int res = sqlite3_exec(conn, toStringz(sql), null, null, &errmsg);
+            if (res != SQLITE_OK) {
+                string msg = "Error #" ~ to!string(res) ~ " while executing " ~ sql ~ " : "
+                    ~ (errmsg is null ? getError() : copyCString(errmsg));
+                sqlite3_free(errmsg);
+                if (after.length) {
+                    beginFailed = true;
+                    throw new SQLException(after ~ " succeeded, but starting the next transaction failed: " ~ msg);
+                }
+                throw failure(msg);
+            }
+            if (sql == "BEGIN")
+                beginFailed = false;
+        }
+
     public:
 
         // db connections are DialectAware
@@ -390,12 +441,28 @@ version(USE_SQLITE) {
             if (url.startsWith("sqlite:"))
                 url = url[7 .. $];
             this.filename = url;
+            // milliseconds to wait for another connection's lock before failing with SQLITE_BUSY (default 0)
+            int busyTimeout = 0;
+            if (auto timeout = "busy_timeout" in params) {
+                try
+                    busyTimeout = to!int(*timeout);
+                catch (ConvException e)
+                    throw new SQLException("Invalid busy_timeout (milliseconds): " ~ *timeout, e);
+                if (busyTimeout < 0)
+                    throw new SQLException("Invalid busy_timeout (milliseconds): " ~ *timeout);
+            }
             //writeln("trying to connect");
             int res = sqlite3_open(toStringz(filename), &conn);
-            if(res != SQLITE_OK)
-                throw new SQLException("SQLITE Error " ~ to!string(res) ~ " while trying to open DB " ~ filename ~ " : " ~ getError());
+            if(res != SQLITE_OK) {
+                string msg = "SQLITE Error " ~ to!string(res) ~ " while trying to open DB " ~ filename ~ " : " ~ getError();
+                sqlite3_close(conn); // SQLite allocates the handle also when opening fails
+                conn = null;
+                throw new SQLException(msg);
+            }
             assert(conn !is null);
             closed = false;
+            if (busyTimeout)
+                sqlite3_busy_timeout(conn, busyTimeout);
             setAutoCommit(true);
         }
 
@@ -419,16 +486,12 @@ version(USE_SQLITE) {
             lock();
             scope(exit) unlock();
 
-            Statement stmt = createStatement();
-            scope(exit) stmt.close();
-            stmt.executeUpdate("COMMIT");
+            if (transactionLost())
+                throw new SQLException("Can't commit: " ~ transactionLostMessage);
+            execInternal("COMMIT"); // on SQLITE_BUSY the transaction stays open and commit() can be retried
 
             // Simulate autocommit being off by immediately starting a new transaction.
-            if (!autocommit) {
-                Statement stmt2 = createStatement();
-                scope(exit) stmt2.close();
-                stmt2.executeUpdate("BEGIN");
-            }
+            execInternal("BEGIN", "COMMIT");
         }
 
         override Statement createStatement() {
@@ -474,14 +537,11 @@ version(USE_SQLITE) {
             lock();
             scope(exit) unlock();
 
-            Statement stmt = createStatement();
-            scope(exit) stmt.close();
-
-            stmt.executeUpdate("ROLLBACK");
-            if (!autocommit) {
-                Statement stmt2 = createStatement();
-                scope(exit) stmt2.close();
-                stmt2.executeUpdate("BEGIN");
+            if (transactionLost()) // after SQLite's own rollback there's nothing to roll back
+                execInternal("BEGIN", "SQLite's rollback");
+            else {
+                execInternal("ROLLBACK");
+                execInternal("BEGIN", "ROLLBACK");
             }
         }
         override bool getAutoCommit() {
@@ -494,14 +554,14 @@ version(USE_SQLITE) {
             lock();
             scope(exit) unlock();
 
-            Statement stmt = createStatement();
-            scope(exit) stmt.close();
             if (autoCommit) {
                 // If switching on autocommit, commit any ongoing transaction.
-                stmt.executeUpdate("COMMIT");
+                if (transactionLost())
+                    throw new SQLException("Can't commit: " ~ transactionLostMessage);
+                execInternal("COMMIT");
             } else {
                 // If switching off autocommit, start a transaction.
-                stmt.executeUpdate("BEGIN");
+                execInternal("BEGIN");
             }
             this.autocommit = autoCommit;
         }
@@ -726,8 +786,10 @@ version(USE_SQLITE) {
             scope(exit) unlock();
 
             closeResultSet();
-            int res = sqlite3_finalize(stmt);
-            enforce!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while closing prepared statement " ~ query ~ " : " ~ conn.getError());
+            // sqlite3_finalize returns the error of the statement's last step, which was reported then. The statement
+            // is freed either way: it must count as closed, or closing the connection finalizes it again (#243).
+            sqlite3_finalize(stmt);
+            stmt = null;
             closed = true;
             conn.onStatementClosed(this);
         }
@@ -755,6 +817,7 @@ version(USE_SQLITE) {
             lock();
             scope(exit) unlock();
             allParamsSet();
+            conn.checkTransaction();
 
             int rowsAffected = 0;
             int res = sqlite3_step(stmt);
@@ -763,10 +826,15 @@ version(USE_SQLITE) {
                 rowsAffected = sqlite3_changes(conn.getConnection());
                 done = true;
             } else if (res == SQLITE_ROW) {
-                // row is available
-                rowsAffected = -1;
+                // row is available (e.g. INSERT ... RETURNING, which made all its changes on this first step); a
+                // statement left in progress would keep its lock and block COMMIT
+                sqlite3_reset(stmt); // completes it: sqlite3_changes counts completed statements only
+                insertId = Variant(sqlite3_last_insert_rowid(conn.getConnection()));
+                rowsAffected = sqlite3_changes(conn.getConnection());
             } else {
-                enforce!SQLException(false, "Error #" ~ to!string(res) ~ " while trying to execute prepared statement: "  ~ " : " ~ conn.getError());
+                string msg = "Error #" ~ to!string(res) ~ " while trying to execute prepared statement " ~ query ~ " : " ~ conn.getError();
+                sqlite3_reset(stmt);
+                throw conn.failure(msg);
             }
             return rowsAffected;
         }
@@ -782,6 +850,7 @@ version(USE_SQLITE) {
             scope(exit) unlock();
             allParamsSet();
             enforce!SQLException(metadata.getColumnCount() > 0, "Query doesn't return result set");
+            conn.checkTransaction();
             resultSet = new SQLITEResultSet(this, stmt, getMetaData());
             return resultSet;
         }
@@ -940,6 +1009,17 @@ version(USE_SQLITE) {
         override string toString() {
             return this.query;
         }
+
+        /// Closes the result set of the last execution: it steps `stmt`, which is reset when the statement runs again
+        /// or its parameters change, and freed by close() (use after free before, #243).
+        override void closeResultSet() {
+            if (resultSet !is null) {
+                resultSet.onStatementClosed();
+                resultSet = null;
+                if (stmt !is null)
+                    sqlite3_reset(stmt); // a statement in progress keeps its lock (SHARED for a read)
+            }
+        }
     }
 
     class SQLITEResultSet : ResultSetImpl {
@@ -991,9 +1071,15 @@ version(USE_SQLITE) {
                 columnMap[metadata.getColumnName(i + 1)] = i;
             }
 
-            // Count how many rows were returned
-            while(sqlite3_step(rs) != SQLITE_DONE) {
+            // Count how many rows were returned; an error ends the count (it looped forever before, #243)
+            int res;
+            while ((res = sqlite3_step(rs)) == SQLITE_ROW)
                 this.rowCount++;
+            if (res != SQLITE_DONE) {
+                string msg = "Error #" ~ to!string(res) ~ " while reading query result: "
+                    ~ copyCString(sqlite3_errmsg(stmt.conn.getConnection()));
+                sqlite3_reset(rs);
+                throw stmt.conn.failure(msg);
             }
             sqlite3_reset(rs);
 
@@ -1036,8 +1122,10 @@ version(USE_SQLITE) {
             lock();
             scope(exit) unlock();
 
+            stmt.conn.checkTransaction(); // runs the query again
             currentRowIndex = 0;
             _first = true;
+            _last = false;
             // Reset the query, in case other rows have been read already.
             sqlite3_reset(rs);
 
@@ -1051,8 +1139,10 @@ version(USE_SQLITE) {
                 columnCount = sqlite3_data_count(rs);
                 return true;
             } else {
-                enforce!SQLException(false, "Error #" ~ to!string(res) ~ " while reading query result: " ~ copyCString(sqlite3_errmsg(stmt.conn.getConnection())));
-                return false;
+                string msg = "Error #" ~ to!string(res) ~ " while reading query result: " ~ copyCString(sqlite3_errmsg(stmt.conn.getConnection()));
+                sqlite3_reset(rs);
+                closed = true; // its position no longer matches the reset statement
+                throw stmt.conn.failure(msg);
             }
         }
         override bool isFirst() {
@@ -1078,6 +1168,10 @@ version(USE_SQLITE) {
                 //writeln("next() first time invocation, columnCount=" ~ to!string(columnCount));
                 //return columnCount > 0;
             }
+            if (_last)
+                return false; // stepping again would run the statement again (#243); first() restarts it
+            if (currentRowIndex < 0)
+                stmt.conn.checkTransaction(); // the statement starts again (the row count reset it)
 
             int res = sqlite3_step(rs);
             if (res == SQLITE_DONE) {
@@ -1093,8 +1187,10 @@ version(USE_SQLITE) {
                 columnCount = sqlite3_data_count(rs);
                 return true;
             } else {
-                enforce!SQLException(false, "Error #" ~ to!string(res) ~ " while reading query result: " ~ copyCString(sqlite3_errmsg(stmt.conn.getConnection())));
-                return false;
+                string msg = "Error #" ~ to!string(res) ~ " while reading query result: " ~ copyCString(sqlite3_errmsg(stmt.conn.getConnection()));
+                sqlite3_reset(rs);
+                closed = true; // its position no longer matches the reset statement
+                throw stmt.conn.failure(msg);
             }
         }
 
@@ -1444,6 +1540,191 @@ version(USE_SQLITE) {
     //         }
     //     }
     // }
+
+    version (unittest) {
+        /// A connection to a new database file in the temporary directory (two connections can share it).
+        private SQLITEConnection openTestFile(string path, string[string] params = null) {
+            return new SQLITEConnection("sqlite:" ~ path, params);
+        }
+
+        private string testFilePath(string name) {
+            import std.file : exists, remove, tempDir;
+            import std.path : buildPath;
+            import std.process : thisProcessID;
+            import std.random : uniform;
+            string path = buildPath(tempDir(), "ddbc-" ~ name ~ "-" ~ to!string(thisProcessID) ~ "-"
+                ~ to!string(uniform(0, int.max)) ~ ".sqlite");
+            if (exists(path))
+                collectException(remove(path));
+            return path;
+        }
+    }
+
+    // A failed statement can be closed, and closing the connection afterwards doesn't finalize it again (#243).
+    unittest {
+        auto conn = new SQLITEConnection("sqlite::memory:", null);
+        Statement stmt = conn.createStatement();
+        stmt.executeUpdate("CREATE TABLE t (id INTEGER PRIMARY KEY)");
+        stmt.executeUpdate("INSERT INTO t VALUES (1)");
+        bool failed;
+        try
+            stmt.executeUpdate("INSERT INTO t VALUES (1)"); // UNIQUE constraint
+        catch (SQLException e)
+            failed = true;
+        assert(failed);
+        stmt.executeUpdate("INSERT INTO t VALUES (2)"); // the same statement works again
+        PreparedStatement ps = conn.prepareStatement("INSERT INTO t VALUES (?)");
+        ps.setInt(1, 2);
+        failed = false;
+        try
+            ps.executeUpdate();
+        catch (SQLException e)
+            failed = true;
+        assert(failed);
+        ps.close();
+        PreparedStatement q = conn.prepareStatement("SELECT id FROM t");
+        ResultSet earlier = q.executeQuery();
+        ResultSet open = q.executeQuery();
+        failed = false;
+        try
+            earlier.next(); // the statement ran again: the earlier result set is closed
+        catch (SQLException e)
+            failed = true;
+        assert(failed);
+        q.close();
+        failed = false;
+        try
+            open.next(); // stepped the finalized statement before
+        catch (SQLException e)
+            failed = true;
+        assert(failed);
+        conn.close(); // finalized ps and stmt's statement twice before: a crash
+    }
+
+    // A query that fails while its rows are counted throws instead of looping forever (#243).
+    unittest {
+        auto conn = new SQLITEConnection("sqlite::memory:", null);
+        scope (exit)
+            conn.close();
+        Statement stmt = conn.createStatement();
+        scope (exit)
+            stmt.close();
+        bool failed;
+        try
+            stmt.executeQuery("SELECT abs(-9223372036854775808)"); // integer overflow at run time
+        catch (SQLException e)
+            failed = true;
+        assert(failed);
+        ResultSet rs = stmt.executeQuery("SELECT 1");
+        assert(rs.next() && rs.getInt(1) == 1);
+        assert(!rs.next());
+        assert(!rs.next()); // stays at the end: stepping again would run the query again
+        assert(rs.first() && rs.getInt(1) == 1);
+
+        // a statement that returns a row run through executeUpdate doesn't stay in progress and block COMMIT
+        if (sqlite3_libversion_number() >= 3_035_000) { // RETURNING
+            stmt.executeUpdate("CREATE TABLE r (id INTEGER PRIMARY KEY)");
+            conn.setAutoCommit(false);
+            Variant id;
+            assert(stmt.executeUpdate("INSERT INTO r VALUES (5) RETURNING id", id) == 1);
+            assert(id == 5L);
+            conn.commit();
+            conn.setAutoCommit(true);
+        }
+    }
+
+    // SQLITE_BUSY while counting rows fails at once (it spun and counted millions of rows before); busy_timeout
+    // makes a connection wait for another one's lock (#243).
+    unittest {
+        import std.file : remove;
+        string path = testFilePath("busy");
+        scope (exit)
+            collectException(remove(path)); // don't hide a failed assertion (Windows keeps open files)
+        auto writer = openTestFile(path);
+        auto reader = openTestFile(path);
+        scope (exit) {
+            reader.close();
+            writer.close();
+        }
+        Statement w = writer.createStatement();
+        scope (exit)
+            w.close();
+        w.executeUpdate("CREATE TABLE t (id INTEGER)");
+        w.executeUpdate("INSERT INTO t VALUES (1)");
+        Statement r = reader.createStatement();
+        scope (exit)
+            r.close();
+        r.executeQuery("SELECT id FROM t").close(); // loads the schema: the next prepare doesn't need a lock
+        w.executeUpdate("BEGIN EXCLUSIVE"); // keeps readers out (rollback journal)
+        bool failed;
+        try
+            r.executeQuery("SELECT id FROM t");
+        catch (SQLException e) {
+            failed = true;
+            assert(e.msg.canFind("while reading query result"), e.msg); // in the row count, not the prepare
+        }
+        assert(failed);
+        w.executeUpdate("COMMIT");
+        ResultSet rs = r.executeQuery("SELECT id FROM t");
+        assert(rs.next() && rs.getInt(1) == 1 && !rs.next());
+
+        foreach (bad; ["5s", "-5"]) {
+            bool rejected;
+            try
+                openTestFile(path, ["busy_timeout": bad]);
+            catch (SQLException e)
+                rejected = true;
+            assert(rejected, bad);
+        }
+
+        auto patient = openTestFile(path, ["busy_timeout": "5000"]);
+        scope (exit)
+            patient.close();
+        Statement p = patient.createStatement();
+        scope (exit)
+            p.close();
+        ResultSet timeout = p.executeQuery("PRAGMA busy_timeout");
+        assert(timeout.next() && timeout.getInt(1) == 5000);
+    }
+
+    // After SQLite rolls a transaction back by itself (here SQLITE_FULL), statements and commit() refuse instead of
+    // running in auto-commit mode; rollback() starts a new transaction (#243, #241).
+    unittest {
+        auto conn = new SQLITEConnection("sqlite::memory:", null);
+        scope (exit)
+            conn.close();
+        Statement stmt = conn.createStatement();
+        scope (exit)
+            stmt.close();
+        stmt.executeUpdate("CREATE TABLE t (id INTEGER, b BLOB)");
+        stmt.executeUpdate("PRAGMA max_page_count = 5");
+        conn.setAutoCommit(false);
+        stmt.executeUpdate("INSERT INTO t VALUES (1, x'01')");
+        bool failed;
+        try
+            stmt.executeUpdate("INSERT INTO t VALUES (2, zeroblob(100000))"); // SQLITE_FULL: SQLite rolls back
+        catch (SQLException e) {
+            failed = true;
+            assert(e.msg.canFind("SQLite rolled back the transaction"), e.msg);
+        }
+        assert(failed);
+        bool refused(void delegate() action) {
+            try
+                action();
+            catch (SQLException e)
+                return e.msg.canFind("SQLite rolled back the transaction");
+            return false;
+        }
+        assert(refused({ stmt.executeUpdate("INSERT INTO t VALUES (3, x'03')"); }));
+        assert(refused({ conn.commit(); }));
+        assert(refused({ conn.setAutoCommit(true); }));
+        conn.rollback();
+        stmt.executeUpdate("INSERT INTO t VALUES (4, x'04')");
+        conn.rollback(); // still in a transaction: undoes it
+        conn.setAutoCommit(true);
+        ResultSet rs = stmt.executeQuery("SELECT count(*) FROM t");
+        assert(rs.next() && rs.getInt(1) == 0);
+    }
 
     __gshared static this() {
         // register SQLiteDriver
