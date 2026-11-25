@@ -224,6 +224,104 @@ version(USE_MYSQL) {
         }
 
         @Test
+        public void testServerErrorInTransaction() {
+            // mysql-native closes its connection after a server error, so the server rolls the transaction back.
+            // The next statements must not run in a new auto-commit session, and commit() must not report success
+            // without the earlier rows (#240).
+            import std.algorithm.searching : canFind;
+            import std.exception : assertThrown;
+            bool exists(string name) {
+                Statement check = conn.createStatement();
+                scope(exit) check.close();
+                return check.executeQuery("SELECT id FROM records WHERE name = '" ~ name ~ "'").next();
+            }
+            conn.setTransactionIsolation(TransactionIsolation.SERIALIZABLE);
+            conn.setAutoCommit(false);
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate(`INSERT INTO records (id, name) VALUES (1, 'Ann')`);
+            assertThrown!SQLException(stmt.executeUpdate(`INSERT INTO records (id, name) VALUES (1, 'Dup')`));
+            try {
+                stmt.executeUpdate(`INSERT INTO records (id, name) VALUES (2, 'Bea')`);
+                conn.commit();
+                // the connection kept its session (a mysql-native that doesn't drop it): both rows are committed
+                assert(exists("Ann") && exists("Bea"), "commit() succeeded without the rows inserted before the error");
+            } catch (SQLException e) {
+                // the session was lost: nothing runs, and commit() fails, until rollback()
+                assert(e.msg.canFind("rolled back the open transaction"), e.msg);
+                assertThrown!SQLException(conn.commit());
+                assertThrown!SQLException(conn.setAutoCommit(true));
+                conn.rollback();
+                assert(!exists("Ann") && !exists("Bea"));
+            }
+            // either way the connection works again, still with auto-commit off and the isolation level
+            assert(!conn.getAutoCommit());
+            assert(conn.getTransactionIsolation() == TransactionIsolation.SERIALIZABLE);
+            stmt.executeUpdate(`INSERT INTO records (id, name) VALUES (3, 'Cid')`);
+            conn.rollback();
+            assert(!exists("Cid"), "the statement after rollback() ran with auto-commit on");
+        }
+
+        @Test
+        public void testFailedFirstStatementInTransaction() {
+            // A failing statement before any other since commit() loses nothing: no rollback() needed (#240).
+            import std.exception : assertThrown;
+            conn.setAutoCommit(false);
+            conn.commit();
+            conn.getTransactionIsolation(); // the driver's own statements don't count as transaction work
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            assertThrown!SQLException(stmt.executeQuery("SELEC 1"));
+            stmt.executeUpdate(`INSERT INTO records (id, name) VALUES (1, 'Dan')`);
+            conn.rollback();
+            assert(!stmt.executeQuery("SELECT id FROM records WHERE name = 'Dan'").next(),
+                "the statement after the error ran with auto-commit on");
+        }
+
+        @Test
+        public void testIsolationAfterReconnect() {
+            // with auto-commit on, mysql-native's reconnect after an error keeps the isolation level (#240)
+            import std.exception : assertThrown;
+            conn.setTransactionIsolation(TransactionIsolation.SERIALIZABLE);
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate(`INSERT INTO records (id, name) VALUES (1, 'Gus')`);
+            assertThrown!SQLException(stmt.executeUpdate(`INSERT INTO records (id, name) VALUES (1, 'Dup')`));
+            assert(conn.getTransactionIsolation() == TransactionIsolation.SERIALIZABLE);
+        }
+
+        @Test
+        public void testRollbackAfterKill() {
+            // rollback() that finds the connection closed by the server succeeds at once: the server rolled back (#240)
+            import ddbc.common : createConnection;
+            conn.setAutoCommit(false);
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate(`INSERT INTO records (id, name) VALUES (1, 'Eve')`);
+            ddbc.core.ResultSet rs = stmt.executeQuery("SELECT CONNECTION_ID()");
+            assert(rs.next());
+            immutable id = rs.getLong(1);
+            Connection killer = createConnection("ddbc:mysql://localhost:%s/testdb?user=testuser,password=passw0rd"
+                    .format(environment.get("MYSQL_PORT", "3306")));
+            scope(exit) killer.close();
+            Statement kill = killer.createStatement();
+            scope(exit) kill.close();
+            kill.executeUpdate("KILL " ~ to!string(id));
+            // wait until the server has ended the session, so rollback() really finds it dead
+            foreach (attempt; 0 .. 100) {
+                if (!kill.executeQuery("SELECT ID FROM information_schema.PROCESSLIST WHERE ID = " ~ to!string(id)).next())
+                    break;
+                import core.thread : Thread;
+                import core.time : msecs;
+                Thread.sleep(50.msecs);
+            }
+            conn.rollback();
+            stmt.executeUpdate(`INSERT INTO records (id, name) VALUES (2, 'Fay')`);
+            conn.rollback();
+            assert(!stmt.executeQuery("SELECT id FROM records WHERE name IN ('Eve', 'Fay')").next());
+        }
+
+        @Test
         public void testTransactionIsolation() {
             // Setting isolation level is only effective in transactions.
             conn.setAutoCommit(false);
