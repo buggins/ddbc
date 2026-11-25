@@ -1666,7 +1666,7 @@ version(USE_SQLITE) {
         assert(failed);
         w.executeUpdate("COMMIT");
         ResultSet rs = r.executeQuery("SELECT id FROM t");
-        assert(rs.getFetchSize() == 1 && rs.next() && rs.getInt(1) == 1);
+        assert(rs.next() && rs.getInt(1) == 1 && !rs.next());
 
         foreach (bad; ["5s", "-5"]) {
             bool rejected;
