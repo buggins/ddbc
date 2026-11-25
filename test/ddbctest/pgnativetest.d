@@ -11,7 +11,7 @@ import std.variant;
 import core.time : minutes;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture;
+import ddbc.test.common : DdbcTestFixture, checkErrorInResultSet;
 import ddbc.core : Connection, Decimal, PreparedStatement, ResultSet, ResultSetMetaData, SqlType, SQLException,
     Statement;
 import ddbc.common : createConnection;
@@ -38,6 +38,12 @@ version (USE_PGNATIVE) {
                     ~ "instant TIMESTAMPTZ, notes TEXT, huge NUMERIC(30))",
                 "DROP TABLE IF EXISTS pgn_typed_values"
             );
+        }
+
+        /// An error at row 5 of a result set leaves the connection usable (#244).
+        @Test
+        public void testErrorInResultSet() {
+            checkErrorInResultSet(conn, "SELECT 1 / (5 - n) FROM generate_series(1, 8) AS t(n)", "SELECT 1", 4);
         }
 
         /// Every setter and getter through a prepared statement, and NULLs of each type.

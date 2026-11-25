@@ -10,7 +10,7 @@ import std.exception : assertThrown;
 import std.variant;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkErrorInResultSet;
 import ddbc.core : Connection, PreparedStatement, ResultSet, ResultSetMetaData, SqlType, SQLException, Statement,
     TransactionIsolation;
 
@@ -67,6 +67,14 @@ version(USE_CLICKHOUSE) {
                     ~ "created DateTime64(3, 'UTC'), day Date, flag Bool) ENGINE = Memory",
                 "DROP TEMPORARY TABLE IF EXISTS ddbc_ch_test"
             );
+        }
+
+        /// An error in a later block of a result set leaves the connection usable (#244).
+        @Test
+        public void testErrorInResultSet() {
+            // one row per block; how many reach the client before the error depends on the server
+            checkErrorInResultSet(conn, "SELECT number FROM numbers(1000) WHERE throwIf(number = 500) = 0 "
+                ~ "SETTINGS max_block_size = 1, max_threads = 1", "SELECT 1", -1, false);
         }
 
         @Test

@@ -314,3 +314,60 @@ void checkPoolEndsSqlTransaction(string url, string begin, string failing = null
         assert(pooledRows() == 0, "the next user of the pooled connection inherited its failed transaction");
     }
 }
+
+/// An error in the middle of a result set (#244): `next()` throws it after the rows before it, and the connection is
+/// free again: `rollback()` works, a new statement runs on the same connection, and `isValid()` is true. Then the same
+/// error met while another statement reads the rest of the rows ahead: that statement runs, and the result set's
+/// `next()` throws the error after the rows read. `failing` gives `rowsBefore` rows, then an error (-1: any number,
+/// at least 1); `probe` gives one row; `transactions`: the server has them.
+void checkErrorInResultSet(Connection conn, string failing, string probe, int rowsBefore, bool transactions = true) {
+    import std.conv : to;
+    import std.exception : assertThrown;
+    import ddbc.core : ConnectionValidator, ResultSet, SQLException;
+
+    Statement stmt = conn.createStatement();
+    scope (exit)
+        stmt.close();
+    Statement other = conn.createStatement();
+    scope (exit)
+        other.close();
+    void probeWorks() {
+        ResultSet p = other.executeQuery(probe);
+        assert(p.next(), "the connection doesn't work after the error");
+        p.close();
+    }
+    void checkRows(int rows) {
+        if (rowsBefore >= 0)
+            assert(rows == rowsBefore, "rows before the error: " ~ rows.to!string);
+        else
+            assert(rows >= 1, "no rows before the error");
+    }
+
+    // the result set meets the error itself
+    if (transactions)
+        conn.setAutoCommit(false);
+    ResultSet rs = stmt.executeQuery(failing);
+    int rows;
+    assertThrown!SQLException({ while (rs.next()) rows++; }());
+    checkRows(rows);
+    assert(!rs.next(), "next() after the error");
+    if (transactions) {
+        conn.rollback();
+        conn.setAutoCommit(true);
+    }
+    probeWorks();
+    if (auto v = cast(ConnectionValidator) conn)
+        assert(v.isValid(), "the connection is not valid after the error");
+    rs.close();
+
+    // another statement reads the rest of the rows ahead and meets the error: it runs, the reader gets the error
+    rs = stmt.executeQuery(failing);
+    assert(rs.next());
+    probeWorks();
+    rows = 1;
+    assertThrown!SQLException({ while (rs.next()) rows++; }());
+    checkRows(rows);
+    assert(!rs.next(), "next() after the error");
+    rs.close();
+    probeWorks();
+}

@@ -11,7 +11,7 @@ import std.variant;
 import core.time : minutes;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, usableFromAnotherThread;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkErrorInResultSet, usableFromAnotherThread;
 import ddbc.core : Connection, Decimal, PreparedStatement, ResultSet, ResultSetMetaData, SqlType, SQLException,
     Statement, TransactionIsolation;
 import ddbc.common : createConnection;
@@ -65,11 +65,20 @@ version (USE_ORACLE) {
             assertTrue(rs.next());
             Statement other = c.createStatement();
             scope(exit) other.close();
-            // reads the rest of rs first; the error isn't translated to SQLException yet (#244)
-            assertThrown!Exception(other.executeQuery("SELECT 1 FROM DUAL"));
-            assertTrue(usableFromAnotherThread(c, "SELECT 1 FROM DUAL"), "the connection lock was left held");
-            rs.close(); // until #244, the failed result set must be closed before the connection works again
+            // reads the rest of rs first; the row error goes to rs's reader (#244), this statement runs
             assertTrue(other.executeQuery("SELECT 1 FROM DUAL").next());
+            assertTrue(usableFromAnotherThread(c, "SELECT 1 FROM DUAL"), "the connection lock was left held");
+            int rows = 1;
+            assertThrown!SQLException({ while (rs.next()) rows++; }());
+            assertEquals(4, rows);
+        }
+
+        /// An error at row 5 of a result set (in a later fetch) leaves the connection usable (#244).
+        @Test
+        public void testErrorInResultSet() {
+            Connection c = createConnection(oracleUrl() ~ ",fetch_size=2");
+            scope(exit) c.close();
+            checkErrorInResultSet(c, "SELECT 1 / (5 - LEVEL) FROM DUAL CONNECT BY LEVEL <= 8", "SELECT 1 FROM DUAL", 4);
         }
 
         @Test

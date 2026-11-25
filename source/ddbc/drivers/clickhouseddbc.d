@@ -445,14 +445,22 @@ version (USE_CLICKHOUSE)
         }
 
         /// Frees the server connection before another statement runs on it: an unfinished
-        /// result set is read into memory. Call with the lock held.
+        /// result set is read into memory. An error in its blocks (a timeout, a runtime error at row N) goes
+        /// to its reader, from `next()` after the rows read before it, not to the statement that needs the
+        /// connection (#244). Call with the lock held.
         void prepareForStatement()
         {
-            if (activeResultSet !is null)
+            if (activeResultSet is null)
+                return;
+            auto rs = activeResultSet;
+            try
+                rs.bufferRemaining();
+            catch (Exception e)
             {
-                activeResultSet.bufferRemaining();
-                activeResultSet = null;
+                if (rs.failure is null || !ch.isOpen)
+                    throw e; // not an error in its blocks, or one that closed the connection: the caller needs it
             }
+            activeResultSet = null;
         }
 
         void onStatementClosed(ClickHouseStatement stmt)
@@ -469,7 +477,14 @@ version (USE_CLICKHOUSE)
         {
             checkClosed();
             foreach (stmt; activeStatements.dup)
-                stmt.close();
+            {
+                try
+                    stmt.close();
+                catch (Exception)
+                {
+                    // the connection goes away anyway
+                }
+            }
             ch.close();
             closed = true;
         }
@@ -619,6 +634,7 @@ version (USE_CLICKHOUSE)
             auto result = translate(conn.ch.query(sql, null, parameters), sql);
             translate(result.empty, sql); // reads the header (and the first block)
             resultSet = new ClickHouseResultSet(this, result);
+            resultSet.sql = sql;
             conn.activeResultSet = resultSet;
             return resultSet;
         }
@@ -1108,6 +1124,8 @@ version (USE_CLICKHOUSE)
         bool exhausted;
         bool closed;
         bool lastIsNull;
+        Exception failure; // an error while reading blocks ahead: thrown by next() after the buffered rows
+        string sql; // for error messages
         int[string] columnIndex;
 
         void checkClosed()
@@ -1133,21 +1151,42 @@ version (USE_CLICKHOUSE)
             return readBlock();
         }
 
-        /// Reads the next non-empty block from the server. Call with the lock held.
+        /// Nothing more to read: the server connection is free for other statements.
+        void finish()
+        {
+            exhausted = true;
+            if (stmt.conn.activeResultSet is this)
+                stmt.conn.activeResultSet = null;
+        }
+
+        /// Reads the next non-empty block from the server. Call with the lock held. An error in the blocks
+        /// ends the result set and is kept in `failure` (#244) when clickhoused has read the response to its
+        /// end, or closed the connection; otherwise (a call from the wrong thread) the result set stays active.
+        /// Other exceptions (vibe.d's InterruptException) propagate unchanged.
         CH.Block readBlock()
         {
             if (exhausted)
                 return null;
-            if (translate(result.empty))
+            try
             {
-                exhausted = true;
-                if (stmt.conn.activeResultSet is this)
-                    stmt.conn.activeResultSet = null;
-                return null;
+                if (result.empty)
+                {
+                    finish();
+                    return null;
+                }
+                auto b = result.front;
+                result.popFront();
+                return b;
             }
-            auto b = result.front;
-            result.popFront();
-            return b;
+            catch (CH.ClickHouseException e)
+            {
+                auto error = new SQLException(sql.length ? e.msg ~ " - while executing " ~ sql : e.msg, e);
+                if (stmt.conn.ch.isBusy)
+                    throw error; // the response wasn't read: the blocks can still be read, or the query cancelled
+                finish();
+                failure = error;
+                throw error;
+            }
         }
 
         CH.Column column(int columnIndex)
@@ -1210,21 +1249,24 @@ version (USE_CLICKHOUSE)
             if (closed)
                 return;
             closed = true;
+            scope (exit)
+            {
+                exhausted = true;
+                if (stmt.conn.activeResultSet is this)
+                    stmt.conn.activeResultSet = null;
+                buffered = null;
+                block = null;
+                firstBlock = null;
+            }
             if (!exhausted)
             {
                 try
                     result.close();
-                catch (Exception)
+                catch (CH.ClickHouseException)
                 {
-                    // the query is abandoned anyway
+                    // the query is abandoned anyway; others (vibe.d's InterruptException) propagate
                 }
-                exhausted = true;
             }
-            if (stmt.conn.activeResultSet is this)
-                stmt.conn.activeResultSet = null;
-            buffered = null;
-            block = null;
-            firstBlock = null;
         }
 
         override ResultSetMetaData getMetaData()
@@ -1240,9 +1282,10 @@ version (USE_CLICKHOUSE)
             conn.lock();
             scope (exit)
                 conn.unlock();
+            scope (exit)
+                if (stmt.resultSet is this)
+                    stmt.resultSet = null;
             release();
-            if (stmt.resultSet is this)
-                stmt.resultSet = null;
         }
 
         override bool next()
@@ -1256,12 +1299,30 @@ version (USE_CLICKHOUSE)
             }
             if (block is null && rowNumber > 0)
                 return false; // already after the last row
-            auto b = fetchBlock();
+            CH.Block b;
+            try
+                b = fetchBlock();
+            catch (Exception e)
+            {
+                if (failure !is null) // the read failed (not the lock): reported here
+                {
+                    failure = null;
+                    block = null;
+                    rowNumber++; // no current row: the getters refuse, later calls return false
+                }
+                throw e;
+            }
             if (b is null)
             {
                 if (rowNumber > 0 || block !is null)
                     rowNumber++; // after the last row
                 block = null;
+                if (failure !is null)
+                {
+                    auto e = failure;
+                    failure = null; // reported once
+                    throw e; // the blocks ended with an error, met while another statement read them ahead
+                }
                 return false;
             }
             if (firstBlock is null)
@@ -1300,11 +1361,21 @@ version (USE_CLICKHOUSE)
                 return false;
             if (buffered.length)
                 return false;
+            if (failure !is null)
+                return false; // the blocks end with an error, which next() reports
             auto conn = stmt.conn;
             conn.lock();
             scope (exit)
                 conn.unlock();
-            auto b = readBlock();
+            CH.Block b;
+            try
+                b = readBlock();
+            catch (SQLException e)
+            {
+                if (failure is null)
+                    throw e;
+                return false; // stored in `failure`: next() reports it
+            }
             if (b is null)
                 return true;
             buffered ~= b;
