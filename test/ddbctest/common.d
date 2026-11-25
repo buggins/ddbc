@@ -246,6 +246,75 @@ bool usableFromAnotherThread(Connection conn, string sql, int seconds = 10) {
     return false;
 }
 
+/// A connection returned to the pool with a transaction started in SQL while auto-commit is on (`begin`: `BEGIN`,
+/// `START TRANSACTION`, ...) doesn't pass it on (#245): its next user finds the work rolled back. With `failing` (a
+/// statement that fails), the same after an error inside the transaction: the next user's statements work.
+void checkPoolEndsSqlTransaction(string url, string begin, string failing = null) {
+    import ddbc.common : ConnectionPoolDataSourceImpl, createConnectionPool;
+    import ddbc.core : ResultSet;
+
+    auto pool = cast(ConnectionPoolDataSourceImpl) createConnectionPool(url, null, 1);
+    scope (exit)
+        pool.close();
+    void run(string sql) {
+        Connection c = pool.getConnection();
+        scope (exit)
+            c.close();
+        Statement s = c.createStatement();
+        scope (exit)
+            s.close();
+        s.executeUpdate(sql);
+    }
+    run("DROP TABLE IF EXISTS pool_reset_test");
+    run("CREATE TABLE pool_reset_test (name VARCHAR(20))");
+    scope (exit)
+        run("DROP TABLE IF EXISTS pool_reset_test");
+    int pooledRows() {
+        Connection c = pool.getConnection(); // the same connection: the pool holds one
+        scope (exit)
+            c.close();
+        assert(c.getAutoCommit());
+        Statement s = c.createStatement();
+        scope (exit)
+            s.close();
+        ResultSet rs = s.executeQuery("SELECT COUNT(*) FROM pool_reset_test");
+        scope (exit)
+            rs.close();
+        assert(rs.next());
+        return rs.getInt(1);
+    }
+
+    {
+        Connection c = pool.getConnection();
+        scope (exit)
+            c.close(); // back to the pool with the transaction open
+        Statement s = c.createStatement();
+        scope (exit)
+            s.close();
+        s.executeUpdate(begin);
+        s.executeUpdate("INSERT INTO pool_reset_test (name) VALUES ('pooled')");
+    }
+    assert(pooledRows() == 0, "the next user of the pooled connection inherited its transaction");
+
+    if (failing.length) {
+        {
+            Connection c = pool.getConnection();
+            scope (exit)
+                c.close(); // back to the pool with the failed transaction
+            Statement s = c.createStatement();
+            scope (exit)
+                s.close();
+            s.executeUpdate(begin);
+            s.executeUpdate("INSERT INTO pool_reset_test (name) VALUES ('pooled')");
+            try
+                s.executeUpdate(failing);
+            catch (Exception e) {
+            }
+        }
+        assert(pooledRows() == 0, "the next user of the pooled connection inherited its failed transaction");
+    }
+}
+
 /// After the server ends `victim`'s session (`kill` does that, from another connection), the next call on `victim`
 /// fails and `isClosed()` is true (#248); `close()` still works. `probe` is a query giving one row.
 void checkClosedByServer(Connection victim, void delegate() kill, string probe) {

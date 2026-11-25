@@ -11,7 +11,7 @@ import std.typecons : Nullable;
 
 import dunit;
 import std.exception : assertThrown, collectException;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkPoolEndsSqlTransaction;
 import ddbc.core : Connection, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
 
@@ -55,6 +55,13 @@ version(PostgresTests) {
             conn.setAutoCommit(true);
             ddbc.core.ResultSet rs = stmt.executeQuery("SELECT count(*) FROM my_first_test");
             assert(rs.next() && rs.getInt(1) == 0, "rows were committed");
+        }
+
+        /// The pool ends a transaction started with BEGIN while auto-commit is on, also a failed one (#245).
+        @Test
+        public void testPoolEndsSqlTransaction() {
+            checkPoolEndsSqlTransaction("ddbc:postgresql://localhost:%s/testdb?user=testuser,password=passw0rd,ssl=false"
+                .format(environment.get("POSTGRES_PORT", "5432")), "BEGIN", "SELECT 1/0");
         }
 
         /// With auto-commit off, a transaction starts with the next statement, not at commit()/rollback(): the

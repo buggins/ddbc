@@ -10,7 +10,7 @@ import std.stdio;
 import std.typecons : Nullable;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkPoolEndsSqlTransaction;
 import ddbc.core : Connection, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
 
@@ -28,6 +28,13 @@ version(USE_MYSQL) {
                 "CREATE TABLE `my_first_test` (`id` INTEGER AUTO_INCREMENT PRIMARY KEY, `name` VARCHAR(255) NOT NULL)",
                 "DROP TABLE IF EXISTS `my_first_test`"
             );
+        }
+
+        /// The pool ends a transaction started with START TRANSACTION while auto-commit is on (#245).
+        @Test
+        public void testPoolEndsSqlTransaction() {
+            checkPoolEndsSqlTransaction("ddbc:mysql://localhost:%s/testdb?user=testuser,password=passw0rd".format(
+                environment.get("MYSQL_PORT", "3306")), "START TRANSACTION");
         }
 
         @Test // https://github.com/buggins/ddbc/issues/226

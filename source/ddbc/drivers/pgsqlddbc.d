@@ -321,7 +321,7 @@ version(USE_PGSQL) {
         return res;
     }
 
-    class PGSQLConnection : ddbc.core.Connection {
+    class PGSQLConnection : ddbc.core.Connection, ConnectionResetter {
     private:
     	string url;
     	string[string] params;
@@ -541,6 +541,14 @@ version(USE_PGSQL) {
             if (inTransaction())
                 execCommand("ROLLBACK"); // with auto-commit off, the next statement starts a transaction
     	}
+        /// Ends an open transaction, also one started in SQL with auto-commit on: the connection pool calls it when
+        /// the connection is returned (#245).
+        void resetForPool() {
+            checkClosed();
+            if (PQtransactionStatus(conn) != PQTRANS_IDLE)
+                rollback();
+        }
+
     	override bool getAutoCommit() {
     		return autocommit;
     	}

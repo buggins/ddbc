@@ -334,8 +334,10 @@ private final class PooledConnectionWrapper : ConnectionWrapper {
 	}
 
 	/++
-	Returns the connection to the pool, after rolling back an open transaction (with auto-commit
-	off) and restoring its initial auto-commit mode; if that fails, the pool closes it.
+	Returns the connection to the pool, after ending an open transaction and restoring its initial
+	auto-commit mode; if that fails, the pool closes it. Drivers with `ConnectionResetter` also end a
+	transaction started in SQL while auto-commit is on; for the others, only connections with
+	auto-commit off are rolled back.
 	+/
 	override void close() {
 		import dbwire.exception : DbException;
@@ -346,7 +348,9 @@ private final class PooledConnectionWrapper : ConnectionWrapper {
 		scope (exit)
 			lease.release();
 		try {
-			if (!base.getAutoCommit())
+			if (auto resetter = cast(ConnectionResetter) base)
+				resetter.resetForPool(); // also a transaction opened in SQL with auto-commit on (#245)
+			else if (!base.getAutoCommit())
 				base.rollback();
 			if (base.getAutoCommit() != item.initialAutoCommit)
 				base.setAutoCommit(item.initialAutoCommit);
@@ -946,6 +950,8 @@ version (unittest) {
 	private final class PoolTestDriver : Driver {
 		shared int opened, closedCount, open, maxOpen, queries;
 		bool validates; // the connections implement ConnectionValidator
+		bool resettable; // the connections implement ConnectionResetter
+		shared int resets;
 		bool valid = true; // what the check finds
 		DialectType dialect = DialectType.SQLITE;
 		string lastQuery;
@@ -959,6 +965,8 @@ version (unittest) {
 			for (int m = maxOpen.atomicLoad; now > m; m = maxOpen.atomicLoad)
 				if (cas(&maxOpen, m, now))
 					break;
+			if (resettable)
+				return new PoolTestResettingConnection(this);
 			return validates ? new PoolTestValidatingConnection(this) : new PoolTestConnection(this);
 		}
 	}
@@ -990,6 +998,15 @@ version (unittest) {
 		TransactionIsolation getTransactionIsolation() { return TransactionIsolation.READ_COMMITTED; }
 		void setTransactionIsolation(TransactionIsolation level) { }
 		DialectType getDialectType() { return driver.dialect; }
+	}
+
+	private final class PoolTestResettingConnection : PoolTestConnection, ConnectionResetter {
+		this(PoolTestDriver driver) { super(driver); }
+		void resetForPool() {
+			driver.resets.atomicOp!"+="(1);
+			if (driver.failRollback)
+				throw new SQLException("the server is gone");
+		}
 	}
 
 	private final class PoolTestValidatingConnection : PoolTestConnection, ConnectionValidator {
@@ -1100,6 +1117,29 @@ unittest {
 		t.join();
 	assert(failures == 0 && driver.maxOpen <= 3 && driver.opened <= 3);
 	assert(pool.activeConnections == 0 && pool.idleConnections == driver.open);
+}
+
+// ddbc#245: a driver's ConnectionResetter replaces the rollback, also with auto-commit on; if it fails, the pool
+// closes the connection
+unittest {
+	auto driver = new PoolTestDriver;
+	driver.resettable = true;
+	auto pool = new ConnectionPoolDataSourceImpl(driver, "test", null, 1);
+	auto c = pool.getConnection();
+	c.close(); // auto-commit on
+	assert(driver.resets == 1 && driver.rollbacks == 0);
+	c = pool.getConnection();
+	c.setAutoCommit(false);
+	c.close();
+	assert(driver.resets == 2 && driver.rollbacks == 0 && driver.opened == 1);
+	c = pool.getConnection();
+	assert(c.getAutoCommit()); // restored after the reset
+	driver.failRollback = true;
+	c.close();
+	assert(driver.open == 0 && pool.idleConnections == 0); // closed, not kept
+	driver.failRollback = false;
+	pool.getConnection().close();
+	assert(driver.opened == 2);
 }
 
 // ddbc#184: invalid limits
