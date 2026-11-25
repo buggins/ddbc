@@ -355,6 +355,32 @@ version(USE_PGSQL) {
     			throw new SQLException("Connection is already closed");
     	}
 
+        /// libpq's message for the last failure on the connection.
+        string errorMessage() {
+            return copyCString(PQerrorMessage(conn));
+        }
+
+        /// Runs a transaction command (BEGIN, COMMIT, ROLLBACK). Call with the lock held.
+        void execCommand(string sql) {
+            trace(sql);
+            PGresult * res = PQexec(conn, std.string.toStringz(sql));
+            enforce!SQLException(res !is null, "Failed to execute " ~ sql ~ ": " ~ errorMessage());
+            scope(exit) PQclear(res);
+            enforce!SQLException(PQresultStatus(res) == PGRES_COMMAND_OK, "Failed to execute " ~ sql ~ ": " ~ errorMessage());
+        }
+
+        /// Whether a transaction is open (or failed) on the server.
+        bool inTransaction() {
+            return PQtransactionStatus(conn) != PQTRANS_IDLE;
+        }
+
+        /// With auto-commit off, starts a transaction before a statement unless one is open: the connection doesn't
+        /// sit "idle in transaction" between commit() and the next statement (#249). Call with the lock held.
+        void beginIfNeeded() {
+            if (!autocommit && PQtransactionStatus(conn) == PQTRANS_IDLE)
+                execCommand("BEGIN");
+        }
+
     public:
 
     	// db connections are DialectAware
@@ -416,8 +442,12 @@ version(USE_PGSQL) {
     		conn = PQconnectdbParams(keywords, values, 0);
     		if(conn is null)
     			throw new SQLException("Cannot get Postgres connection");
-    		if(PQstatus(conn) != CONNECTION_OK)
-    			throw new SQLException(copyCString(PQerrorMessage(conn)));
+    		if(PQstatus(conn) != CONNECTION_OK) {
+    			const message = copyCString(PQerrorMessage(conn));
+    			PQfinish(conn); // a failed attempt still allocates the handle (#249)
+    			conn = null;
+    			throw new SQLException(message);
+    		}
     		closed = false;
     		setAutoCommit(true);
     		updateConnectionParams();
@@ -437,8 +467,10 @@ version(USE_PGSQL) {
 
     		closeUnclosedStatements();
 
-    		PQfinish(conn);
-    		closed = true;
+    		closed = true; // before the handle goes: isClosed() reads it
+    		auto handle = conn;
+    		conn = null;
+    		PQfinish(handle);
     	}
 
     	override void commit() {
@@ -448,14 +480,8 @@ version(USE_PGSQL) {
     		scope(exit) unlock();
 
             enforceNotFailed("commit");
-    		Statement stmt = createStatement();
-    		scope(exit) stmt.close();
-    		stmt.executeUpdate("COMMIT");
-            if (!autocommit) {
-                Statement stmt2 = createStatement();
-                scope(exit) stmt2.close();
-                stmt2.executeUpdate("BEGIN");
-            }
+            if (inTransaction())
+                execCommand("COMMIT"); // with auto-commit off, the next statement starts a transaction
     	}
 
     	override Statement createStatement() {
@@ -500,8 +526,10 @@ version(USE_PGSQL) {
     		throw new SQLException("Not implemented");
     	}
 
+        /// Whether the connection is closed: by `close()`, or by the server or the network (a terminated backend, a
+        /// broken socket), which shows after a call on it failed (#248).
     	override bool isClosed() {
-    		return closed;
+    		return closed || conn is null || PQstatus(conn) == CONNECTION_BAD;
     	}
 
     	override void rollback() {
@@ -510,12 +538,8 @@ version(USE_PGSQL) {
     		lock();
     		scope(exit) unlock();
 
-    		Statement stmt = createStatement();
-    		scope(exit) stmt.close();
-    		stmt.executeUpdate("ROLLBACK");
-            if (!autocommit) {
-                stmt.executeUpdate("BEGIN");
-            }
+            if (inTransaction())
+                execCommand("ROLLBACK"); // with auto-commit off, the next statement starts a transaction
     	}
     	override bool getAutoCommit() {
     		return autocommit;
@@ -535,21 +559,14 @@ version(USE_PGSQL) {
     		lock();
     		scope(exit) unlock();
 
-            try {
-                Statement stmt = createStatement();
-                scope(exit) stmt.close();
-                if (autoCommit) {
-                  // If switching on autocommit, commit any ongoing transaction.
-                  enforceNotFailed("switch auto-commit on (commit)");
-                  stmt.executeUpdate("COMMIT");
-                } else {
-                  // If switching off autocommit, start a transaction.
-                  stmt.executeUpdate("BEGIN");
-                }
-                this.autocommit = autoCommit;
-            } catch (Throwable e) {
-                throw new SQLException(e);
+            if (autoCommit) {
+                // switching auto-commit on commits the open transaction
+                enforceNotFailed("switch auto-commit on (commit)");
+                if (inTransaction())
+                    execCommand("COMMIT");
             }
+            // switched off, the next statement starts a transaction (#249)
+            this.autocommit = autoCommit;
     	}
 
         override TransactionIsolation getTransactionIsolation() {
@@ -558,11 +575,15 @@ version(USE_PGSQL) {
             scope(exit) unlock();
 
             try {
-                Statement stmt = createStatement();
-                scope(exit) stmt.close();
-                ddbc.core.ResultSet resultSet = stmt.executeQuery("SHOW TRANSACTION ISOLATION LEVEL");
-                if (resultSet.next()) {
-                    switch (resultSet.getString(1)) {
+                // directly, not through a statement: that would start a transaction (with auto-commit off), whose
+                // level a later setTransactionIsolation() couldn't change (#249)
+                PGresult * res = PQexec(conn, "SHOW TRANSACTION ISOLATION LEVEL");
+                enforce!SQLException(res !is null, "Failed to read the isolation level: " ~ errorMessage());
+                scope(exit) PQclear(res);
+                enforce!SQLException(PQresultStatus(res) == PGRES_TUPLES_OK, "Failed to read the isolation level: "
+                        ~ errorMessage());
+                if (PQntuples(res) == 1 && PQnfields(res) == 1) {
+                    switch (copyCString(PQgetvalue(res, 0, 0), PQgetlength(res, 0, 0))) {
                         case "read uncommitted":
                             return TransactionIsolation.READ_UNCOMMITTED;
                         case "repeatable read":
@@ -576,7 +597,9 @@ version(USE_PGSQL) {
                 } else {
                     return TransactionIsolation.READ_COMMITTED;  // Postgresql default
                 }
-            } catch (Throwable e) {
+            } catch (SQLException e) {
+                throw e;
+            } catch (Exception e) {
                 throw new SQLException(e);
             }
         }
@@ -587,9 +610,10 @@ version(USE_PGSQL) {
             scope(exit) unlock();
 
             try {
-                Statement stmt = createStatement();
-                // See: https://www.postgresql.org/docs/current/sql-set-transaction.html
-                string query = "SET TRANSACTION ISOLATION LEVEL ";
+                // the level of the following transactions, as in the native driver; directly, not through a
+                // statement, which would start a transaction with auto-commit off (#249).
+                // See https://www.postgresql.org/docs/current/sql-set-transaction.html
+                string query = "SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL ";
                 switch (level) {
                     case TransactionIsolation.READ_UNCOMMITTED:
                         query ~= "READ UNCOMMITTED";
@@ -605,8 +629,10 @@ version(USE_PGSQL) {
                         query ~= "READ COMMITTED";
                         break;
                 }
-                stmt.executeUpdate(query);
-            } catch (Throwable e) {
+                execCommand(query);
+            } catch (SQLException e) {
+                throw e;
+            } catch (Exception e) {
                 throw new SQLException(e);
             }
         }
@@ -806,11 +832,12 @@ version(USE_PGSQL) {
 
             trace(query);
 
+    		conn.beginIfNeeded();
     		PGresult * res = PQexec(conn.getConnection(), std.string.toStringz(query));
-    		enforce!SQLException(res !is null, "Failed to execute statement " ~ query);
+    		enforce!SQLException(res !is null, "Failed to execute statement " ~ query ~ ": " ~ getError());
+    		scope(exit) PQclear(res); // also when the statement failed (#249)
     		auto status = PQresultStatus(res);
     		enforce!SQLException(status == PGRES_TUPLES_OK, getError());
-    		scope(exit) PQclear(res);
 
     //		cmd = new Command(conn.getConnection(), query);
     //		rs = cmd.execSQLResult();
@@ -832,15 +859,18 @@ version(USE_PGSQL) {
     		return executeUpdate(query, dummy);
     	}
 
+        /// The value of a one-row, one-column result (`RETURNING id`): a `long` when it is an integer, else its text.
         void readInsertId(PGresult * res, ref Variant insertId) {
             int rows = PQntuples(res);
             int fieldCount = PQnfields(res);
-            //writeln("readInsertId - rows " ~ to!string(rows) ~ " " ~ to!string(fieldCount));
-            if (rows == 1 && fieldCount == 1) {
+            if (rows == 1 && fieldCount == 1 && !PQgetisnull(res, 0, 0)) {
                 int len = PQgetlength(res, 0, 0);
                 const ubyte * value = PQgetvalue(res, 0, 0);
                 string s = copyCString(value, len);
-                insertId = parse!long(s);
+                try
+                    insertId = s.to!long;
+                catch (ConvException)
+                    insertId = s; // a non-integer key (uuid, text), or any other single value (#249)
             }
         }
 
@@ -851,11 +881,12 @@ version(USE_PGSQL) {
 
             trace(query);
 
+    		conn.beginIfNeeded();
     		PGresult * res = PQexec(conn.getConnection(), std.string.toStringz(query));
-    		enforce!SQLException(res !is null, "Failed to execute statement " ~ query);
+    		enforce!SQLException(res !is null, "Failed to execute statement " ~ query ~ ": " ~ getError());
+    		scope(exit) PQclear(res); // also when the statement failed (#249)
     		auto status = PQresultStatus(res);
     		enforce!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, getError());
-    		scope(exit) PQclear(res);
 
     		string rowsAffected = copyCString(PQcmdTuples(res));
 
@@ -972,6 +1003,7 @@ version(USE_PGSQL) {
 
         PGresult * exec() {
             checkParams();
+            conn.beginIfNeeded();
             const (char) * [] values = new const(char)*[paramCount];
             int[] lengths = new int[paramCount];
             int[] formats = new int[paramCount];
@@ -1001,7 +1033,9 @@ version(USE_PGSQL) {
             // being unable to send the query to the server. For other errors, a non-null result is
             // returned, and the status should be looked up.
             // See https://www.postgresql.org/docs/current/libpq-exec.html#LIBPQ-PQEXEC
-            enforce!SQLException(res !is null, "Error while executing prepared statement " ~ query);
+            enforce!SQLException(res !is null, "Error while executing prepared statement " ~ query ~ ": "
+                    ~ conn.errorMessage());
+            scope(failure) PQclear(res); // the caller frees it after a success (#249)
             enforce!SQLException(
                     PQresultStatus(res) != PGRES_FATAL_ERROR,
                     "Fatal error executing prepared statement " ~ query ~ ": " ~ copyCString(PQresultErrorMessage(res)));
@@ -1065,6 +1099,8 @@ version(USE_PGSQL) {
 
             PGresult * res = exec();
             scope(exit) PQclear(res);
+            enforce!SQLException(PQresultStatus(res) == PGRES_TUPLES_OK, "The statement gives no rows: " ~ query ~ ": "
+                    ~ copyCString(PQresultErrorMessage(res)));
             int rows = PQntuples(res);
             int fieldCount = PQnfields(res);
             Variant[][] data;
