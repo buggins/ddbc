@@ -606,6 +606,31 @@ version (USE_ODBC)
             return check!(Fn, file, line)(conn, cast(ushort) SQL_HANDLE_DBC, args);
         }
 
+        /+
+        Server-side rollbacks (#241). A statement failing with an SQLSTATE of class 40 (transaction rollback: 40001
+        deadlock victim or serialization failure, 40002, 40003) means the server rolled the transaction back. With
+        auto-commit off the driver (msodbcsql) then starts a new transaction at once, so commit() would commit the
+        statements after the error and report success. Until rollback(), statements and commit() throw. Errors that
+        roll back without such a state aren't detected: SQL Server under XACT_ABORT, and back ends that abort the
+        transaction on any error (PostgreSQL through psqlODBC, which reports 25P02 only on the next statement).
+        +/
+        bool transactionLost;
+
+        /// Called with the lock held after a statement call failed on `stmt`.
+        void noteFailure(SQLHSTMT stmt)
+        {
+            if (!autocommit && diagStates(stmt, SQL_HANDLE_STMT).any!(st => st.startsWith("40")))
+                transactionLost = true;
+        }
+
+        /// Called with the lock held before each statement and before commit.
+        void checkTransaction()
+        {
+            if (transactionLost)
+                throw new SQLException("The server rolled back the transaction after an error (e.g. a deadlock); "
+                    ~ "call rollback() to continue");
+        }
+
         this(string url, string[string] params)
         {
             //writeln("ODBCConnection() creating connection");
@@ -786,6 +811,7 @@ version (USE_ODBC)
                 scope (exit)
                     unlock();
 
+                checkTransaction();
                 checkdbc!SQLEndTran(cast(short) SQL_HANDLE_DBC, conn, cast(short) SQL_COMMIT);
             }
         }
@@ -854,6 +880,7 @@ version (USE_ODBC)
                 unlock();
 
             checkdbc!SQLEndTran(cast(short) SQL_HANDLE_DBC, conn, cast(short) SQL_ROLLBACK);
+            transactionLost = false;
         }
 
         override bool getAutoCommit()
@@ -872,8 +899,11 @@ version (USE_ODBC)
 
                 uint ac = autoCommit ? SQL_AUTOCOMMIT_ON : SQL_AUTOCOMMIT_OFF;
 
+                if (autoCommit)
+                    checkTransaction(); // switching auto-commit on commits
                 checkdbc!SQLSetConnectAttr(conn, SQL_ATTR_AUTOCOMMIT, cast(SQLPOINTER) ac, 0);
                 this.autocommit = autoCommit;
+                transactionLost = false;
             }
         }
 
@@ -935,7 +965,12 @@ version (USE_ODBC)
 
         private SQLRETURN checkstmt(alias Fn, string file = __FILE__, size_t line = __LINE__)(
                 Parameters!Fn args) {
-            return check!(Fn, file, line)(stmt, SQL_HANDLE_STMT, args);
+            try
+                return check!(Fn, file, line)(stmt, SQL_HANDLE_STMT, args);
+            catch (Exception e) {
+                conn.noteFailure(stmt); // the diagnostic records stay readable until the next call on stmt
+                throw e;
+            }
         }
 
     public:
@@ -980,6 +1015,7 @@ version (USE_ODBC)
                 unlock();
             
             trace(query);
+            conn.checkTransaction();
 
             try
             {
@@ -1015,6 +1051,7 @@ version (USE_ODBC)
             ptrdiff_t rowsAffected = 0; // an SQLLEN
 
             trace(query);
+            conn.checkTransaction();
 
             try
             {
@@ -1044,6 +1081,7 @@ version (USE_ODBC)
                 unlock();
             
             trace(query);
+            conn.checkTransaction();
 
             try
             {
@@ -1148,6 +1186,7 @@ version (USE_ODBC)
                 const states = diagStates(stmt, SQL_HANDLE_STMT);
                 if (states.canFind("IM001"))
                     break;
+                conn.noteFailure(stmt);
                 const failed = states.any!(st => isCallFailure(st));
                 if (error is null || failed)
                 {
@@ -1481,6 +1520,7 @@ version (USE_ODBC)
                 unlock();
             
             trace(stmt);
+            conn.checkTransaction();
 
             try
             {
@@ -1510,6 +1550,7 @@ version (USE_ODBC)
                 unlock();
             
             trace(stmt);
+            conn.checkTransaction();
 
             try
             {
@@ -1548,6 +1589,7 @@ version (USE_ODBC)
                 unlock();
 
             trace(stmt);
+            conn.checkTransaction();
 
             try
             {

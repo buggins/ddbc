@@ -506,8 +506,18 @@ version (USE_PGNATIVE)
                 activeResultSet.bufferRemaining();
                 activeResultSet = null;
             }
+            enforceNotFailed("commit");
             if (pg.inTransaction)
                 translate(pg.commit());
+        }
+
+        /// After an error the server aborts the transaction (ReadyForQuery 'E'): its COMMIT only rolls back, with no
+        /// error (#241). Refuses that, so the caller learns the work is gone; rollback() ends the failed transaction.
+        private void enforceNotFailed(string what)
+        {
+            if (pg.transactionFailed)
+                throw new SQLException("Can't " ~ what ~ ": the transaction failed after an error and the server rolled "
+                    ~ "back its work; call rollback() to continue");
         }
 
         override void rollback()
@@ -546,6 +556,7 @@ version (USE_PGNATIVE)
                     activeResultSet.bufferRemaining();
                     activeResultSet = null;
                 }
+                enforceNotFailed("switch auto-commit on (commit)");
                 if (pg.inTransaction)
                     translate(pg.commit());
             }
