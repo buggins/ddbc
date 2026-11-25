@@ -215,7 +215,10 @@ interface Connection : DialectAware {
 	string getCatalog();
 	/// Sets the given catalog name in order to select a subspace of this Connection object's database in which to work.
 	void setCatalog(string catalog);
-	/// Retrieves whether this Connection object has been closed.
+	/// Retrieves whether this Connection object has been closed. The native drivers (PGNATIVE, MSSQL, ORACLE,
+	/// ClickHouse) also return true when the server or the network closed the connection, which shows after a call
+	/// on it failed; call `close()` anyway to release the driver's resources. A pooled connection reports only its
+	/// own `close()`; the pool drops connections the server closed.
 	bool isClosed();
 	/// Undoes all changes made in the current transaction and releases any database locks currently held by this Connection object.
 	void rollback();

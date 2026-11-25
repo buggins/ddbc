@@ -11,7 +11,8 @@ import std.variant;
 import core.time : hnsecs, minutes;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkCommitAfterDeadlock, usableFromAnotherThread;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkClosedByServer, checkCommitAfterDeadlock,
+    usableFromAnotherThread;
 import ddbc.core : Connection, Decimal, PreparedStatement, ResultSet, ResultSetMetaData, SqlType, SQLException,
     Statement, TransactionIsolation;
 import ddbc.common : createConnection;
@@ -36,6 +37,25 @@ version (USE_MSSQL) {
                 "DROP TABLE IF EXISTS [my_first_test];CREATE TABLE [my_first_test] ([id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY, [name] NVARCHAR(255) NOT NULL)",
                 "DROP TABLE IF EXISTS [my_first_test]"
             );
+        }
+
+        /// `isClosed()` after the server killed the session (#248).
+        @Test
+        public void testClosedByServer() {
+            Connection victim = createConnection(msSqlUrl());
+            scope(failure) victim.close();
+            Statement vs = victim.createStatement();
+            ResultSet rs = vs.executeQuery("SELECT @@SPID");
+            assertTrue(rs.next());
+            const spid = rs.getInt(1);
+            rs.close();
+            vs.close();
+            void kill() {
+                Statement stmt = conn.createStatement();
+                scope(exit) stmt.close();
+                stmt.executeUpdate("KILL " ~ to!string(spid));
+            }
+            checkClosedByServer(victim, &kill, "SELECT 1");
         }
 
         /// commit() after the server rolled the transaction back (deadlock victim) must not succeed (#241).

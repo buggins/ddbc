@@ -246,6 +246,20 @@ bool usableFromAnotherThread(Connection conn, string sql, int seconds = 10) {
     return false;
 }
 
+/// After the server ends `victim`'s session (`kill` does that, from another connection), the next call on `victim`
+/// fails and `isClosed()` is true (#248); `close()` still works. `probe` is a query giving one row.
+void checkClosedByServer(Connection victim, void delegate() kill, string probe) {
+    import std.exception : assertThrown;
+    import ddbc.core : SQLException;
+
+    assert(!victim.isClosed());
+    kill();
+    Statement stmt = victim.createStatement();
+    assertThrown!SQLException(stmt.executeQuery(probe).next());
+    assert(victim.isClosed(), "isClosed() is false after the server closed the connection");
+    victim.close();
+}
+
 /// An error in the middle of a result set (#244): `next()` throws it after the rows before it, and the connection is
 /// free again: `rollback()` works, a new statement runs on the same connection, and `isValid()` is true. Then the same
 /// error met while another statement reads the rest of the rows ahead: that statement runs, and the result set's

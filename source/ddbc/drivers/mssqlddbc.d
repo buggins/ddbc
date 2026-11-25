@@ -687,9 +687,11 @@ version (USE_MSSQL)
             run("USE [" ~ catalog.replace("]", "]]") ~ "]");
         }
 
+        /// Whether the connection is closed: by `close()`, or by the server or the network (a killed session, a
+        /// broken socket), which shows after a call on it failed (#248).
         override bool isClosed()
         {
-            return closed;
+            return closed || !ms.isOpen;
         }
 
         override Statement createStatement()
