@@ -665,9 +665,9 @@ version (USE_PGNATIVE)
             checkClosed();
             conn.checkClosed();
             conn.lock();
-            closeResultSet();
             scope (failure)
-                conn.unlock();
+                conn.unlock(); // the callers unlock only after begin() returns (#242)
+            closeResultSet();
             translate(conn.prepareForStatement());
         }
 

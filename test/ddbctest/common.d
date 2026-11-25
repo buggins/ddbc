@@ -210,3 +210,38 @@ void checkCommitAfterDeadlock(Connection conn, string url) {
     assert(rs.next() && rs.getInt(1) == 0, "work after the deadlock was committed");
     rs.close();
 }
+
+/// Whether another thread can run `sql` on `conn` within `seconds`: false when the connection lock was left held
+/// (#242). Errors from the statement count as usable: this checks the lock only. A false result can also mean the
+/// thread is stuck elsewhere (e.g. a blocked socket read), not only on the lock. The thread is a daemon, so a blocked
+/// one doesn't keep the test program alive; but it stays attached to `conn`, so after a false result don't use `conn`
+/// in later tests.
+bool usableFromAnotherThread(Connection conn, string sql, int seconds = 10) {
+    import core.atomic : atomicLoad, atomicStore;
+    import core.thread : Thread;
+    import core.time : msecs;
+
+    shared bool done;
+    void run() {
+        try {
+            Statement stmt = conn.createStatement();
+            scope (exit)
+                stmt.close();
+            stmt.executeQuery(sql).close();
+        } catch (Exception e) {
+        }
+        atomicStore(done, true);
+    }
+
+    auto thread = new Thread(&run);
+    thread.isDaemon = true;
+    thread.start();
+    foreach (i; 0 .. seconds * 20) {
+        if (atomicLoad(done)) {
+            thread.join();
+            return true;
+        }
+        Thread.sleep(50.msecs);
+    }
+    return false;
+}

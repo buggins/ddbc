@@ -11,7 +11,7 @@ import std.variant;
 import core.time : hnsecs, minutes;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkCommitAfterDeadlock;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkCommitAfterDeadlock, usableFromAnotherThread;
 import ddbc.core : Connection, Decimal, PreparedStatement, ResultSet, ResultSetMetaData, SqlType, SQLException,
     Statement, TransactionIsolation;
 import ddbc.common : createConnection;
@@ -138,6 +138,25 @@ version (USE_MSSQL) {
             rs = stmt.executeQuery("SELECT COUNT(*) FROM [my_first_test]");
             assertTrue(rs.next());
             assertEquals(6, rs.getInt(1));
+        }
+
+        /// An error while the rest of a result set is read for the next statement doesn't leave the connection
+        /// locked (#242): another thread can still use it.
+        @Test
+        public void testLockReleasedAfterRowError() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            // divide by zero at row 5, after rows were sent
+            ResultSet rs = stmt.executeQuery("SELECT 1 / (5 - n) FROM (VALUES (1), (2), (3), (4), (5), (6)) AS t(n)");
+            assertTrue(rs.next());
+            Statement other = conn.createStatement();
+            scope(exit) other.close();
+            // reads the rest of rs first; the row error goes to rs's reader (#241), this statement runs
+            assertTrue(other.executeQuery("SELECT 1").next());
+            assertTrue(usableFromAnotherThread(conn, "SELECT 1"), "the connection lock was left held");
+            int rows = 1;
+            assertThrown!SQLException({ while (rs.next()) rows++; }());
+            assertEquals(4, rows);
         }
 
         @Test
