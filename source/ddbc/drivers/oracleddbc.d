@@ -320,7 +320,7 @@ version (USE_ORACLE)
     }
 
     /// DDBC connection to Oracle Database.
-    class OracleConnection : ddbc.core.Connection, ConnectionValidator
+    class OracleConnection : ddbc.core.Connection, ConnectionValidator, ConnectionResetter
     {
     private:
         OR.Connection ora;
@@ -476,6 +476,24 @@ version (USE_ORACLE)
                 unlock();
             prepareForStatement();
             translate(ora.rollback());
+        }
+
+        /// Ends an open transaction, also one left open with auto-commit on: the connection pool calls it when
+        /// the connection is returned (#245).
+        void resetForPool()
+        {
+            checkClosed();
+            if (activeResultSet !is null)
+            {
+                // the user is gone: drop the unread rows instead of reading them into memory
+                lock();
+                scope (exit)
+                    unlock();
+                if (activeResultSet !is null)
+                    activeResultSet.release();
+            }
+            if (!autoCommit || ora.inTransaction)
+                rollback();
         }
 
         override bool getAutoCommit()

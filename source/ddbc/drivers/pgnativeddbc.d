@@ -366,7 +366,7 @@ version (USE_PGNATIVE)
     }
 
     /// DDBC connection to PostgreSQL.
-    class PGNativeConnection : ddbc.core.Connection, ConnectionValidator
+    class PGNativeConnection : ddbc.core.Connection, ConnectionValidator, ConnectionResetter
     {
     private:
         PG.Connection pg;
@@ -533,6 +533,23 @@ version (USE_PGNATIVE)
             }
             if (pg.inTransaction)
                 translate(pg.rollback());
+        }
+
+        /// Ends an open transaction, also one started in SQL with auto-commit on: the connection pool calls it
+        /// when the connection is returned (#245).
+        void resetForPool()
+        {
+            checkClosed();
+            if (activeResultSet !is null)
+            {
+                // the user is gone: drop the unread rows instead of reading them into memory
+                lock();
+                scope (exit)
+                    unlock();
+                if (activeResultSet !is null)
+                    activeResultSet.release();
+            }
+            rollback(); // rolls back whenever the server reports a transaction
         }
 
         override bool getAutoCommit()

@@ -89,7 +89,7 @@ SqlType fromMySQLType(int t) {
 	}
 }
 
-class MySQLConnection : ddbc.core.Connection {
+class MySQLConnection : ddbc.core.Connection, ConnectionResetter {
 private:
     string url;
     string[string] params;
@@ -367,6 +367,15 @@ public:
             throw new SQLException(e);
         }
     }
+    /// Ends an open transaction, also one started in SQL (`START TRANSACTION`) with auto-commit on: the connection
+    /// pool calls it when the connection is returned (#245).
+    void resetForPool() {
+        enum serverStatusInTrans = 0x0001; // SERVER_STATUS_IN_TRANS, from the last OK packet
+        checkClosed();
+        if (!autocommit || transactionLost || (!conn.closed && (conn.serverStatus & serverStatusInTrans)))
+            rollback();
+    }
+
     override bool getAutoCommit() {
         return autocommit;
     }

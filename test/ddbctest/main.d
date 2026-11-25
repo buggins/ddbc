@@ -12,7 +12,7 @@ import std.stdio;
 import dunit;
 import std.exception : assertThrown;
 import std.typecons : Nullable;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkPoolEndsSqlTransaction;
 import ddbc.core : Connection, Decimal, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
 
@@ -29,6 +29,12 @@ class SQLiteTest : DdbcTestFixture {
             "CREATE TABLE my_first_test (id INTEGER PRIMARY KEY, name VARCHAR(255) NOT NULL)",
             "DROP TABLE IF EXISTS my_first_test"
         );
+    }
+
+    /// The pool ends a transaction started with BEGIN while auto-commit is on (#245).
+    @Test
+    public void testPoolEndsSqlTransaction() {
+        checkPoolEndsSqlTransaction("sqlite::memory:", "BEGIN");
     }
 
     @Test

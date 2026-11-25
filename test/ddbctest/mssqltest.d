@@ -11,7 +11,8 @@ import std.variant;
 import core.time : hnsecs, minutes;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkCommitAfterDeadlock, usableFromAnotherThread;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkCommitAfterDeadlock, checkPoolEndsSqlTransaction,
+    usableFromAnotherThread;
 import ddbc.core : Connection, Decimal, PreparedStatement, ResultSet, ResultSetMetaData, SqlType, SQLException,
     Statement, TransactionIsolation;
 import ddbc.common : createConnection;
@@ -36,6 +37,12 @@ version (USE_MSSQL) {
                 "DROP TABLE IF EXISTS [my_first_test];CREATE TABLE [my_first_test] ([id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY, [name] NVARCHAR(255) NOT NULL)",
                 "DROP TABLE IF EXISTS [my_first_test]"
             );
+        }
+
+        /// The pool ends a transaction started with BEGIN TRANSACTION while auto-commit is on (#245).
+        @Test
+        public void testPoolEndsSqlTransaction() {
+            checkPoolEndsSqlTransaction(msSqlUrl(), "BEGIN TRANSACTION", "SELECT 1/0");
         }
 
         /// commit() after the server rolled the transaction back (deadlock victim) must not succeed (#241).

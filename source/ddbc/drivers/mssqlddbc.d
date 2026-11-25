@@ -392,7 +392,7 @@ version (USE_MSSQL)
     }
 
     /// DDBC connection to SQL Server.
-    class MSSQLConnection : ddbc.core.Connection, ConnectionValidator
+    class MSSQLConnection : ddbc.core.Connection, ConnectionValidator, ConnectionResetter
     {
     private:
         MS.Connection ms;
@@ -611,6 +611,24 @@ version (USE_MSSQL)
             runLocked("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION");
             sawTransaction = !autoCommit && ms.inTransaction;
             transactionLost = false;
+        }
+
+        /// Ends an open transaction, also one started in SQL (`BEGIN TRANSACTION`) with auto-commit on: the
+        /// connection pool calls it when the connection is returned (#245).
+        void resetForPool()
+        {
+            checkClosed();
+            if (activeResultSet !is null)
+            {
+                // the user is gone: drop the unread rows instead of reading them into memory
+                lock();
+                scope (exit)
+                    unlock();
+                if (activeResultSet !is null)
+                    activeResultSet.release();
+            }
+            if (!autoCommit || ms.inTransaction || transactionLost)
+                rollback(); // IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION
         }
 
         override bool getAutoCommit()

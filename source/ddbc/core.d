@@ -258,6 +258,20 @@ interface ConnectionValidator {
 	bool isValid();
 }
 
+/**
+ * An optional interface for connections that can end a transaction left open when the connection pool takes the
+ * connection back, also one started in SQL (`BEGIN`, `START TRANSACTION`) while auto-commit is on. Without it, the
+ * pool rolls back only connections with auto-commit off (#245).
+ */
+interface ConnectionResetter {
+	/++
+	Ends an open transaction, if any, so that the connection's next user doesn't inherit it, its locks or its failed
+	state. Session state (temporary tables, `SET` options) is kept. Throws if that fails: the pool then closes the
+	connection.
+	+/
+	void resetForPool();
+}
+
 interface ResultSetMetaData {
 	//Returns the number of columns in this ResultSet object.
 	int getColumnCount();

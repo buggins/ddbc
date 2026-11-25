@@ -335,7 +335,7 @@ version(USE_SQLITE) {
         assert(ymdthmssUtcPlus2.toISOExtString() == "2019-09-15T15:18:51.5+02:00", ymdthmssUtcPlus2.toISOExtString());
     }
 
-    class SQLITEConnection : ddbc.core.Connection {
+    class SQLITEConnection : ddbc.core.Connection, ConnectionResetter {
     private:
         string filename;
         sqlite3 * conn;
@@ -544,6 +544,20 @@ version(USE_SQLITE) {
                 execInternal("BEGIN", "ROLLBACK");
             }
         }
+        /// Ends an open transaction, also one started in SQL (`BEGIN`) with auto-commit on: the connection pool
+        /// calls it when the connection is returned (#245).
+        void resetForPool() {
+            checkClosed();
+            if (!autocommit) {
+                rollback();
+                return;
+            }
+            lock();
+            scope(exit) unlock();
+            if (sqlite3_get_autocommit(conn) == 0)
+                execInternal("ROLLBACK");
+        }
+
         override bool getAutoCommit() {
             return autocommit;
         }
