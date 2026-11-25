@@ -461,12 +461,27 @@ version (USE_PGNATIVE)
         /// result set is read into memory. Call with the lock held.
         void prepareForStatement()
         {
-            if (activeResultSet !is null)
-            {
-                activeResultSet.bufferRemaining();
-                activeResultSet = null;
-            }
+            finishActiveResultSet();
             beginIfNeeded();
+        }
+
+        /// Frees the server connection: an unfinished result set is read into memory. An error in its rows (a
+        /// statement timeout, a cancel, a deadlock, a runtime error at row N) goes to its reader, from `next()`
+        /// after the rows read before it, not to the statement that needs the connection (#244). Call with the
+        /// lock held.
+        void finishActiveResultSet()
+        {
+            if (activeResultSet is null)
+                return;
+            auto rs = activeResultSet;
+            try
+                rs.bufferRemaining();
+            catch (Exception e)
+            {
+                if (rs.failure is null || !pg.isOpen)
+                    throw e; // not an error in its rows, or one that closed the connection: the caller needs it
+            }
+            activeResultSet = null;
         }
 
         void onStatementClosed(PGNativeStatement stmt)
@@ -501,11 +516,7 @@ version (USE_PGNATIVE)
             lock();
             scope (exit)
                 unlock();
-            if (activeResultSet !is null)
-            {
-                activeResultSet.bufferRemaining();
-                activeResultSet = null;
-            }
+            finishActiveResultSet();
             enforceNotFailed("commit");
             if (pg.inTransaction)
                 translate(pg.commit());
@@ -526,11 +537,7 @@ version (USE_PGNATIVE)
             lock();
             scope (exit)
                 unlock();
-            if (activeResultSet !is null)
-            {
-                activeResultSet.bufferRemaining();
-                activeResultSet = null;
-            }
+            finishActiveResultSet();
             if (pg.inTransaction)
                 translate(pg.rollback());
         }
@@ -551,11 +558,7 @@ version (USE_PGNATIVE)
                 unlock();
             if (autoCommit)
             {
-                if (activeResultSet !is null)
-                {
-                    activeResultSet.bufferRemaining();
-                    activeResultSet = null;
-                }
+                finishActiveResultSet();
                 enforceNotFailed("switch auto-commit on (commit)");
                 if (pg.inTransaction)
                     translate(pg.commit());
@@ -593,11 +596,7 @@ version (USE_PGNATIVE)
             lock();
             scope (exit)
                 unlock();
-            if (activeResultSet !is null)
-            {
-                activeResultSet.bufferRemaining();
-                activeResultSet = null;
-            }
+            finishActiveResultSet();
             translate(pg.setSessionDefaults(pgLevel));
             isolation = level;
         }
@@ -609,11 +608,7 @@ version (USE_PGNATIVE)
             lock();
             scope (exit)
                 unlock();
-            if (activeResultSet !is null)
-            {
-                activeResultSet.bufferRemaining();
-                activeResultSet = null;
-            }
+            finishActiveResultSet();
             return translate(pg.queryValue!string("SELECT current_database()"));
         }
 
@@ -674,8 +669,9 @@ version (USE_PGNATIVE)
         ddbc.core.ResultSet wrap(PG.QueryResult result, string sql)
         {
             resultSet = new PGNativeResultSet(this, result);
+            resultSet.sql = sql;
             conn.activeResultSet = resultSet;
-            translate(resultSet.start(), sql); // the first row, or the end
+            resultSet.start(); // the first row, or the end
             return resultSet;
         }
 
@@ -1038,6 +1034,8 @@ version (USE_PGNATIVE)
         bool afterLast;
         bool closed;
         bool lastIsNull;
+        Exception failure; // an error while reading rows ahead: thrown by next() after the buffered rows
+        string sql; // for error messages
         int[string] columnIndex;
 
         void checkClosed()
@@ -1045,23 +1043,44 @@ version (USE_PGNATIVE)
             enforce!SQLException(!closed, "Result set is already closed");
         }
 
+        /// Nothing more to read: the server connection is free for other statements.
+        void finish()
+        {
+            exhausted = true;
+            if (stmt.conn.activeResultSet is this)
+                stmt.conn.activeResultSet = null;
+        }
+
         /// Reads the next row from the server into `buffered`; false at the end. Call with the lock held.
+        /// An error in the rows ends the result set and is kept in `failure` (#244) when postgresql-native has
+        /// read the response to its end, or closed the connection; otherwise (a call from the wrong thread) the
+        /// result set stays active. Other exceptions (vibe.d's InterruptException) propagate unchanged.
         bool readAhead()
         {
             if (exhausted)
                 return false;
-            if (started)
-                result.popFront();
-            started = true;
-            if (result.empty)
+            try
             {
-                exhausted = true;
-                if (stmt.conn.activeResultSet is this)
-                    stmt.conn.activeResultSet = null;
-                return false;
+                if (started)
+                    result.popFront();
+                started = true;
+                if (result.empty)
+                {
+                    finish();
+                    return false;
+                }
+                buffered ~= result.front; // the values are immutable: they stay valid
+                return true;
             }
-            buffered ~= result.front; // the values are immutable: they stay valid
-            return true;
+            catch (DbException e)
+            {
+                auto error = new SQLException(sql.length ? e.msg ~ " - while executing " ~ sql : e.msg, e);
+                if (stmt.conn.pg.isBusy)
+                    throw error; // the response wasn't read: the rows can still be read, or the result closed
+                finish();
+                failure = error;
+                throw error;
+            }
         }
 
         PG.Value cell(int columnIndex)
@@ -1187,7 +1206,17 @@ version (USE_PGNATIVE)
                 conn.lock();
                 scope (exit)
                     conn.unlock();
-                translate(readAhead());
+                try
+                    readAhead();
+                catch (Exception e)
+                {
+                    if (failure !is null)
+                    {
+                        current = PG.Row.init;
+                        afterLast = true; // reported here; no current row: the getters refuse, later calls return false
+                    }
+                    throw e;
+                }
             }
             if (buffered.length)
             {
@@ -1198,6 +1227,8 @@ version (USE_PGNATIVE)
             }
             current = PG.Row.init;
             afterLast = true;
+            if (failure !is null)
+                throw failure; // the rows ended with an error, met while another statement read them ahead
             rowNumber++;
             return false;
         }
@@ -1226,11 +1257,20 @@ version (USE_PGNATIVE)
                 return false;
             if (buffered.length)
                 return false;
+            if (failure !is null)
+                return false; // the rows end with an error, which next() reports
             auto conn = stmt.conn;
             conn.lock();
             scope (exit)
                 conn.unlock();
-            return !translate(readAhead());
+            try
+                return !readAhead();
+            catch (SQLException e)
+            {
+                if (failure is null)
+                    throw e;
+                return false; // stored in `failure`: next() reports it
+            }
         }
 
         override int findColumn(string columnName)
