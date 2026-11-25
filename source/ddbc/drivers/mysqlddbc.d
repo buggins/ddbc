@@ -49,6 +49,7 @@ version(USE_MYSQL) {
 import std.array;
 import mysql.connection : prepare, MySqlNativeConnection = Connection;
 import mysql.commands : query, exec;
+import mysql.exceptions : MYXReceived;
 import mysql.prepared;
 import mysql.protocol.constants;
 import mysql.protocol.packets : FieldDescription, ParamDescription;
@@ -117,6 +118,68 @@ private:
 			throw new SQLException("Connection is already closed");
 	}
 
+    /+
+    Guards transactions against mysql-native's reconnect (#240). mysql-native closes its connection after any server
+    error (a deadlock, a duplicate key, a lock wait timeout, KILL QUERY, even a syntax error) or a lost connection,
+    and reconnects silently on the next command: in a new session, with auto-commit on and without the transaction,
+    which the server rolled back. With auto-commit off, a closed connection is noticed before the next command:
+    - if statements ran since the last commit or rollback (`transactionStarted`), their work is gone: the
+      transaction is lost, and statements, commit() and setAutoCommit() throw until rollback() acknowledges it;
+    - otherwise nothing was lost, and the new session is set up again (auto-commit off, the isolation level).
+    Only transactions of setAutoCommit(false) are guarded, not ones opened in SQL (START TRANSACTION, BEGIN), and
+    not commands sent through getConnection() straight to mysql-native.
+    +/
+    bool transactionStarted;
+    bool transactionLost;
+    string sessionIsolation; // the level set by setTransactionIsolation, set again in a new session
+
+    enum transactionLostMessage = "the connection to the MySQL server was closed, so the server rolled back the open "
+        ~ "transaction; call rollback() to continue";
+
+    /// Called with the lock held before each command that is sent to the server.
+    void checkSession() {
+        if (!transactionLost && conn.closed) {
+            if (!autocommit && transactionStarted)
+                transactionLost = true;
+            else
+                restoreSession();
+        }
+        if (transactionLost)
+            throw new SQLException("Can't run statements: " ~ transactionLostMessage);
+    }
+
+    /// Called with the lock held after a statement ran.
+    void statementRan() {
+        transactionStarted = !autocommit;
+    }
+
+    /// The exception for a failed command, saying so when it ended a transaction that had done work.
+    SQLException failure(Throwable e, string msg) {
+        if (!conn.closed)
+            statementRan(); // it may have done work (taken locks) before failing
+        else if (!autocommit && transactionStarted) {
+            transactionLost = true;
+            msg ~= " - " ~ transactionLostMessage;
+        }
+        return new SQLException(msg, e);
+    }
+
+    /// Sets up the session mysql-native opens on the next command like the lost one: auto-commit off if it was, the
+    /// isolation level. Its other settings are the server defaults. Straight to mysql-native: ddbc statements would
+    /// refuse.
+    void restoreSession() {
+        try {
+            if (!autocommit)
+                exec(conn, "SET autocommit=0");
+            if (sessionIsolation.length)
+                exec(conn, "SET SESSION TRANSACTION ISOLATION LEVEL " ~ sessionIsolation);
+        } catch (Exception e) {
+            throw new SQLException("Restoring the session after mysql-native's reconnect failed: " ~ e.msg, e);
+        }
+        transactionLost = false;
+        transactionStarted = false;
+    }
+
 public:
 
     // db connections are DialectAware
@@ -132,6 +195,8 @@ public:
         mutex.unlock();
     }
 
+    /// The mysql-native connection. Commands sent through it directly aren't guarded against its silent reconnect
+    /// after an error (#240): with auto-commit off, such a command may run in a new session, outside the transaction.
     MySqlNativeConnection getConnection() { return conn; }
 
 
@@ -204,11 +269,19 @@ public:
         lock();
         scope(exit) unlock();
 
+        checkSession(); // a transaction lost before COMMIT was rolled back
         try {
-            Statement stmt = createStatement();
-            scope(exit) stmt.close();
-            stmt.executeUpdate("COMMIT");
-        } catch (Throwable e) {
+            exec(conn, "COMMIT");
+            transactionStarted = false;
+        } catch (Exception e) {
+            if (!autocommit && transactionStarted && conn.closed) {
+                transactionLost = true;
+                if (cast(MYXReceived) e) // the server answered with an error: it rolled back
+                    throw new SQLException("COMMIT failed: " ~ e.msg ~ " - " ~ transactionLostMessage, e);
+                // the connection broke after COMMIT was sent: the server may have committed or not (#240)
+                throw new SQLException("COMMIT failed and the connection to the MySQL server was closed: whether the "
+                    ~ "transaction was committed is unknown; call rollback() to continue", e);
+            }
             throw new SQLException(e);
         }
     }
@@ -233,12 +306,13 @@ public:
         lock();
         scope(exit) unlock();
 
+        checkSession();
         try {
             MySQLPreparedStatement stmt = new MySQLPreparedStatement(this, sql);
             activeStatements ~= stmt;
             return stmt;
         } catch (Throwable e) {
-            throw new SQLException(e.msg ~ " while execution of query " ~ sql, e);
+            throw failure(e, e.msg ~ " while execution of query " ~ sql);
         }
     }
 
@@ -255,11 +329,12 @@ public:
         lock();
         scope(exit) unlock();
 
+        checkSession();
         try {
             conn.selectDB(catalog);
             dbName = catalog;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw failure(e, e.msg);
         }
     }
 
@@ -273,11 +348,22 @@ public:
         lock();
         scope(exit) unlock();
 
+        // The server rolled the transaction back when the session ended: set up the new one (#240).
+        if (transactionLost || (!autocommit && conn.closed)) {
+            restoreSession();
+            return;
+        }
         try {
             Statement stmt = createStatement();
             scope(exit) stmt.close();
             stmt.executeUpdate("ROLLBACK");
+            transactionStarted = false;
         } catch (Throwable e) {
+            // ROLLBACK found the connection dead (e.g. closed by the server while idle): rolled back all the same
+            if (!autocommit && conn.closed) {
+                restoreSession();
+                return;
+            }
             throw new SQLException(e);
         }
     }
@@ -296,6 +382,7 @@ public:
             scope(exit) stmt.close();
             stmt.executeUpdate("SET autocommit=" ~ (autoCommit ? "1" : "0"));
             this.autocommit = autoCommit;
+            transactionStarted = false;
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -307,6 +394,8 @@ public:
         lock();
         scope(exit) unlock();
 
+        immutable started = transactionStarted; // reading a variable starts no transaction work
+        scope(success) transactionStarted = started;
         try {
             Statement stmt = createStatement();
             scope(exit) stmt.close();
@@ -337,26 +426,30 @@ public:
         lock();
         scope(exit) unlock();
 
+        immutable started = transactionStarted; // a session setting is no transaction work
+        scope(success) transactionStarted = started;
         try {
             Statement stmt = createStatement();
+            scope(exit) stmt.close();
             // See: https://dev.mysql.com/doc/refman/8.0/en/set-transaction.html
-            string query = "SET SESSION TRANSACTION ISOLATION LEVEL ";
+            string levelName;
             switch (level) {
                 case TransactionIsolation.READ_UNCOMMITTED:
-                    query ~= "READ UNCOMMITTED";
+                    levelName = "READ UNCOMMITTED";
                     break;
                 case TransactionIsolation.READ_COMMITTED:
-                    query ~= "READ COMMITTED";
+                    levelName = "READ COMMITTED";
                     break;
                 case TransactionIsolation.SERIALIZABLE:
-                    query ~= "SERIALIZABLE";
+                    levelName = "SERIALIZABLE";
                     break;
                 case TransactionIsolation.REPEATABLE_READ:
                 default:
-                    query ~= "REPEATABLE READ";
+                    levelName = "REPEATABLE READ";
                     break;
             }
-            stmt.executeUpdate(query);
+            stmt.executeUpdate("SET SESSION TRANSACTION ISOLATION LEVEL " ~ levelName);
+            sessionIsolation = levelName;
         } catch (Throwable e) {
             throw new SQLException(e);
         }
@@ -436,12 +529,14 @@ public:
 
         trace(queryString);
 
+        conn.checkSession();
 		try {
 	        results = query(conn.getConnection(), queryString);
     	    resultSet = new MySQLResultSet(this, results, createMetadata(conn.getConnection().resultFieldDescriptions));
+	        conn.statementRan(); // after the rows are read (the result set reads them all)
         	return resultSet;
 		} catch (Throwable e) {
-            throw new SQLException(e.msg ~ " - while execution of query " ~ queryString, e);
+            throw conn.failure(e, e.msg ~ " - while execution of query " ~ queryString);
         }
 	}
     override int executeUpdate(string query) {
@@ -452,23 +547,27 @@ public:
 
         trace(query);
         
+        conn.checkSession();
 		try {
 			rowsAffected = exec(conn.getConnection(), query);
+			conn.statementRan();
 	        return cast(int)rowsAffected;
 		} catch (Throwable e) {
-			throw new SQLException(e.msg ~ " - while execution of query " ~ query, e);
+			throw conn.failure(e, e.msg ~ " - while execution of query " ~ query);
 		}
     }
 	override int executeUpdate(string query, out Variant insertId) {
 		checkClosed();
 		lock();
 		scope(exit) unlock();
+        conn.checkSession();
         try {
     		ulong rowsAffected = exec(conn.getConnection(), query);
+    		conn.statementRan();
     		insertId = Variant(conn.getConnection().lastInsertID);
     		return cast(int)rowsAffected;
         } catch (Throwable e) {
-            throw new SQLException(e.msg ~ " - while execution of query " ~ query, e);
+            throw conn.failure(e, e.msg ~ " - while execution of query " ~ query);
         }
 	}
 	override void close() {
@@ -557,12 +656,14 @@ public:
         checkClosed();
         lock();
         scope(exit) unlock();
+        conn.checkSession();
         try {
             ulong rowsAffected = 0;
             rowsAffected = conn.getConnection().exec(statement);
+            conn.statementRan();
             return cast(int)rowsAffected;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw conn.failure(e, e.msg);
         }
     }
 
@@ -570,13 +671,15 @@ public:
 		checkClosed();
 		lock();
 		scope(exit) unlock();
+        conn.checkSession();
         try {
     		ulong rowsAffected = 0;
     		rowsAffected = conn.getConnection().exec(statement);
+    		conn.statementRan();
     		insertId = conn.getConnection().lastInsertID;
     		return cast(int)rowsAffected;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw conn.failure(e, e.msg);
         }
 	}
 
@@ -587,12 +690,14 @@ public:
 
             trace(statement.sql());
 
+        conn.checkSession();
         try {
             results = query(conn.getConnection(), statement);
             resultSet = new MySQLResultSet(this, results, getMetaData());
+            conn.statementRan(); // after the rows are read (the result set reads them all)
             return resultSet;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw conn.failure(e, e.msg);
         }
     }
     
