@@ -408,14 +408,72 @@ version (USE_MSSQL)
             enforce!SQLException(!closed, "Connection is already closed");
         }
 
+        /+
+        Server-side rollbacks (#241). With auto-commit off (IMPLICIT_TRANSACTIONS ON) the server rolls the whole
+        transaction back on a deadlock (1205), a snapshot conflict (3960) or any error under XACT_ABORT, and the next
+        statement silently starts a new transaction, which commit() would then commit. mssql-native tracks the
+        server's transaction (ENVCHANGE): a statement that fails and leaves no transaction behind ends the one that
+        was open before it (or that it opened, for 1205 and 3960); until rollback(), statements and commit() throw.
+        Not detected: a batch that opens the transaction and then fails with another error under XACT_ABORT (or
+        reports a 1205/3960 after mssql-native's cap of 100 errors), and transactions ended through
+        getNativeConnection().
+        +/
+        bool sawTransaction;     // a transaction was open after the last successful statement
+        bool wasInTransaction;   // a transaction was open when the current statement started
+        bool transactionLost;
+
+        /// Called with the lock held before each statement and before commit.
+        void checkTransaction()
+        {
+            if (!autoCommit && !transactionLost && sawTransaction && !ms.inTransaction)
+                transactionLost = true; // ended outside a tracked statement, e.g. while reading a result set
+            if (transactionLost)
+                throw new SQLException("The server rolled back the transaction after an error (e.g. a deadlock); "
+                    ~ "call rollback() to continue");
+            wasInTransaction = ms.inTransaction;
+        }
+
+        /// Called with the lock held after a statement succeeded: a COMMIT statement may have ended the transaction.
+        void statementSucceeded()
+        {
+            sawTransaction = !autoCommit && ms.inTransaction;
+        }
+
+        /// Called with the lock held after a statement failed with `e`.
+        void statementFailed(Throwable e)
+        {
+            if (autoCommit || ms.inTransaction)
+                return; // still in the transaction: the error rolled back the statement only
+            if (wasInTransaction || sawTransaction || endsTransaction(e))
+                transactionLost = true;
+        }
+
+        /// Whether `e` (or its cause) is a deadlock (1205) or snapshot update conflict (3960) error, which roll back
+        /// the transaction even when the failing batch opened it.
+        static bool endsTransaction(Throwable e)
+        {
+            for (; e !is null; e = e.next)
+                if (auto se = cast(MS.ServerException) e)
+                    foreach (m; se.errors)
+                        if (m.number == 1205 || m.number == 3960)
+                            return true;
+            return false;
+        }
+
+        /// Runs `sql` (no result set); the lock must be held.
+        void runLocked(string sql)
+        {
+            prepareForStatement();
+            translate(ms.exec(sql), sql);
+        }
+
         /// Runs `sql` (no result set) with the lock held, after freeing the server connection.
         void run(string sql)
         {
             lock();
             scope (exit)
                 unlock();
-            prepareForStatement();
-            translate(ms.exec(sql), sql);
+            runLocked(sql);
         }
 
     public:
@@ -492,7 +550,16 @@ version (USE_MSSQL)
         {
             if (activeResultSet !is null)
             {
-                activeResultSet.bufferRemaining();
+                auto rs = activeResultSet;
+                try
+                    rs.bufferRemaining();
+                catch (Exception e)
+                {
+                    if (rs.failure is null)
+                        throw e;
+                    // an error in its rows: its reader gets it from next(), and the statement that needs the
+                    // connection goes on (checkTransaction stops it if the server rolled back), #241
+                }
                 activeResultSet = null;
             }
         }
@@ -526,13 +593,24 @@ version (USE_MSSQL)
         override void commit()
         {
             checkClosed();
-            run("IF @@TRANCOUNT > 0 COMMIT TRANSACTION");
+            lock();
+            scope (exit)
+                unlock();
+            prepareForStatement(); // the rest of a batch may end the transaction
+            checkTransaction();
+            runLocked("IF @@TRANCOUNT > 0 COMMIT TRANSACTION"); // not run(): the lock isn't recursive in fiber mode
+            sawTransaction = !autoCommit && ms.inTransaction; // a nested BEGIN TRANSACTION stays open
         }
 
         override void rollback()
         {
             checkClosed();
-            run("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION");
+            lock();
+            scope (exit)
+                unlock();
+            runLocked("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION");
+            sawTransaction = !autoCommit && ms.inTransaction;
+            transactionLost = false;
         }
 
         override bool getAutoCommit()
@@ -546,9 +624,19 @@ version (USE_MSSQL)
             checkClosed();
             if (autoCommit == this.autoCommit)
                 return;
-            run(autoCommit ? "IF @@TRANCOUNT > 0 COMMIT TRANSACTION; SET IMPLICIT_TRANSACTIONS OFF"
+            lock();
+            scope (exit)
+                unlock();
+            if (autoCommit)
+            {
+                prepareForStatement(); // the rest of a batch may end the transaction
+                checkTransaction();
+            }
+            runLocked(autoCommit ? "IF @@TRANCOUNT > 0 COMMIT TRANSACTION; SET IMPLICIT_TRANSACTIONS OFF"
                     : "SET IMPLICIT_TRANSACTIONS ON");
             this.autoCommit = autoCommit;
+            sawTransaction = false;
+            transactionLost = false;
         }
 
         override TransactionIsolation getTransactionIsolation()
@@ -640,8 +728,27 @@ version (USE_MSSQL)
             checkClosed();
             conn.checkClosed();
             conn.lock();
+            scope (failure)
+                conn.unlock(); // the callers unlock only after begin() returns (#242)
             conn.prepareForStatement();
             closeResultSet();
+            conn.checkTransaction();
+        }
+
+        /// Runs a statement's server call (after begin()), recording the server's transaction state (#241).
+        T track(T)(lazy T action)
+        {
+            try
+            {
+                T result = action();
+                conn.statementSucceeded();
+                return result;
+            }
+            catch (Exception e)
+            {
+                conn.statementFailed(e);
+                throw e;
+            }
         }
 
         ddbc.core.ResultSet wrap(MS.QueryResult result, string sql)
@@ -659,22 +766,26 @@ version (USE_MSSQL)
             scope (exit)
                 conn.unlock();
             const batch = sql ~ "\nSELECT CAST(SCOPE_IDENTITY() AS bigint)";
-            // in its own scope (sp_executesql): in a plain batch SCOPE_IDENTITY() gives the value of
-            // an earlier batch of the session when the statement inserts nothing
-            auto result = translate(params.length ? conn.ms.queryMultiple(batch, params)
-                    : conn.ms.callProcedure("sp_executesql", batch), sql);
-            Variant last;
-            translate({
-                do
-                {
-                    if (result.next())
-                        last = result.isNull(0) ? Variant() : Variant(result.getLong(0));
-                }
-                while (result.nextResult());
-            }(), sql);
-            insertId = last;
-            const n = result.recordsAffected;
-            return n > int.max ? int.max : cast(int) n;
+            int run()
+            {
+                // in its own scope (sp_executesql): in a plain batch SCOPE_IDENTITY() gives the value of
+                // an earlier batch of the session when the statement inserts nothing
+                auto result = translate(params.length ? conn.ms.queryMultiple(batch, params)
+                        : conn.ms.callProcedure("sp_executesql", batch), sql);
+                Variant last;
+                translate({
+                    do
+                    {
+                        if (result.next())
+                            last = result.isNull(0) ? Variant() : Variant(result.getLong(0));
+                    }
+                    while (result.nextResult());
+                }(), sql);
+                insertId = last;
+                const n = result.recordsAffected;
+                return n > int.max ? int.max : cast(int) n;
+            }
+            return track(run());
         }
 
     public:
@@ -699,7 +810,7 @@ version (USE_MSSQL)
             begin();
             scope (exit)
                 conn.unlock();
-            return wrap(translate(conn.ms.query(query), query), query);
+            return track(wrap(translate(conn.ms.query(query), query), query));
         }
 
         override int executeUpdate(string query)
@@ -707,7 +818,7 @@ version (USE_MSSQL)
             begin();
             scope (exit)
                 conn.unlock();
-            const n = translate(conn.ms.exec(query), query);
+            const n = track(translate(conn.ms.exec(query), query));
             return n > int.max ? int.max : cast(int) n;
         }
 
@@ -797,7 +908,7 @@ version (USE_MSSQL)
             begin();
             scope (exit)
                 conn.unlock();
-            auto rs = wrap(translate(statement().query(params), sql), sql);
+            auto rs = track(wrap(translate(statement().query(params), sql), sql));
             lastMetadata = rs.getMetaData();
             return rs;
         }
@@ -808,7 +919,7 @@ version (USE_MSSQL)
             begin();
             scope (exit)
                 conn.unlock();
-            const n = translate(statement().exec(params), sql);
+            const n = track(translate(statement().exec(params), sql));
             return n > int.max ? int.max : cast(int) n;
         }
 
@@ -1039,6 +1150,7 @@ version (USE_MSSQL)
         bool afterLast;
         bool closed;
         bool lastIsNull;
+        Exception failure; // an error while reading rows ahead: thrown by next() after the buffered rows
         int[string] columnIndex;
 
         void checkClosed()
@@ -1059,6 +1171,20 @@ version (USE_MSSQL)
             return row;
         }
 
+        /// After an error while reading rows: nothing more to read, the connection is free again (mssql-native
+        /// has read the response to its end). The current row, if copied, stays readable.
+        void finishAfterError()
+        {
+            if (live)
+            {
+                live = false; // its values are no longer in `result`
+                current = null;
+            }
+            exhausted = true;
+            if (stmt.conn.activeResultSet is this)
+                stmt.conn.activeResultSet = null;
+        }
+
         /// Reads the next row from the server into `buffered`; false at the end. Call with the lock held.
         bool readAhead()
         {
@@ -1069,11 +1195,23 @@ version (USE_MSSQL)
                 current = copyRow(); // keep the current row while the result moves on
                 live = false;
             }
-            if (!translate(result.next()))
+            bool more;
+            try
+                more = translate(result.next());
+            catch (Exception e)
+            {
+                // e.g. a deadlock while the rows were sent (#241); the reader gets it after the buffered rows
+                finishAfterError();
+                failure = e;
+                stmt.conn.statementFailed(e);
+                throw e;
+            }
+            if (!more)
             {
                 exhausted = true;
                 if (stmt.conn.activeResultSet is this)
                     stmt.conn.activeResultSet = null;
+                stmt.conn.statementSucceeded(); // the rest of the batch may have committed (#241)
                 return false;
             }
             buffered ~= copyRow();
@@ -1085,7 +1223,7 @@ version (USE_MSSQL)
             checkClosed();
             enforce!SQLException(columnIndex >= 1 && columnIndex <= columns.length,
                     "Column index out of bounds: " ~ to!string(columnIndex));
-            enforce!SQLException(rowNumber > 0 && !afterLast, "No current row in result set");
+            enforce!SQLException(rowNumber > 0 && !afterLast && (live || current !is null), "No current row in result set");
             auto v = live ? result[columnIndex - 1] : current[columnIndex - 1];
             lastIsNull = v.isNull;
             return v;
@@ -1155,10 +1293,13 @@ version (USE_MSSQL)
             if (!exhausted)
             {
                 try
-                    result.close();
-                catch (Exception)
                 {
-                    // the result is abandoned anyway
+                    result.close(); // reads the rest of the response: the rest of the batch runs
+                    stmt.conn.statementSucceeded(); // it may have committed (#241)
+                }
+                catch (Exception e)
+                {
+                    stmt.conn.statementFailed(e); // the result is abandoned anyway; the error may end the transaction
                 }
                 exhausted = true;
             }
@@ -1205,7 +1346,19 @@ version (USE_MSSQL)
                 conn.lock();
                 scope (exit)
                     conn.unlock();
-                if (translate(result.next()))
+                bool more;
+                try
+                    more = translate(result.next());
+                catch (Exception e)
+                {
+                    // e.g. a deadlock while the rows were sent (#241)
+                    finishAfterError();
+                    current = null;
+                    afterLast = true; // no current row: the getters refuse
+                    conn.statementFailed(e);
+                    throw e;
+                }
+                if (more)
                 {
                     live = true;
                     rowNumber++;
@@ -1214,10 +1367,13 @@ version (USE_MSSQL)
                 exhausted = true;
                 if (conn.activeResultSet is this)
                     conn.activeResultSet = null;
+                conn.statementSucceeded(); // the rest of the batch may have committed (#241)
             }
             live = false;
             current = null;
             afterLast = true;
+            if (failure !is null)
+                throw failure; // the rows ended with an error, met while another statement read them ahead
             rowNumber++;
             return false;
         }
@@ -1246,11 +1402,16 @@ version (USE_MSSQL)
                 return false;
             if (buffered.length)
                 return false;
+            if (failure !is null)
+                return false; // the rows end with an error, which next() reports
             auto conn = stmt.conn;
             conn.lock();
             scope (exit)
                 conn.unlock();
-            return !readAhead();
+            try
+                return !readAhead();
+            catch (Exception e)
+                return false; // stored in `failure`: next() reports it, once
         }
 
         override int findColumn(string columnName)

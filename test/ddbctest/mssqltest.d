@@ -11,7 +11,7 @@ import std.variant;
 import core.time : hnsecs, minutes;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkCommitAfterDeadlock;
 import ddbc.core : Connection, Decimal, PreparedStatement, ResultSet, ResultSetMetaData, SqlType, SQLException,
     Statement, TransactionIsolation;
 import ddbc.common : createConnection;
@@ -36,6 +36,108 @@ version (USE_MSSQL) {
                 "DROP TABLE IF EXISTS [my_first_test];CREATE TABLE [my_first_test] ([id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY, [name] NVARCHAR(255) NOT NULL)",
                 "DROP TABLE IF EXISTS [my_first_test]"
             );
+        }
+
+        /// commit() after the server rolled the transaction back (deadlock victim) must not succeed (#241).
+        @Test
+        public void testCommitAfterDeadlock() {
+            checkCommitAfterDeadlock(conn, msSqlUrl());
+        }
+
+        /// A transaction ended by a COMMIT statement isn't mistaken for a server-side rollback (#241).
+        @Test
+        public void testCommitStatementEndsTransaction() {
+            conn.setAutoCommit(false);
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("INSERT INTO [my_first_test] ([name]) VALUES ('Ann')");
+            stmt.executeUpdate("COMMIT TRANSACTION");
+            stmt.executeUpdate("INSERT INTO [my_first_test] ([name]) VALUES ('Bob')"); // no "rolled back" error
+            conn.commit();
+            conn.setAutoCommit(true);
+            ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM [my_first_test]");
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+        }
+
+        /// After an error while reading rows, rollback() and the next statement work without closing the result
+        /// set first (#241: the error message asks for rollback()).
+        @Test
+        public void testRollbackAfterRowError() {
+            import std.exception : assertThrown;
+            conn.setAutoCommit(false);
+            scope(exit) conn.setAutoCommit(true);
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            enum query = "SELECT 1 / (5 - n) FROM (VALUES (1), (2), (3), (4), (5), (6)) AS t(n)";
+            ResultSet rs = stmt.executeQuery(query);
+            bool failed;
+            try {
+                while (rs.next()) {
+                }
+            } catch (SQLException e) {
+                failed = true;
+            }
+            assertTrue(failed);
+            assertThrown!SQLException(rs.getInt(1)); // no current row: an SQLException, not a RangeError
+            assertFalse(rs.next());
+            conn.rollback();
+            ResultSet one = stmt.executeQuery("SELECT 1");
+            assertTrue(one.next());
+            assertEquals(1, one.getInt(1));
+
+            // read ahead by another statement: that statement runs, and the reader gets the error after its rows
+            Statement reader = conn.createStatement();
+            scope(exit) reader.close();
+            rs = reader.executeQuery(query);
+            assertTrue(rs.next());
+            assertFalse(rs.isLast());
+            one = stmt.executeQuery("SELECT 2");
+            assertTrue(one.next());
+            assertEquals(2, one.getInt(1));
+            assertEquals(0, rs.getInt(1)); // the current row stays readable
+            int rows = 1;
+            failed = false;
+            try {
+                while (rs.next())
+                    rows++;
+            } catch (SQLException e) {
+                failed = true;
+            }
+            assertTrue(failed, "the reader saw a truncated result without the error");
+            assertEquals(4, rows);
+            conn.rollback();
+        }
+
+        /// A batch that returns rows and then commits isn't mistaken for a server-side rollback, whether its rows
+        /// are read to the end or left for the next statement (#241).
+        @Test
+        public void testBatchWithRowsThenCommit() {
+            conn.setAutoCommit(false);
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            enum batch = "INSERT INTO [my_first_test] ([name]) VALUES ('Ann'); "
+                ~ "SELECT [name] FROM [my_first_test]; COMMIT TRANSACTION";
+            ResultSet rs = stmt.executeQuery(batch);
+            while (rs.next()) {
+            }
+            stmt.executeUpdate("INSERT INTO [my_first_test] ([name]) VALUES ('Bob')"); // read to the end
+            conn.commit();
+            rs = stmt.executeQuery(batch);
+            assertTrue(rs.next());
+            Statement other = conn.createStatement();
+            scope(exit) other.close();
+            other.executeUpdate("INSERT INTO [my_first_test] ([name]) VALUES ('Cid')"); // reads the rest first
+            conn.commit();
+            rs = stmt.executeQuery(batch);
+            assertTrue(rs.next());
+            rs.close(); // reads the rest of the response too
+            other.executeUpdate("INSERT INTO [my_first_test] ([name]) VALUES ('Dan')");
+            conn.commit();
+            conn.setAutoCommit(true);
+            rs = stmt.executeQuery("SELECT COUNT(*) FROM [my_first_test]");
+            assertTrue(rs.next());
+            assertEquals(6, rs.getInt(1));
         }
 
         @Test

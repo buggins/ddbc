@@ -11,7 +11,7 @@ import std.stdio;
 import dunit;
 import std.uni : toUpper;
 import std.exception : assertThrown;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, checkCommitAfterDeadlock;
 import ddbc.core : Connection, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
 
@@ -32,6 +32,12 @@ version(USE_ODBC) {
                 "DROP TABLE IF EXISTS [my_first_test];CREATE TABLE [my_first_test] ([id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY, [name] VARCHAR(255) NOT NULL)",
                 "DROP TABLE IF EXISTS [my_first_test]"
             );
+        }
+
+        /// commit() after the server rolled the transaction back (deadlock victim, SQLSTATE 40001) must not succeed (#241).
+        @Test
+        public void testCommitAfterDeadlock() {
+            checkCommitAfterDeadlock(conn, "odbc://localhost,%s?user=SA,password=MSbbk4k77JKH88g54,trust_server_certificate=yes,driver=ODBC Driver 18 for SQL Server".format(environment.get("MSSQL_PORT", "1433")));
         }
 
         @Test // https://github.com/buggins/ddbc/issues/226

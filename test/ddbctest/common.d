@@ -53,6 +53,8 @@ class DdbcTestFixture {
 
     @AfterEach
     public void tearDown() {
+        if (!conn.getAutoCommit())
+            conn.rollback(); // a failed test may leave a transaction the server rolled back
         conn.setAutoCommit(true);
         //debug writeln("@AfterEach : tear down data");
         Statement stmt = conn.createStatement();
@@ -121,4 +123,90 @@ void checkDecimalRoundTrip(Connection conn, string table, bool exactScale, strin
     assertTrue(rs.getDecimal("missing") == Decimal.fromString("-1"));
     assertFalse(rs.wasNull());
     assertFalse(rs.next());
+}
+
+/// Makes `victim` the victim of a deadlock with `other` on SQL Server (both with auto-commit off): each updates a row
+/// of `table` (columns `id`, `v`, rows 1 and 2) that the other then needs; `other` waits in a thread. Returns the
+/// victim's exception (error 1205; the server rolls its whole transaction back), null if there was none (#241).
+Exception provokeSqlServerDeadlock(Connection victim, Connection other, string table) {
+    import core.thread : Thread;
+    import core.time : msecs;
+
+    Statement sv = victim.createStatement();
+    scope (exit)
+        sv.close();
+    Statement so = other.createStatement();
+    scope (exit)
+        so.close();
+    sv.executeUpdate("SET DEADLOCK_PRIORITY LOW");
+    sv.executeUpdate("UPDATE " ~ table ~ " SET v = 1 WHERE id = 1");
+    so.executeUpdate("UPDATE " ~ table ~ " SET v = 2 WHERE id = 2");
+    Exception otherError;
+    void blockOnRow1() {
+        try
+            so.executeUpdate("UPDATE " ~ table ~ " SET v = 2 WHERE id = 1");
+        catch (Exception e)
+            otherError = e;
+    }
+    auto thread = new Thread(&blockOnRow1);
+    thread.start();
+    Thread.sleep(500.msecs); // other now waits for row 1
+    Exception victimError;
+    try
+        sv.executeUpdate("UPDATE " ~ table ~ " SET v = 1 WHERE id = 2");
+    catch (Exception e)
+        victimError = e;
+    thread.join();
+    assert(otherError is null, otherError.msg);
+    return victimError;
+}
+
+/// After `conn` (SQL Server, auto-commit off) did work and became a deadlock victim, the server has rolled the work
+/// back: statements and commit() must refuse until rollback() (#241). `url` opens the other connection.
+void checkCommitAfterDeadlock(Connection conn, string url) {
+    import std.algorithm.searching : canFind;
+    import std.exception : assertThrown;
+    import ddbc.core : ResultSet, SQLException;
+
+    Statement setup = conn.createStatement();
+    scope (exit)
+        setup.close();
+    setup.executeUpdate("DROP TABLE IF EXISTS deadlock_test");
+    setup.executeUpdate("CREATE TABLE deadlock_test (id INT PRIMARY KEY, v INT)");
+    setup.executeUpdate("INSERT INTO deadlock_test VALUES (1, 0), (2, 0), (3, 0)");
+    void cleanup() {
+        try {
+            if (!conn.getAutoCommit())
+                conn.rollback();
+            conn.setAutoCommit(true);
+            setup.executeUpdate("DROP TABLE IF EXISTS deadlock_test");
+        } catch (Exception e) {
+            // don't hide the assertion that failed
+        }
+    }
+    scope (exit)
+        cleanup();
+    Connection other = createConnection(url);
+    scope (exit)
+        other.close();
+    conn.setAutoCommit(false);
+    other.setAutoCommit(false);
+    Statement stmt = conn.createStatement();
+    scope (exit)
+        stmt.close();
+    stmt.executeUpdate("UPDATE deadlock_test SET v = 9 WHERE id = 3"); // work before the deadlock
+    Exception e = provokeSqlServerDeadlock(conn, other, "deadlock_test");
+    assert(e !is null && e.msg.canFind("deadlock"), e is null ? "no deadlock" : e.msg);
+    other.rollback();
+    other.setAutoCommit(true);
+    assertThrown!SQLException(stmt.executeUpdate("UPDATE deadlock_test SET v = 8 WHERE id = 3"));
+    assertThrown!SQLException(conn.commit());
+    assertThrown!SQLException(conn.setAutoCommit(true));
+    conn.rollback();
+    stmt.executeUpdate("UPDATE deadlock_test SET v = 7 WHERE id = 3");
+    conn.rollback(); // still in a transaction: undoes it
+    conn.setAutoCommit(true);
+    ResultSet rs = stmt.executeQuery("SELECT v FROM deadlock_test WHERE id = 3");
+    assert(rs.next() && rs.getInt(1) == 0, "work after the deadlock was committed");
+    rs.close();
 }

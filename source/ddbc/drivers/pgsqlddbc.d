@@ -447,6 +447,7 @@ version(USE_PGSQL) {
     		lock();
     		scope(exit) unlock();
 
+            enforceNotFailed("commit");
     		Statement stmt = createStatement();
     		scope(exit) stmt.close();
     		stmt.executeUpdate("COMMIT");
@@ -519,6 +520,14 @@ version(USE_PGSQL) {
     	override bool getAutoCommit() {
     		return autocommit;
     	}
+
+        /// After an error the server aborts the transaction: its COMMIT only rolls back, with no error (#241).
+        /// Refuses that, so the caller learns the work is gone; rollback() ends the failed transaction.
+        private void enforceNotFailed(string what) {
+            if (PQtransactionStatus(conn) == PQTRANS_INERROR)
+                throw new SQLException("Can't " ~ what ~ ": the transaction failed after an error and the server rolled "
+                    ~ "back its work; call rollback() to continue");
+        }
     	override void setAutoCommit(bool autoCommit) {
     		checkClosed();
     		if (this.autocommit == autoCommit)
@@ -531,6 +540,7 @@ version(USE_PGSQL) {
                 scope(exit) stmt.close();
                 if (autoCommit) {
                   // If switching on autocommit, commit any ongoing transaction.
+                  enforceNotFailed("switch auto-commit on (commit)");
                   stmt.executeUpdate("COMMIT");
                 } else {
                   // If switching off autocommit, start a transaction.

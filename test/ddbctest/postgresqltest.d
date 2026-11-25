@@ -38,6 +38,25 @@ version(PostgresTests) {
             );
         }
 
+        /// After an error the server aborts the transaction; commit() must not report success (#241).
+        @Test
+        public void testCommitAfterError() {
+            import std.exception : assertThrown;
+            conn.setAutoCommit(false);
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("INSERT INTO my_first_test (name) VALUES ('Ann')");
+            assertThrown!SQLException(stmt.executeQuery("SELECT 1/0"));
+            assertThrown!SQLException(conn.commit());
+            assertThrown!SQLException(conn.setAutoCommit(true));
+            conn.rollback();
+            stmt.executeUpdate("INSERT INTO my_first_test (name) VALUES ('Bob')");
+            conn.rollback(); // still in a transaction: undoes it
+            conn.setAutoCommit(true);
+            ddbc.core.ResultSet rs = stmt.executeQuery("SELECT count(*) FROM my_first_test");
+            assert(rs.next() && rs.getInt(1) == 0, "rows were committed");
+        }
+
         @Test // https://github.com/buggins/ddbc/issues/226
         public void testNullTimestamp() {
             Statement stmt = conn.createStatement();
