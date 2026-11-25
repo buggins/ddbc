@@ -218,6 +218,19 @@ An in memory database can be configured by specifying **:memory:** instead of a 
 ddbc:sqlite::memory:
 ```
 
+`busy_timeout` sets how long (in milliseconds) a connection waits for another connection's lock before failing with
+`SQLITE_BUSY`; the default is 0, failing at once:
+
+```
+ddbc:sqlite:ddbc-test.sqlite?busy_timeout=5000
+```
+
+With auto-commit off, SQLite may roll the transaction back by itself after some errors (`SQLITE_FULL`,
+`SQLITE_IOERR`, `SQLITE_NOMEM`, `SQLITE_INTERRUPT`). The driver then refuses to start further statements, `commit()` and
+`setAutoCommit(true)` until `rollback()`, instead of letting them run in auto-commit mode. The same happens when a
+`COMMIT` or `ROLLBACK` statement run through a `Statement` ends the driver's transaction: with auto-commit off, end
+transactions with `commit()` and `rollback()`.
+
 SQLite has no date or time types; the driver stores dates and times as text in the forms SQLite's date and time
 functions understand: `setDate` writes `YYYY-MM-DD`, `setDateTime` `YYYY-MM-DD HH:MM:SS`, `setTime` `HH:MM:SS`.
 Before ddbc 0.15, `setDate` wrote `YYYYMMDD` and `setDateTime` `YYYYMMDDTHHMMSS` (and before 0.14.2, `setTime`
