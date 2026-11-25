@@ -10,7 +10,7 @@ import std.exception : assertThrown;
 import std.variant;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
+import ddbc.test.common : DdbcTestFixture, checkClosedByServer, checkDecimalRoundTrip;
 import ddbc.core : Connection, PreparedStatement, ResultSet, ResultSetMetaData, SqlType, SQLException, Statement,
     TransactionIsolation;
 
@@ -67,6 +67,21 @@ version(USE_CLICKHOUSE) {
                     ~ "created DateTime64(3, 'UTC'), day Date, flag Bool) ENGINE = Memory",
                 "DROP TEMPORARY TABLE IF EXISTS ddbc_ch_test"
             );
+        }
+
+        /// `isClosed()` after the connection broke underneath the driver (#248); ClickHouse can't kill a session,
+        /// so the native connection is closed directly.
+        @Test
+        public void testClosedByServer() {
+            import ddbc.common : createConnection;
+            import ddbc.drivers.clickhouseddbc : ClickHouseConnection;
+
+            Connection victim = createConnection(clickHouseUrl());
+            scope(failure) victim.close();
+            void kill() {
+                (cast(ClickHouseConnection) victim).getNativeConnection().close();
+            }
+            checkClosedByServer(victim, &kill, "SELECT 1");
         }
 
         @Test

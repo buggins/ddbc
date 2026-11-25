@@ -11,7 +11,7 @@ import std.variant;
 import core.time : minutes;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture;
+import ddbc.test.common : DdbcTestFixture, checkClosedByServer;
 import ddbc.core : Connection, Decimal, PreparedStatement, ResultSet, ResultSetMetaData, SqlType, SQLException,
     Statement;
 import ddbc.common : createConnection;
@@ -38,6 +38,26 @@ version (USE_PGNATIVE) {
                     ~ "instant TIMESTAMPTZ, notes TEXT, huge NUMERIC(30))",
                 "DROP TABLE IF EXISTS pgn_typed_values"
             );
+        }
+
+        /// `isClosed()` after the server terminated the backend (#248).
+        @Test
+        public void testClosedByServer() {
+            Connection victim = createConnection(pgnativeUrl());
+            scope(failure) victim.close();
+            Statement vs = victim.createStatement();
+            ResultSet rs = vs.executeQuery("SELECT pg_backend_pid()");
+            assertTrue(rs.next());
+            const pid = rs.getLong(1);
+            rs.close();
+            vs.close();
+            void kill() {
+                Statement stmt = conn.createStatement();
+                scope(exit) stmt.close();
+                // waits up to 5 s until the backend has exited (PostgreSQL 14+)
+                stmt.executeQuery("SELECT pg_terminate_backend(" ~ to!string(pid) ~ ", 5000)").close();
+            }
+            checkClosedByServer(victim, &kill, "SELECT 1");
         }
 
         /// Every setter and getter through a prepared statement, and NULLs of each type.

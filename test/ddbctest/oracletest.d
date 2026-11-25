@@ -11,7 +11,7 @@ import std.variant;
 import core.time : minutes;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, usableFromAnotherThread;
+import ddbc.test.common : DdbcTestFixture, checkClosedByServer, checkDecimalRoundTrip, usableFromAnotherThread;
 import ddbc.core : Connection, Decimal, PreparedStatement, ResultSet, ResultSetMetaData, SqlType, SQLException,
     Statement, TransactionIsolation;
 import ddbc.common : createConnection;
@@ -70,6 +70,47 @@ version (USE_ORACLE) {
             assertTrue(usableFromAnotherThread(c, "SELECT 1 FROM DUAL"), "the connection lock was left held");
             rs.close(); // until #244, the failed result set must be closed before the connection works again
             assertTrue(other.executeQuery("SELECT 1 FROM DUAL").next());
+        }
+
+        /// `isClosed()` after the session was killed (#248). Needs SELECT on V$SESSION and ALTER SYSTEM; skipped
+        /// without them.
+        @Test
+        public void testClosedByServer() {
+            Connection victim = createConnection(oracleUrl());
+            scope(failure) victim.close();
+            Statement vs = victim.createStatement();
+            string session;
+            try {
+                ResultSet rs = vs.executeQuery("SELECT SID || ',' || SERIAL# FROM v$session "
+                    ~ "WHERE sid = SYS_CONTEXT('USERENV', 'SID')");
+                assertTrue(rs.next());
+                session = rs.getString(1);
+                rs.close();
+            } catch (SQLException e) {
+                victim.close();
+                return; // no SELECT on V$SESSION
+            }
+            vs.close();
+            bool privileged = true;
+            void kill() {
+                Statement stmt = conn.createStatement();
+                scope(exit) stmt.close();
+                try
+                    stmt.executeUpdate("ALTER SYSTEM KILL SESSION '" ~ session ~ "' IMMEDIATE");
+                catch (SQLException e) {
+                    import std.algorithm.searching : canFind;
+
+                    if (!e.msg.canFind("ORA-01031"))
+                        throw e;
+                    privileged = false; // insufficient privileges
+                }
+            }
+            kill();
+            if (!privileged) {
+                victim.close();
+                return;
+            }
+            checkClosedByServer(victim, delegate() {}, "SELECT 1 FROM DUAL");
         }
 
         @Test
