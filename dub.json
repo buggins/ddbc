@@ -114,14 +114,14 @@
             "name": "ORACLE",
             "versions": ["USE_ORACLE"],
             "dependencies": {
-                "oracle-native": "~>0.4.3"
+                "oracle-native": "~>0.5.0"
             }
         },
         {
             "name": "PGNATIVE",
             "versions": ["USE_PGNATIVE"],
             "dependencies": {
-                "postgresql-native": "~>0.6.3"
+                "postgresql-native": "~>0.7.0"
             }
         },
         {
@@ -131,8 +131,8 @@
                 "mysql-native": "~>3.1.0",
                 "clickhoused": "~>0.9.4",
                 "mssql-native": "~>0.3.3",
-                "oracle-native": "~>0.4.3",
-                "postgresql-native": "~>0.6.3"
+                "oracle-native": "~>0.5.0",
+                "postgresql-native": "~>0.7.0"
             },
             "libs-posix": ["sqlite3"],
             "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],
@@ -214,7 +214,7 @@
             "versions": ["USE_SQLITE", "USE_ORACLE"],
             "dependencies": {
                 "d-unit": "~>0.10.2",
-                "oracle-native": "~>0.4.3"
+                "oracle-native": "~>0.5.0"
             },
             "libs-posix": ["sqlite3"],
             "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],
@@ -230,7 +230,7 @@
             "versions": ["USE_SQLITE", "USE_PGNATIVE"],
             "dependencies": {
                 "d-unit": "~>0.10.2",
-                "postgresql-native": "~>0.6.3"
+                "postgresql-native": "~>0.7.0"
             },
             "libs-posix": ["sqlite3"],
             "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],
@@ -249,8 +249,8 @@
                 "mysql-native": "~>3.1.0",
                 "clickhoused": "~>0.9.4",
                 "mssql-native": "~>0.3.3",
-                "oracle-native": "~>0.4.3",
-                "postgresql-native": "~>0.6.3"
+                "oracle-native": "~>0.5.0",
+                "postgresql-native": "~>0.7.0"
             },
             "libs-posix": ["sqlite3"],
             "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],
