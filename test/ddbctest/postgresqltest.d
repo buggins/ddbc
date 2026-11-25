@@ -10,7 +10,7 @@ import std.stdio;
 import std.typecons : Nullable;
 
 import dunit;
-import std.exception : assertThrown;
+import std.exception : assertThrown, collectException;
 import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
 import ddbc.core : Connection, PreparedStatement, Statement, SQLException, TransactionIsolation;
 import ddbc.pods;
@@ -55,6 +55,83 @@ version(PostgresTests) {
             conn.setAutoCommit(true);
             ddbc.core.ResultSet rs = stmt.executeQuery("SELECT count(*) FROM my_first_test");
             assert(rs.next() && rs.getInt(1) == 0, "rows were committed");
+        }
+
+        /// With auto-commit off, a transaction starts with the next statement, not at commit()/rollback(): the
+        /// connection doesn't sit "idle in transaction" in between (#249).
+        @Test
+        public void testNoIdleTransaction() {
+            import ddbc.common : createConnection;
+
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            ddbc.core.ResultSet rs = stmt.executeQuery("SELECT pg_backend_pid()");
+            assertTrue(rs.next());
+            const pid = rs.getLong(1);
+            rs.close();
+            Connection other = createConnection(("ddbc:postgresql://localhost:%s/testdb?user=testuser,password=passw0rd,"
+                ~ "ssl=false").format(environment.get("POSTGRES_PORT", "5432")));
+            scope(exit) other.close();
+            string state() {
+                Statement os = other.createStatement();
+                scope(exit) os.close();
+                ddbc.core.ResultSet r = os.executeQuery("SELECT state FROM pg_stat_activity WHERE pid = " ~ to!string(pid));
+                assertTrue(r.next());
+                return r.getString(1);
+            }
+            conn.setAutoCommit(false);
+            assertEquals("idle", state());
+            stmt.executeUpdate("INSERT INTO my_first_test (name) VALUES ('Ann')");
+            assertEquals("idle in transaction", state());
+            conn.commit();
+            assertEquals("idle", state());
+            stmt.executeUpdate("INSERT INTO my_first_test (name) VALUES ('Bob')");
+            conn.rollback();
+            assertEquals("idle", state());
+            conn.setAutoCommit(true);
+            rs = stmt.executeQuery("SELECT name FROM my_first_test");
+            assertTrue(rs.next());
+            assertEquals("Ann", rs.getString(1));
+            assertFalse(rs.next());
+        }
+
+        /// A single non-integer value doesn't break executeUpdate's insert id (#249).
+        @Test
+        public void testTextInsertId() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            Variant id;
+            stmt.executeUpdate("INSERT INTO my_first_test (name) VALUES ('Ann') RETURNING name", id);
+            assertEquals("Ann", id.get!string);
+            stmt.executeUpdate("INSERT INTO my_first_test (name) VALUES ('Bob') RETURNING id", id);
+            assertTrue(id.get!long > 0);
+        }
+
+        version (USE_PGSQL) {
+            /// isClosed() after the server terminated the backend (#248); PGNATIVE has its own test.
+            @Test
+            public void testClosedByServer() {
+                import ddbc.common : createConnection;
+
+                Connection victim = createConnection(("ddbc:postgresql://localhost:%s/testdb?user=testuser,"
+                    ~ "password=passw0rd,ssl=false").format(environment.get("POSTGRES_PORT", "5432")));
+                scope(failure) victim.close();
+                Statement vs = victim.createStatement();
+                ddbc.core.ResultSet rs = vs.executeQuery("SELECT pg_backend_pid()");
+                assertTrue(rs.next());
+                const pid = rs.getLong(1);
+                rs.close();
+                Statement stmt = conn.createStatement();
+                scope(exit) stmt.close();
+                // waits up to 5 s until the backend has exited (PostgreSQL 14+)
+                stmt.executeQuery("SELECT pg_terminate_backend(" ~ to!string(pid) ~ ", 5000)").close();
+                assertFalse(victim.isClosed());
+                auto e = collectException!SQLException(vs.executeQuery("SELECT 1"));
+                assertTrue(e !is null);
+                assertTrue(victim.isClosed());
+                vs.close();
+                victim.close();
+            }
         }
 
         @Test // https://github.com/buggins/ddbc/issues/226
