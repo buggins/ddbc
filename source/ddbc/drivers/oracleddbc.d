@@ -422,14 +422,22 @@ version (USE_ORACLE)
         }
 
         /// Frees the server connection before another statement runs on it: an unfinished
-        /// result set is read into memory. Call with the lock held.
+        /// result set is read into memory. An error in its rows (a fetch that fails at row N, a cancel, a lost
+        /// session) goes to its reader, from `next()` after the rows read before it, not to the statement that
+        /// needs the connection (#244). Call with the lock held.
         void prepareForStatement()
         {
-            if (activeResultSet !is null)
+            if (activeResultSet is null)
+                return;
+            auto rs = activeResultSet;
+            try
+                rs.bufferRemaining();
+            catch (Exception e)
             {
-                activeResultSet.bufferRemaining();
-                activeResultSet = null;
+                if (rs.failure is null || !ora.isOpen)
+                    throw e; // not an error in its rows, or one that closed the connection: the caller needs it
             }
+            activeResultSet = null;
         }
 
         void onStatementClosed(OracleStatement stmt)
@@ -603,8 +611,9 @@ version (USE_ORACLE)
         ddbc.core.ResultSet wrap(OR.QueryResult result, string sql)
         {
             resultSet = new OracleResultSet(this, result);
+            resultSet.sql = sql;
             conn.activeResultSet = resultSet;
-            translate(resultSet.start(), sql); // the first row, or the end
+            resultSet.start(); // the first row, or the end
             return resultSet;
         }
 
@@ -977,6 +986,8 @@ version (USE_ORACLE)
         bool afterLast;
         bool closed;
         bool lastIsNull;
+        Exception failure; // an error while reading rows ahead: thrown by next() after the buffered rows
+        string sql; // for error messages
         int[string] columnIndex;
 
         void checkClosed()
@@ -985,29 +996,59 @@ version (USE_ORACLE)
         }
 
         /// Reads the next row from the server into `buffered`; false at the end. Call with the lock held.
+        /// An error in the rows ends the result set and is kept in `failure` (#244) when oracle-native has read
+        /// the response to its end, or closed the connection; otherwise (a call from the wrong thread) the result
+        /// set stays active. Other exceptions (vibe.d's InterruptException) propagate unchanged.
         bool readAhead()
         {
             if (exhausted)
                 return false;
-            if (started)
-                result.popFront();
-            started = true;
-            if (result.empty)
+            try
             {
-                exhausted = true;
-                if (stmt.conn.activeResultSet is this)
+                if (started)
+                    result.popFront();
+                started = true;
+                if (result.empty)
                 {
-                    stmt.conn.activeResultSet = null;
-                    stmt.conn.commitIfAuto();
+                    exhausted = true;
+                    if (stmt.conn.activeResultSet is this)
+                    {
+                        stmt.conn.activeResultSet = null;
+                        stmt.conn.commitIfAuto();
+                    }
+                    return false;
                 }
-                return false;
+                auto row = result.front;
+                auto values = new OR.Value[row.length];
+                foreach (i; 0 .. row.length)
+                    values[i] = row[i]; // the bytes are immutable: they stay valid
+                buffered ~= values;
+                return true;
             }
-            auto row = result.front;
-            auto values = new OR.Value[row.length];
-            foreach (i; 0 .. row.length)
-                values[i] = row[i]; // the bytes are immutable: they stay valid
-            buffered ~= values;
-            return true;
+            catch (DbException e)
+            {
+                auto error = new SQLException(sql.length ? e.msg ~ " - while executing " ~ sql : e.msg, e);
+                auto conn = stmt.conn;
+                if (conn.ora.isBusy)
+                    throw error; // the response wasn't read: the rows can still be read, or the result closed
+                exhausted = true;
+                if (conn.activeResultSet is this)
+                {
+                    conn.activeResultSet = null;
+                    if (conn.ora.isOpen)
+                    {
+                        // in auto-commit mode, ends what the query held (the locks of a SELECT ... FOR UPDATE)
+                        try
+                            conn.commitIfAuto();
+                        catch (Exception)
+                        {
+                            // the query's error is the one reported
+                        }
+                    }
+                }
+                failure = error;
+                throw error;
+            }
         }
 
         OR.Value cell(int columnIndex)
@@ -1133,7 +1174,17 @@ version (USE_ORACLE)
                 conn.lock();
                 scope (exit)
                     conn.unlock();
-                translate(readAhead());
+                try
+                    readAhead();
+                catch (Exception e)
+                {
+                    if (failure !is null)
+                    {
+                        current = null;
+                        afterLast = true; // reported here; no current row: the getters refuse, later calls return false
+                    }
+                    throw e;
+                }
             }
             if (buffered.length)
             {
@@ -1144,6 +1195,8 @@ version (USE_ORACLE)
             }
             current = null;
             afterLast = true;
+            if (failure !is null)
+                throw failure; // the rows ended with an error, met while another statement read them ahead
             rowNumber++;
             return false;
         }
@@ -1172,11 +1225,20 @@ version (USE_ORACLE)
                 return false;
             if (buffered.length)
                 return false;
+            if (failure !is null)
+                return false; // the rows end with an error, which next() reports
             auto conn = stmt.conn;
             conn.lock();
             scope (exit)
                 conn.unlock();
-            return !translate(readAhead());
+            try
+                return !readAhead();
+            catch (SQLException e)
+            {
+                if (failure is null)
+                    throw e;
+                return false; // stored in `failure`: next() reports it
+            }
         }
 
         override int findColumn(string columnName)
