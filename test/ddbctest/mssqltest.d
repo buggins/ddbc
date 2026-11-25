@@ -11,7 +11,7 @@ import std.variant;
 import core.time : hnsecs, minutes;
 
 import dunit;
-import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip;
+import ddbc.test.common : DdbcTestFixture, checkDecimalRoundTrip, usableFromAnotherThread;
 import ddbc.core : Connection, Decimal, PreparedStatement, ResultSet, ResultSetMetaData, SqlType, SQLException,
     Statement, TransactionIsolation;
 import ddbc.common : createConnection;
@@ -36,6 +36,23 @@ version (USE_MSSQL) {
                 "DROP TABLE IF EXISTS [my_first_test];CREATE TABLE [my_first_test] ([id] INT NOT NULL IDENTITY(1,1) PRIMARY KEY, [name] NVARCHAR(255) NOT NULL)",
                 "DROP TABLE IF EXISTS [my_first_test]"
             );
+        }
+
+        /// An error while the rest of a result set is read for the next statement doesn't leave the connection
+        /// locked (#242): another thread can still use it.
+        @Test
+        public void testLockReleasedAfterRowError() {
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            // divide by zero at row 5, after rows were sent
+            ResultSet rs = stmt.executeQuery("SELECT 1 / (5 - n) FROM (VALUES (1), (2), (3), (4), (5), (6)) AS t(n)");
+            assertTrue(rs.next());
+            Statement other = conn.createStatement();
+            scope(exit) other.close();
+            assertThrown!Exception(other.executeQuery("SELECT 1")); // reads the rest of rs first
+            assertTrue(usableFromAnotherThread(conn, "SELECT 1"), "the connection lock was left held");
+            rs.close(); // until #244, the failed result set must be closed before the connection works again
+            assertTrue(other.executeQuery("SELECT 1").next());
         }
 
         @Test

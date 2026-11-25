@@ -640,6 +640,8 @@ version (USE_MSSQL)
             checkClosed();
             conn.checkClosed();
             conn.lock();
+            scope (failure)
+                conn.unlock(); // the callers unlock only after begin() returns (#242)
             conn.prepareForStatement();
             closeResultSet();
         }
