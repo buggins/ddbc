@@ -53,6 +53,7 @@ version (USE_PGNATIVE)
 {
     pragma(msg, "DDBC will use the native PostgreSQL driver (postgresql-native)");
 
+    import core.time : Duration;
     import std.conv : ConvException, to;
     import std.datetime : Date, DateTime, TimeOfDay;
     import std.datetime.systime : SysTime;
@@ -63,7 +64,8 @@ version (USE_PGNATIVE)
     import PG = postgresql;
     import dbwire.exception : DbException;
     import dbwire.io.backend : IoLock, backendFor;
-    import ddbc.drivers.utils : connectFailure, connectorError;
+    import ddbc.drivers.utils : connectFailure, connectorError, CurrentStatement, newStatementSerial,
+        QueryTimeoutProperty;
 
     /// Translates postgresql-native errors into `SQLException`s.
     private T translate(T)(lazy T action, string context = null)
@@ -77,9 +79,12 @@ version (USE_PGNATIVE)
     }
 
     /// The `SQLException` for a postgresql-native error: the server's SQLSTATE, classified (#246). A FATAL error
-    /// ended the session (e.g. `pg_terminate_backend`, 57P01): the connection is gone.
+    /// ended the session (e.g. `pg_terminate_backend`, 57P01): the connection is gone. The client's command timeout
+    /// (the query timeout, #247) → HYT00: the server's 57014 is the same for a cancel.
     private SQLException pgError(DbException e, string msg)
     {
+        if (cast(PG.StatementTimeoutException) e)
+            return makeSQLException(msg, "HYT00", 0, SQLErrorKind.timeout, e);
         if (auto server = cast(PG.ServerException) e)
         {
             const state = server.sqlState;
@@ -406,6 +411,8 @@ version (USE_PGNATIVE)
         IoLock driverLock;
         PGNativeStatement[] activeStatements;
         PGNativeResultSet activeResultSet; // streaming result set holding the server connection
+        CurrentStatement current; // the statement that ran last, for Statement.cancel() (#247)
+        Duration defaultCommandTimeout; // the command timeout of the URL, for statements without a query timeout
         bool closed;
         bool autoCommit = true;
         TransactionIsolation isolation = TransactionIsolation.READ_COMMITTED;
@@ -444,6 +451,7 @@ version (USE_PGNATIVE)
             {
                 driverLock = backendFor(options.ioMode).newLock();
                 pg = new PG.Connection(options);
+                defaultCommandTimeout = pg.commandTimeout;
             }
             catch (DbException e)
             {
@@ -499,6 +507,13 @@ version (USE_PGNATIVE)
                 return false;
         }
 
+        /// The active result set ended or let go of the connection: no statement holds it any more (#247).
+        void resultSetDone()
+        {
+            activeResultSet = null;
+            current.clear();
+        }
+
         /// Frees the server connection before another statement runs on it: an unfinished
         /// result set is read into memory. Call with the lock held.
         void prepareForStatement()
@@ -523,7 +538,7 @@ version (USE_PGNATIVE)
                 if (rs.failure is null || !pg.isOpen)
                     throw e; // not an error in its rows, or one that closed the connection: the caller needs it
             }
-            activeResultSet = null;
+            resultSetDone();
         }
 
         void onStatementClosed(PGNativeStatement stmt)
@@ -713,15 +728,19 @@ version (USE_PGNATIVE)
         PGNativeConnection conn;
         PGNativeResultSet resultSet;
         bool closed;
+        immutable ulong serial; // for cancel(): see CurrentStatement
 
         void checkClosed()
         {
             enforce!SQLException(!closed, "Statement is already closed");
         }
 
-        /// Starts a statement: checks state, takes the lock, frees the server connection.
+        /// Starts a statement: checks state, takes the lock, frees the server connection, applies the query
+        /// timeout (or the URL's command timeout) to the request (#247).
         void begin()
         {
+            import core.time : seconds;
+
             checkClosed();
             conn.checkClosed();
             conn.lock();
@@ -729,6 +748,19 @@ version (USE_PGNATIVE)
                 conn.unlock(); // the callers unlock only after begin() returns (#242)
             closeResultSet();
             translate(conn.prepareForStatement());
+            conn.pg.commandTimeout = queryTimeoutSeconds > 0 ? queryTimeoutSeconds.seconds : conn.defaultCommandTimeout;
+            conn.current.set(serial);
+        }
+
+        /// Ends a statement started by begin(): the URL's command timeout again for the connection's other
+        /// requests (commit, rollback, metadata); a request keeps the timeout it started with. Without a result set
+        /// that holds the connection, the statement's cancel() no longer reaches it (#247).
+        void end()
+        {
+            conn.pg.commandTimeout = conn.defaultCommandTimeout;
+            if (conn.activeResultSet is null)
+                conn.current.clear();
+            conn.unlock();
         }
 
         ddbc.core.ResultSet wrap(PG.QueryResult result, string sql)
@@ -755,6 +787,19 @@ version (USE_PGNATIVE)
         this(PGNativeConnection conn)
         {
             this.conn = conn;
+            serial = newStatementSerial();
+        }
+
+        mixin QueryTimeoutProperty;
+
+        /// Cancels the statement this statement runs, or whose rows its result set reads (a CancelRequest; #247).
+        /// The command timeout of a request (the query timeout) covers the reading of its rows too.
+        override void cancel()
+        {
+            auto pg = conn.pg;
+            if (closed || pg is null || !conn.current.isCurrent(serial))
+                return;
+            translate(pg.cancel());
         }
 
         override DialectType getDialectType()
@@ -772,7 +817,7 @@ version (USE_PGNATIVE)
         {
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             return wrap(translate(conn.pg.query(query), query), query);
         }
 
@@ -781,7 +826,7 @@ version (USE_PGNATIVE)
         {
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             const n = translate(conn.pg.exec(query), query);
             return n > int.max ? int.max : cast(int) n;
         }
@@ -791,7 +836,7 @@ version (USE_PGNATIVE)
         {
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             auto result = translate(conn.pg.query(query), query);
             return translate(update(result, insertId), query);
         }
@@ -866,7 +911,7 @@ version (USE_PGNATIVE)
             auto v = values();
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             auto rs = wrap(translate(conn.pg.query(sql, v), sql), sql);
             lastMetadata = rs.getMetaData();
             return rs;
@@ -884,7 +929,7 @@ version (USE_PGNATIVE)
             auto v = values();
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             auto result = translate(conn.pg.query(sql, v), sql);
             return translate(update(result, insertId), sql);
         }
@@ -1113,7 +1158,7 @@ version (USE_PGNATIVE)
         {
             exhausted = true;
             if (stmt.conn.activeResultSet is this)
-                stmt.conn.activeResultSet = null;
+                stmt.conn.resultSetDone();
         }
 
         /// Reads the next row from the server into `buffered`; false at the end. Call with the lock held.
@@ -1238,7 +1283,7 @@ version (USE_PGNATIVE)
                 exhausted = true;
             }
             if (stmt.conn.activeResultSet is this)
-                stmt.conn.activeResultSet = null;
+                stmt.conn.resultSetDone();
             buffered = null;
         }
 

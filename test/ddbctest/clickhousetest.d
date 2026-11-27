@@ -87,6 +87,14 @@ version(USE_CLICKHOUSE) {
             assert(rs.next() && rs.getInt(1) == 1, "the connection doesn't work after the errors");
         }
 
+        /// Statement.cancel() and the query timeout (#247).
+        @Test
+        public void testCancelAndTimeout() {
+            import ddbc.test.common : checkCancelAndTimeout;
+
+            checkCancelAndTimeout(conn, "SELECT sum(number) FROM numbers(100000000000)", "SELECT 1");
+        }
+
         /// `isClosed()` after the connection broke underneath the driver (#248); ClickHouse can't kill a session,
         /// so the native connection is closed directly.
         @Test

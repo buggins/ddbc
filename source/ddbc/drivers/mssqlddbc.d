@@ -61,7 +61,8 @@ version (USE_MSSQL)
     import mssql.params : rewritePlaceholders;
     import dbwire.exception : DbException;
     import dbwire.io.backend : IoLock, backendFor;
-    import ddbc.drivers.utils : connectFailure, connectorError;
+    import ddbc.drivers.utils : cancelledError, connectFailure, connectorError, CurrentStatement,
+        newStatementSerial, QueryTimeoutProperty;
 
     /// Translates mssql-native errors into `SQLException`s.
     private T translate(T)(lazy T action, string context = null)
@@ -100,6 +101,8 @@ version (USE_MSSQL)
         }
         if (cast(MS.StatementTimeoutException) e)
             return makeSQLException(msg, "HYT00", 0, SQLErrorKind.timeout, e);
+        if (cast(MS.ClientException) e && e.msg == "The batch was cancelled") // exec() after a cancel (#247)
+            return cancelledError(e);
         return connectorError(e, msg);
     }
 
@@ -450,6 +453,8 @@ version (USE_MSSQL)
         IoLock driverLock;
         MSSQLStatement[] activeStatements;
         MSSQLResultSet activeResultSet; // streaming result set holding the server connection
+        CurrentStatement current; // the statement that ran last, for Statement.cancel() (#247)
+        Duration defaultCommandTimeout; // the command timeout of the URL, for statements without a query timeout
         bool closed;
         bool autoCommit = true;
         TransactionIsolation isolation = TransactionIsolation.READ_COMMITTED;
@@ -549,6 +554,7 @@ version (USE_MSSQL)
             {
                 driverLock = backendFor(options.ioMode).newLock();
                 ms = new MS.Connection(options);
+                defaultCommandTimeout = ms.commandTimeout;
             }
             catch (DbException e)
             {
@@ -604,6 +610,13 @@ version (USE_MSSQL)
                 return false;
         }
 
+        /// The active result set ended or let go of the connection: no statement holds it any more (#247).
+        void resultSetDone()
+        {
+            activeResultSet = null;
+            current.clear();
+        }
+
         /// Frees the server connection before another statement runs on it: an unfinished
         /// result set is read into memory. Call with the lock held.
         void prepareForStatement()
@@ -620,7 +633,7 @@ version (USE_MSSQL)
                     // an error in its rows: its reader gets it from next(), and the statement that needs the
                     // connection goes on (checkTransaction stops it if the server rolled back), #241
                 }
-                activeResultSet = null;
+                resultSetDone();
             }
         }
 
@@ -799,15 +812,19 @@ version (USE_MSSQL)
         MSSQLConnection conn;
         MSSQLResultSet resultSet;
         bool closed;
+        immutable ulong serial; // for cancel(): see CurrentStatement
 
         void checkClosed()
         {
             enforce!SQLException(!closed, "Statement is already closed");
         }
 
-        /// Starts a statement: checks state, takes the lock, frees the server connection.
+        /// Starts a statement: checks state, takes the lock, frees the server connection, applies the query
+        /// timeout (or the URL's command timeout) to the request (#247).
         void begin()
         {
+            import core.time : seconds;
+
             checkClosed();
             conn.checkClosed();
             conn.lock();
@@ -816,6 +833,19 @@ version (USE_MSSQL)
             conn.prepareForStatement();
             closeResultSet();
             conn.checkTransaction();
+            conn.ms.commandTimeout = queryTimeoutSeconds > 0 ? queryTimeoutSeconds.seconds : conn.defaultCommandTimeout;
+            conn.current.set(serial);
+        }
+
+        /// Ends a statement started by begin(): the URL's command timeout again for the connection's other
+        /// requests (commit, rollback, metadata); a request keeps the timeout it started with. Without a result set
+        /// that holds the connection, the statement's cancel() no longer reaches it (#247).
+        void end()
+        {
+            conn.ms.commandTimeout = conn.defaultCommandTimeout;
+            if (conn.activeResultSet is null)
+                conn.current.clear();
+            conn.unlock();
         }
 
         /// Runs a statement's server call (after begin()), recording the server's transaction state (#241).
@@ -837,6 +867,8 @@ version (USE_MSSQL)
         ddbc.core.ResultSet wrap(MS.QueryResult result, string sql)
         {
             translate(result.empty, sql); // the first row, or the end
+            if (result.empty && result.cancelled)
+                throw cancelledError(); // (a command timeout throws StatementTimeoutException instead)
             resultSet = new MSSQLResultSet(this, result);
             conn.activeResultSet = resultSet;
             return resultSet;
@@ -847,7 +879,7 @@ version (USE_MSSQL)
         {
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             const batch = sql ~ "\nSELECT CAST(SCOPE_IDENTITY() AS bigint)";
             int run()
             {
@@ -864,6 +896,8 @@ version (USE_MSSQL)
                     }
                     while (result.nextResult());
                 }(), sql);
+                if (result.cancelled)
+                    throw cancelledError();
                 insertId = last;
                 const n = result.recordsAffected;
                 return n > int.max ? int.max : cast(int) n;
@@ -875,6 +909,19 @@ version (USE_MSSQL)
         this(MSSQLConnection conn)
         {
             this.conn = conn;
+            serial = newStatementSerial();
+        }
+
+        mixin QueryTimeoutProperty;
+
+        /// Cancels the batch this statement runs, or whose rows its result set reads (an attention request; #247).
+        /// The command timeout of a request (the query timeout) covers the reading of its rows too.
+        override void cancel()
+        {
+            auto ms = conn.ms;
+            if (closed || ms is null || !conn.current.isCurrent(serial))
+                return;
+            translate(ms.cancel());
         }
 
         override DialectType getDialectType()
@@ -892,7 +939,7 @@ version (USE_MSSQL)
         {
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             return track(wrap(translate(conn.ms.query(query), query), query));
         }
 
@@ -900,7 +947,7 @@ version (USE_MSSQL)
         {
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             const n = track(translate(conn.ms.exec(query), query));
             return n > int.max ? int.max : cast(int) n;
         }
@@ -990,7 +1037,7 @@ version (USE_MSSQL)
             checkSet();
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             auto rs = track(wrap(translate(statement().query(params), sql), sql));
             lastMetadata = rs.getMetaData();
             return rs;
@@ -1001,7 +1048,7 @@ version (USE_MSSQL)
             checkSet();
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             const n = track(translate(statement().exec(params), sql));
             return n > int.max ? int.max : cast(int) n;
         }
@@ -1241,6 +1288,16 @@ version (USE_MSSQL)
             enforce!SQLException(!closed, "Result set is already closed");
         }
 
+        /// Moves the result to its next row; false at its end. Throws the cancel's error when `cancel()` stopped
+        /// the batch (mssql-native just ends the rows then; #247).
+        bool fetchRow()
+        {
+            const more = translate(result.next());
+            if (!more && result.cancelled)
+                throw cancelledError();
+            return more;
+        }
+
         /// A copy of the result's current row that stays valid after the result moves on.
         MS.Value[] copyRow()
         {
@@ -1265,7 +1322,7 @@ version (USE_MSSQL)
             }
             exhausted = true;
             if (stmt.conn.activeResultSet is this)
-                stmt.conn.activeResultSet = null;
+                stmt.conn.resultSetDone();
         }
 
         /// Reads the next row from the server into `buffered`; false at the end. Call with the lock held.
@@ -1280,7 +1337,7 @@ version (USE_MSSQL)
             }
             bool more;
             try
-                more = translate(result.next());
+                more = fetchRow();
             catch (Exception e)
             {
                 // e.g. a deadlock while the rows were sent (#241); the reader gets it after the buffered rows
@@ -1293,7 +1350,7 @@ version (USE_MSSQL)
             {
                 exhausted = true;
                 if (stmt.conn.activeResultSet is this)
-                    stmt.conn.activeResultSet = null;
+                    stmt.conn.resultSetDone();
                 stmt.conn.statementSucceeded(); // the rest of the batch may have committed (#241)
                 return false;
             }
@@ -1387,7 +1444,7 @@ version (USE_MSSQL)
                 exhausted = true;
             }
             if (stmt.conn.activeResultSet is this)
-                stmt.conn.activeResultSet = null;
+                stmt.conn.resultSetDone();
             buffered = null;
             current = null;
         }
@@ -1431,7 +1488,7 @@ version (USE_MSSQL)
                     conn.unlock();
                 bool more;
                 try
-                    more = translate(result.next());
+                    more = fetchRow();
                 catch (Exception e)
                 {
                     // e.g. a deadlock while the rows were sent (#241)
@@ -1449,7 +1506,7 @@ version (USE_MSSQL)
                 }
                 exhausted = true;
                 if (conn.activeResultSet is this)
-                    conn.activeResultSet = null;
+                    conn.resultSetDone();
                 conn.statementSucceeded(); // the rest of the batch may have committed (#241)
             }
             live = false;

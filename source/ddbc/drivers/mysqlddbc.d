@@ -42,6 +42,7 @@ import std.variant;
 import core.sync.mutex;
 import ddbc.common;
 import ddbc.core;
+import ddbc.drivers.utils : QueryTimeoutProperty;
 
 version(USE_MYSQL) {
     pragma(msg, "DDBC will use MySQL driver");
@@ -230,8 +231,35 @@ private:
     enum transactionLostMessage = "the connection to the MySQL server was closed, so the server rolled back the open "
         ~ "transaction; call rollback() to continue";
 
+    int sessionTimeout; // the statement timeout (seconds) the driver set on the session; 0: the server's (#247)
+
+    /**
+     * Before a statement with the query timeout `seconds` (0: none): sets the session's statement timeout when it
+     * differs from what the driver set last (#247). MariaDB: `max_statement_time`, for every statement; MySQL:
+     * `max_execution_time`, for read-only SELECTs only. 0 sets it back to the server's default. `sql` is the
+     * statement: one that names the variable takes it over. Called with the lock held, after checkSession().
+     */
+    void applyQueryTimeout(int seconds, const(char)[] sql) {
+        import std.uni : asLowerCase;
+
+        scope (exit) {
+            auto lower = sql.asLowerCase;
+            if (lower.canFind("max_statement_time") || lower.canFind("max_execution_time"))
+                sessionTimeout = 0; // the statement sets it itself: the session's value is its own again
+        }
+        if (seconds == sessionTimeout)
+            return;
+        const value = seconds == 0 ? "DEFAULT" : conn.serverVersion.canFind("MariaDB") ? to!string(seconds)
+            : to!string(seconds * 1000L);
+        exec(conn, (conn.serverVersion.canFind("MariaDB") ? "SET SESSION max_statement_time = "
+            : "SET SESSION max_execution_time = ") ~ value);
+        sessionTimeout = seconds;
+    }
+
     /// Called with the lock held before each command that is sent to the server.
     void checkSession() {
+        if (conn.closed)
+            sessionTimeout = 0; // mysql-native opens a new session, with the server's settings
         if (!transactionLost && conn.closed) {
             if (!autocommit && transactionStarted)
                 transactionLost = true;
@@ -479,6 +507,12 @@ public:
         checkClosed();
         if (!autocommit || transactionLost || (!conn.closed && (conn.serverStatus & serverStatusInTrans)))
             rollback();
+        if (sessionTimeout != 0) { // the last borrower's query timeout (#247)
+            lock();
+            scope(exit) unlock();
+            checkSession();
+            applyQueryTimeout(0, null);
+        }
     }
 
     override bool getAutoCommit() {
@@ -600,6 +634,20 @@ public:
         this.conn = conn;
     }
 
+    mixin QueryTimeoutProperty;
+
+    /**
+     * Not supported: mysql-native has no cancel, and `KILL QUERY` needs a second connection (#247). The query timeout
+     * works: MariaDB's `max_statement_time` (every statement), MySQL's `max_execution_time` (read-only SELECTs only).
+     * It stays on the session until a statement with another timeout changes it, so on MariaDB `commit()` runs under
+     * the last statement's timeout.
+     *
+     * Throws: `SQLFeatureNotSupportedException`.
+     */
+    override void cancel() {
+        throw new SQLFeatureNotSupportedException("Statement.cancel() is not supported with MySQL");
+    }
+
     ResultSetMetaData createMetadata(FieldDescription[] fields) {
         ColumnMetadataItem[] res = new ColumnMetadataItem[fields.length];
         foreach(i, field; fields) {
@@ -645,6 +693,7 @@ public:
 
         conn.checkSession();
 		try {
+            conn.applyQueryTimeout(queryTimeoutSeconds, queryString); // #247
 	        results = query(conn.getConnection(), queryString);
     	    resultSet = new MySQLResultSet(this, results, createMetadata(conn.getConnection().resultFieldDescriptions));
 	        conn.statementRan(); // after the rows are read (the result set reads them all)
@@ -663,6 +712,7 @@ public:
         
         conn.checkSession();
 		try {
+            conn.applyQueryTimeout(queryTimeoutSeconds, query); // #247
 			rowsAffected = exec(conn.getConnection(), query);
 			conn.statementRan();
 	        return cast(int)rowsAffected;
@@ -676,6 +726,7 @@ public:
 		scope(exit) unlock();
         conn.checkSession();
         try {
+            conn.applyQueryTimeout(queryTimeoutSeconds, query); // #247
     		ulong rowsAffected = exec(conn.getConnection(), query);
     		conn.statementRan();
     		insertId = Variant(conn.getConnection().lastInsertID);
@@ -772,6 +823,7 @@ public:
         scope(exit) unlock();
         conn.checkSession();
         try {
+            conn.applyQueryTimeout(queryTimeoutSeconds, statement.sql); // #247
             ulong rowsAffected = 0;
             rowsAffected = conn.getConnection().exec(statement);
             conn.statementRan();
@@ -787,6 +839,7 @@ public:
 		scope(exit) unlock();
         conn.checkSession();
         try {
+            conn.applyQueryTimeout(queryTimeoutSeconds, statement.sql); // #247
     		ulong rowsAffected = 0;
     		rowsAffected = conn.getConnection().exec(statement);
     		conn.statementRan();
@@ -806,6 +859,7 @@ public:
 
         conn.checkSession();
         try {
+            conn.applyQueryTimeout(queryTimeoutSeconds, statement.sql); // #247
             results = query(conn.getConnection(), statement);
             resultSet = new MySQLResultSet(this, results, getMetaData());
             conn.statementRan(); // after the rows are read (the result set reads them all)

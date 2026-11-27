@@ -1034,6 +1034,9 @@ version (unittest) {
 		int executeUpdate(string query) { return 0; }
 		int executeUpdate(string query, out Variant insertId) { return 0; }
 		void close() { }
+		void cancel() { }
+		void setQueryTimeout(int seconds) { }
+		int getQueryTimeout() { return 0; }
 		DialectType getDialectType() { return driver.dialect; }
 	}
 }

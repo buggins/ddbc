@@ -63,7 +63,8 @@ version (USE_CLICKHOUSE)
 
     import CH = clickhoused;
     import clickhoused.io.backend : PoolSync, backendFor;
-    import ddbc.drivers.utils : connectFailure, connectorError;
+    import ddbc.drivers.utils : cancelledError, connectFailure, connectorError, CurrentStatement,
+        newStatementSerial, QueryTimeoutProperty;
 
     /// The type without `Nullable(...)` and `LowCardinality(...)` wrappers, in any order.
     private string baseClickHouseType(string typeName)
@@ -396,6 +397,7 @@ version (USE_CLICKHOUSE)
         DriverLock driverLock;
         ClickHouseStatement[] activeStatements;
         ClickHouseResultSet activeResultSet; // streaming result set holding the server connection
+        CurrentStatement current; // the statement that ran last, for Statement.cancel() (#247)
         bool closed;
 
         /// Throws `SQLNonTransientConnectionException` (08003) if the connection was closed: by `close()`, or with
@@ -495,6 +497,13 @@ version (USE_CLICKHOUSE)
                 return false;
         }
 
+        /// The active result set ended or let go of the connection: no statement holds it any more (#247).
+        void resultSetDone()
+        {
+            activeResultSet = null;
+            current.clear();
+        }
+
         /// Frees the server connection before another statement runs on it: an unfinished
         /// result set is read into memory. An error in its blocks (a timeout, a runtime error at row N) goes
         /// to its reader, from `next()` after the rows read before it, not to the statement that needs the
@@ -511,7 +520,7 @@ version (USE_CLICKHOUSE)
                 if (rs.failure is null || !ch.isOpen)
                     throw e; // not an error in its blocks, or one that closed the connection: the caller needs it
             }
-            activeResultSet = null;
+            resultSetDone();
         }
 
         void onStatementClosed(ClickHouseStatement stmt)
@@ -669,10 +678,19 @@ version (USE_CLICKHOUSE)
         ClickHouseConnection conn;
         ClickHouseResultSet resultSet;
         bool closed;
+        immutable ulong serial; // for cancel(): see CurrentStatement
 
         void checkClosed()
         {
             enforce!SQLException(!closed, "Statement is already closed");
+        }
+
+        /// The query's settings: the query timeout as `max_execution_time`, which the server checks (#247).
+        string[string] settings()
+        {
+            if (queryTimeoutSeconds <= 0)
+                return null;
+            return ["max_execution_time": to!string(queryTimeoutSeconds)];
         }
 
         ddbc.core.ResultSet runQuery(string sql, const string[string] parameters)
@@ -684,7 +702,11 @@ version (USE_CLICKHOUSE)
                 conn.unlock();
             conn.prepareForStatement();
             closeResultSet();
-            auto result = translate(conn.ch.query(sql, null, parameters), sql);
+            conn.current.set(serial);
+            scope (exit)
+                if (conn.activeResultSet is null)
+                    conn.current.clear(); // (failed: no result set holds the connection; #247)
+            auto result = translate(conn.ch.query(sql, settings(), parameters), sql);
             translate(result.empty, sql); // reads the header (and the first block)
             resultSet = new ClickHouseResultSet(this, result);
             resultSet.sql = sql;
@@ -700,7 +722,12 @@ version (USE_CLICKHOUSE)
             scope (exit)
                 conn.unlock();
             conn.prepareForStatement();
-            const stats = translate(conn.ch.exec(sql, null, parameters), sql);
+            conn.current.set(serial);
+            scope (exit)
+                conn.current.clear(); // done: a late cancel() no longer reaches the connection (#247)
+            // (no check of stats.cancelled: DDL and INSERT ... SELECT never get the statistics that tell a finished
+            // statement from a cancelled one, #247)
+            const stats = translate(conn.ch.exec(sql, settings(), parameters), sql);
             return stats.progress.writtenRows > int.max ? int.max : cast(int) stats.progress.writtenRows;
         }
 
@@ -708,6 +735,28 @@ version (USE_CLICKHOUSE)
         this(ClickHouseConnection conn)
         {
             this.conn = conn;
+            serial = newStatementSerial();
+        }
+
+        mixin QueryTimeoutProperty;
+
+        /// Cancels the query this statement runs, or whose blocks its result set reads (a Cancel packet; #247). An
+        /// INSERT with data can't be cancelled: then this does nothing. A cancelled `executeUpdate` returns
+        /// normally: the server ends it like a finished one, so whether it took effect, fully or in part (an
+        /// `INSERT ... SELECT`), is unknown. The query timeout is the server's `max_execution_time`: it limits the
+        /// whole query.
+        override void cancel()
+        {
+            auto ch = conn.ch;
+            if (closed || ch is null || !conn.current.isCurrent(serial))
+                return;
+            try
+                translate(ch.cancel());
+            catch (SQLException e)
+            {
+                if (cast(CH.ClientException) e.next is null)
+                    throw e; // (a ClientException: an INSERT, which can't be cancelled)
+            }
         }
 
         override DialectType getDialectType()
@@ -1209,7 +1258,7 @@ version (USE_CLICKHOUSE)
         {
             exhausted = true;
             if (stmt.conn.activeResultSet is this)
-                stmt.conn.activeResultSet = null;
+                stmt.conn.resultSetDone();
         }
 
         /// Reads the next non-empty block from the server. Call with the lock held. An error in the blocks
@@ -1225,6 +1274,8 @@ version (USE_CLICKHOUSE)
                 if (result.empty)
                 {
                     finish();
+                    if (result.cancelled)
+                        throw failure = cancelledError(); // cancel() stopped the query (#247)
                     return null;
                 }
                 auto b = result.front;
@@ -1306,7 +1357,7 @@ version (USE_CLICKHOUSE)
             {
                 exhausted = true;
                 if (stmt.conn.activeResultSet is this)
-                    stmt.conn.activeResultSet = null;
+                    stmt.conn.resultSetDone();
                 buffered = null;
                 block = null;
                 firstBlock = null;

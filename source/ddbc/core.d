@@ -82,7 +82,8 @@ class SQLException : Exception {
 }
 
 private mixin template SQLExceptionConstructors() {
-    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    static if (!is(typeof(this) == SQLFeatureNotSupportedException))
+        this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
     this(string msg, Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(msg, causedBy, f, l); }
     this(string msg, string sqlState, int errorCode, Throwable causedBy = null, string f = __FILE__, size_t l = __LINE__) {
         super(msg, sqlState, errorCode, causedBy, f, l);
@@ -105,9 +106,10 @@ class SQLTransactionRollbackException : SQLTransientException {
 }
 
 /// A timeout ran out: a lock wait timeout, a statement timeout set on the server (`max_execution_time`, ...) or
-/// by the client. The transaction stays open where the database keeps it after a failed statement; with MySQL it is
-/// lost, as mysql-native drops the session after a server error. PostgreSQL's `statement_timeout` is reported like a
-/// cancel (SQLSTATE 57014, a plain `SQLException`): the server sends the same code for both.
+/// by the client, such as a statement's query timeout (`Statement.setQueryTimeout`, #247). The transaction stays
+/// open where the database keeps it after a failed statement; with MySQL it is lost, as mysql-native drops the session
+/// after a server error. PostgreSQL's `statement_timeout` set in SQL is reported like a cancel (SQLSTATE 57014, a plain
+/// `SQLException`): the server sends the same code for both.
 class SQLTimeoutException : SQLTransientException {
     mixin SQLExceptionConstructors;
 }
@@ -118,6 +120,14 @@ class SQLTimeoutException : SQLTransientException {
 /// the MySQL driver opens a new session on its next statement instead (#240).
 class SQLNonTransientConnectionException : SQLException {
     mixin SQLExceptionConstructors;
+}
+
+/// The driver doesn't support the requested feature (as in JDBC), e.g. `Statement.cancel()` with MySQL; SQLSTATE
+/// `0A000` (feature not supported) (#247).
+class SQLFeatureNotSupportedException : SQLException {
+    mixin SQLExceptionConstructors;
+    /// An error with SQLSTATE `0A000`.
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, "0A000", 0, null, f, l); }
 }
 
 /// What a database error means for generic code; selects the class `makeSQLException` creates.
@@ -685,6 +695,38 @@ interface Statement : DialectAware {
 	int executeUpdate(string query);
 	int executeUpdate(string query, out Variant insertId);
 	void close();
+
+	/**
+	 * Asks the database to stop the execution or fetch running for this statement (its own, or its result set's),
+	 * as in JDBC (#247). The one call that may come from another thread or task: it never waits for the
+	 * connection's lock. Does nothing when nothing of this statement runs. A connection in vibe.d's fiber mode
+	 * (MSSQL, ORACLE, ClickHouse) takes a cancel from a task of its own thread; MSSQL and ORACLE ignore one from
+	 * another thread.
+	 *
+	 * The running call then throws an `SQLException` with SQLSTATE `57014` (query canceled), and the connection
+	 * stays usable. Like every cancel, it races with the end of the statement: a statement that ended first keeps
+	 * its result (on PostgreSQL a cancel that arrives that late may hit the session's next statement, a limit of
+	 * its protocol).
+	 *
+	 * Throws: `SQLFeatureNotSupportedException` if the driver can't cancel (MySQL).
+	 */
+	void cancel();
+
+	/**
+	 * The time limit, in seconds, for each execution of this statement and each fetch of more rows of its result
+	 * (as in JDBC; #247); 0, the default, keeps the connection's own setting (a driver's `command_timeout` or
+	 * `call_timeout` parameter; none otherwise). It applies from the next call. When it runs out, the call is
+	 * cancelled and throws `SQLTimeoutException` (SQLSTATE `HYT00`), and the connection stays usable. MySQL is the
+	 * exception: the error keeps the server's SQLSTATE (MySQL `HY000`, error 3024; MariaDB `70100`, error 1969),
+	 * and mysql-native then drops the session, so an open transaction is lost. What counts differs a little by
+	 * driver: see the README.
+	 *
+	 * Throws: `SQLException` if `seconds` is negative or the statement is closed.
+	 */
+	void setQueryTimeout(int seconds);
+
+	/// ditto
+	int getQueryTimeout();
 }
 
 /// An object that represents a precompiled SQL statement. 

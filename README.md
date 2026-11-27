@@ -212,24 +212,59 @@ the database, are thrown as subclasses (as in JDBC):
 
 `SQLTransactionRollbackException` and `SQLTimeoutException` extend `SQLTransientException`. A cancel (PostgreSQL's
 57014, ORA-01013, ClickHouse's 394, SQLite's `SQLITE_INTERRUPT`) is a plain `SQLException` with SQLSTATE 57014.
-PostgreSQL reports its `statement_timeout` with the same 57014, so it arrives as a cancel, not as an
-`SQLTimeoutException`. When the driver finds that the server rolled back the transaction after an earlier error
+PostgreSQL reports its `statement_timeout` with the same 57014, so a `statement_timeout` set in SQL arrives as a
+cancel, not as an `SQLTimeoutException`; the query timeout of a statement (see below) is reported as a timeout. When the driver finds that the server rolled back the transaction after an earlier error
 ("call rollback() to continue"), it throws a plain `SQLException` with SQLSTATE 25000: the earlier error, which may
 not be worth a retry (e.g. a duplicate key), already had its class.
 
 | Driver | SQLSTATE | Error code | Transaction rollback | Timeout | Connection |
 |---|---|---|---|---|---|
-| PGNATIVE, PGSQL | the server's | 0 | 40P01, 40001 | 55P03 | FATAL errors, 57P01–57P03 |
+| PGNATIVE, PGSQL | the server's | 0 | 40P01, 40001 | 55P03, the query timeout (HYT00) | FATAL errors, 57P01–57P03 |
 | MySQL | the server's | the server's | 1213 | 1205, 3024, 1969 | class 08, 1927, network failures |
 | MSSQL | 40001, HYT00, 08006 for the classified errors | error number | 1205, 3960 | 1222, `command_timeout` | severity 20 or more (e.g. 596) |
 | ORACLE | 40001, HYT00, 08006, 57014 for the classified errors | ORA number | 60, 8177 | 54, 2049, 30006, `call_timeout` | ORA-00028, ORA-03113, ... |
 | ClickHouse | HYT00, 57014 for the classified errors | exception code | – | 159 (`max_execution_time`) | network failures |
 | SQLite | 40001, HYT00, 57014 for the classified errors | extended result code | `SQLITE_BUSY_SNAPSHOT` | `SQLITE_BUSY` | – |
-| ODBC | the driver's | native code | class 40 | HYT00, HYT01 (SQL Server's lock timeout 1222 arrives as 42000) | class 08 |
+| ODBC | the driver's (HY008, operation canceled, becomes 57014) | native code | class 40 | HYT00, HYT01 (SQL Server's lock timeout 1222 arrives as 42000) | class 08 |
 
 Network failures and failed connects are `SQLNonTransientConnectionException` in every driver (08006, 08001).
 PostgreSQL, MySQL and SQL Server roll back (or abort) the whole transaction on a deadlock; Oracle rolls back only the
 statement, so the transaction's earlier work stays until `rollback()`.
+
+### Cancel and query timeout
+
+As in JDBC, `Statement.cancel()` stops what a statement runs (its execution, or a fetch of its result set's rows) and
+may be called from another thread or vibe.d task; `setQueryTimeout(seconds)` limits each execution and each fetch of
+more rows (0, the default, keeps the connection's own setting, such as `command_timeout` in the URL):
+
+```d
+Statement stmt = conn.createStatement();
+stmt.setQueryTimeout(30);
+try {
+    auto rs = stmt.executeQuery("SELECT slow_report()");
+    while (rs.next()) { ... }
+} catch (SQLTimeoutException e) {
+    // SQLSTATE HYT00 (MySQL: the server's own); the connection works
+}
+// from another thread: the running call throws SQLException with SQLSTATE 57014
+stmt.cancel();
+```
+
+The connection stays usable after both (MySQL: see the table). A statement that ended before the cancel reached the
+server keeps its result; PostgreSQL's protocol can't rule out that a cancel arriving that late hits the session's next
+statement. A connection in vibe.d's fiber mode (MSSQL, ORACLE, ClickHouse) takes a cancel from a task of its own
+thread; MSSQL and ORACLE ignore one from another thread.
+
+| Driver | `cancel()` | Query timeout |
+|---|---|---|
+| PGNATIVE | a CancelRequest | postgresql-native's `commandTimeout`: the time a request waits for the server, rows included |
+| PGSQL | `PQcancel` | the server's `statement_timeout`, set before a statement when it changes (one more round trip; a `ROLLBACK TO SAVEPOINT` undoes it unnoticed); it stays on the session until then, so `commit()` and metadata queries run under the last statement's timeout; a statement that names `statement_timeout` takes it over, and the pool resets it |
+| MySQL | not supported: `SQLFeatureNotSupportedException` | the session's `max_statement_time` (MariaDB, every statement) or `max_execution_time` (MySQL, read-only SELECTs only), set when it changes and kept on the session until then (on MariaDB `commit()` runs under it too; a statement that names the variable takes it over, and the pool resets it); mysql-native drops the session after the timeout's error, so an open transaction is lost |
+| MSSQL | an attention request | mssql-native's `commandTimeout`: the time a request waits for the server, rows included |
+| ORACLE | a break (the server can't interrupt `DBMS_SESSION.SLEEP`, nor a row-lock wait on 21c and later) | oracle-native's `callTimeout`, for the execution and for each fetch |
+| ClickHouse | a Cancel packet (an INSERT with data can't be cancelled: nothing happens; a cancelled `executeUpdate` returns normally, since the server ends it like a finished one and whether it took effect is unknown) | the server's `max_execution_time` for the whole query |
+| SQLite | `sqlite3_interrupt` (it stops every statement running on the connection, and an interrupted write rolls the transaction back; between two fetches nothing runs, so a cancel then does nothing) | a progress handler that interrupts the statement at the deadline |
+| ODBC | `SQLCancel` | the statement's `SQL_ATTR_QUERY_TIMEOUT`, as the ODBC driver applies it |
 
 ## Connections Strings
 

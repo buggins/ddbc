@@ -516,3 +516,84 @@ void checkLockTimeout(string url, string table, string prepare, string blocked, 
     assert(rs.next() && rs.getInt(1) == 0, "the connection doesn't work after the lock timeout");
     rs.close();
 }
+
+/**
+ * `Statement.cancel()` and the query timeout (#247), on a statement and on a prepared statement: `slow` is a query
+ * that runs for several seconds. An idle cancel does nothing; a cancel from another thread stops `slow` with a plain
+ * `SQLException` of SQLSTATE 57014 (`canCancel` false: `cancel()` throws `SQLFeatureNotSupportedException`); a
+ * query timeout of 1 second stops it with an `SQLTimeoutException` of `timeoutState` ("*": any SQLSTATE). The
+ * connection works after each (`probe` gives one row).
+ */
+/// `clearTimeout`: a statement that clears the session's own statement timeout (PGSQL, MySQL): the driver must still
+/// apply the query timeout after it.
+void checkCancelAndTimeout(Connection conn, string slow, string probe, bool canCancel = true,
+        string timeoutState = "HYT00", string clearTimeout = null) {
+    import core.thread : Thread;
+    import core.time : MonoTime, msecs, seconds;
+    import std.exception : assertThrown, collectException;
+    import ddbc.core : PreparedStatement, ResultSet, SQLException, SQLFeatureNotSupportedException;
+
+    Statement stmt = conn.createStatement();
+    scope (exit)
+        stmt.close();
+    void probeWorks(string after) {
+        ResultSet p = stmt.executeQuery(probe);
+        assert(p.next(), "the connection doesn't work after " ~ after);
+        p.close();
+    }
+    void readAll(ResultSet rs) {
+        while (rs.next()) {
+        }
+        rs.close();
+    }
+    void checkTimeout(Exception e, MonoTime start, string what) {
+        assert(MonoTime.currTime - start < 5.seconds, "the timeout took too long: " ~ what);
+        checkSqlError(e, timeoutState == "*" ? (cast(SQLException) e is null ? null
+            : (cast(SQLException) e).getSQLState()) : timeoutState, -1, SQLErrorKind.timeout);
+        probeWorks("a timeout: " ~ what);
+    }
+
+    assert(stmt.getQueryTimeout() == 0);
+    assertThrown!SQLException(stmt.setQueryTimeout(-1));
+    if (canCancel) {
+        stmt.cancel(); // nothing runs: nothing happens
+        probeWorks("an idle cancel");
+        void cancelSoon() {
+            Thread.sleep(300.msecs);
+            stmt.cancel();
+        }
+        auto canceller = new Thread(&cancelSoon);
+        const start = MonoTime.currTime;
+        canceller.start();
+        auto e = collectException(readAll(stmt.executeQuery(slow)));
+        canceller.join();
+        assert(MonoTime.currTime - start < 4.seconds, "the cancel took too long");
+        checkSqlError(e, "57014", -1, SQLErrorKind.other);
+        probeWorks("a cancel");
+    } else
+        assertThrown!SQLFeatureNotSupportedException(stmt.cancel());
+
+    stmt.setQueryTimeout(1);
+    assert(stmt.getQueryTimeout() == 1);
+    auto start = MonoTime.currTime;
+    checkTimeout(collectException(readAll(stmt.executeQuery(slow))), start, "statement");
+    stmt.setQueryTimeout(0);
+    probeWorks("the timeout was reset");
+
+    PreparedStatement ps = conn.prepareStatement(slow);
+    scope (exit)
+        ps.close();
+    ps.setQueryTimeout(1);
+    start = MonoTime.currTime;
+    checkTimeout(collectException(readAll(ps.executeQuery())), start, "prepared statement");
+
+    if (clearTimeout !is null) {
+        stmt.setQueryTimeout(1);
+        probeWorks("a query timeout"); // the driver sets the session's timeout
+        stmt.executeUpdate(clearTimeout); // the statement's own setting replaces it
+        start = MonoTime.currTime;
+        checkTimeout(collectException(readAll(stmt.executeQuery(slow))), start, "after a statement set the timeout");
+        stmt.setQueryTimeout(0);
+        probeWorks("the timeout was reset again");
+    }
+}

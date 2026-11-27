@@ -31,6 +31,15 @@ class SQLiteTest : DdbcTestFixture {
         );
     }
 
+    /// Statement.cancel() and the query timeout (#247).
+    @Test
+    public void testCancelAndTimeout() {
+        import ddbc.test.common : checkCancelAndTimeout;
+
+        checkCancelAndTimeout(conn, "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c LIMIT 2000000000) "
+            ~ "SELECT count(*) FROM c", "SELECT 1");
+    }
+
     /// Errors carry SQLite's extended result code, and a class generic code can act on (#246): a database still
     /// locked after `busy_timeout` is an `SQLTimeoutException`.
     @Test
