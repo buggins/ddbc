@@ -4,12 +4,12 @@
 
 We only support the latest major/minor release. Fixes for security issues that do not require breaking changes will be released a bugfix version.
 
-Currently that is 0.15.x.
+Currently that is 0.16.x.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.15.x  | :white_check_mark: |
-| < 0.15  | :x:                |
+| 0.16.x  | :white_check_mark: |
+| < 0.16  | :x:                |
 
 ## Reporting a Vulnerability
 
