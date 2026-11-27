@@ -42,6 +42,7 @@ import core.sync.mutex;
 import std.traits;
 import ddbc.common;
 import ddbc.core;
+import ddbc.drivers.utils : QueryTimeoutProperty;
 
 version (USE_ODBC)
 {
@@ -324,11 +325,15 @@ version (USE_ODBC)
     /**
      * The `SQLException` for a failure, with `msg`: for an ODBC call's error, its SQLSTATE and native error code,
      * classified by the SQLSTATE (#246: class 40 → transaction rollback, class 08 → connection, HYT00/HYT01 →
-     * timeout); an `SQLException` keeps its class, SQLSTATE and code.
+     * timeout); an `SQLException` keeps its class, SQLSTATE and code. HY008 (operation canceled, after
+     * `Statement.cancel()`) becomes 57014, as in the other drivers (#247).
      */
     private SQLException odbcError(Throwable e, string msg)
     {
-        if (auto odbc = cast(ODBCError) e)
+        auto odbc = cast(ODBCError) e;
+        if (odbc !is null && odbc.sqlState == "HY008")
+            return makeSQLException(msg, "57014", odbc.nativeCode, SQLErrorKind.other, e, e.file, e.line);
+        if (odbc !is null)
             return makeSQLException(msg, odbc.sqlState, odbc.nativeCode, kindOfSqlState(odbc.sqlState), e,
                     e.file, e.line);
         if (auto sql = cast(SQLException) e)
@@ -338,6 +343,8 @@ version (USE_ODBC)
 
     unittest
     {
+        auto cancelled = odbcError(new ODBCError("cancel", "HY008", 0, __FILE__, __LINE__), "cancel");
+        assert(typeid(cancelled) == typeid(SQLException) && cancelled.getSQLState() == "57014");
         auto e = odbcError(new ODBCError("\n\t40001:1:1205\tdeadlock victim", "40001", 1205, __FILE__, __LINE__),
                 "deadlock - while execution of query UPDATE t");
         assert(cast(SQLTransactionRollbackException) e && e.getSQLState() == "40001" && e.getErrorCode() == 1205);
@@ -596,6 +603,7 @@ version (USE_ODBC)
         bool closed;
         bool autocommit = true;
         Mutex mutex;
+        Mutex cancelLock; // Statement.cancel() doesn't take the lock: this keeps close() from freeing its handle (#247)
 
         ODBCStatement[] activeStatements;
 
@@ -684,6 +692,7 @@ version (USE_ODBC)
         {
             //writeln("ODBCConnection() creating connection");
             mutex = new Mutex();
+            cancelLock = new Mutex();
             this.url = url;
             this.params = params;
 
@@ -1035,6 +1044,21 @@ version (USE_ODBC)
         ColumnInfo[] cols;
 
         bool closed = false;
+        int appliedTimeout; // the SQL_ATTR_QUERY_TIMEOUT set on `stmt`
+
+        /// Sets the query timeout on the statement handle when it changed (SQL_ATTR_QUERY_TIMEOUT; #247). Call
+        /// with the lock held, before an execution.
+        void applyTimeout()
+        {
+            if (queryTimeoutSeconds == appliedTimeout)
+                return;
+            try
+                checkstmt!SQLSetStmtAttr(stmt, SQL_ATTR_QUERY_TIMEOUT,
+                        cast(SQLPOINTER) cast(size_t) queryTimeoutSeconds, SQL_IS_UINTEGER);
+            catch (Exception e)
+                throw odbcError(e, "Setting the query timeout failed: " ~ e.msg);
+            appliedTimeout = queryTimeoutSeconds;
+        }
 
         private SQLRETURN checkstmt(alias Fn, string file = __FILE__, size_t line = __LINE__)(
                 Parameters!Fn args) {
@@ -1073,6 +1097,25 @@ version (USE_ODBC)
             checkstmt!SQLAllocHandle(cast(short) SQL_HANDLE_STMT, this.conn.conn, &stmt);
         }
 
+        mixin QueryTimeoutProperty;
+
+        /// Cancels what runs on this statement's handle (`SQLCancel`, which ODBC allows from another thread; #247).
+        /// The query timeout is the handle's SQL_ATTR_QUERY_TIMEOUT: what it covers is up to the ODBC driver.
+        override void cancel()
+        {
+            if (closed)
+                return;
+            conn.cancelLock.lock();
+            scope (exit)
+                conn.cancelLock.unlock();
+            auto handle = stmt;
+            if (closed || handle is null)
+                return;
+            const rc = SQLCancel(handle);
+            if (rc != SQL_SUCCESS && rc != SQL_SUCCESS_WITH_INFO)
+                throw new SQLException("SQLCancel failed (" ~ to!string(rc) ~ ")");
+        }
+
     public:
         ODBCConnection getConnection()
         {
@@ -1089,6 +1132,7 @@ version (USE_ODBC)
             
             trace(query);
             conn.checkTransaction();
+            applyTimeout();
 
             try
             {
@@ -1124,6 +1168,7 @@ version (USE_ODBC)
 
             trace(query);
             conn.checkTransaction();
+            applyTimeout();
 
             try
             {
@@ -1154,6 +1199,7 @@ version (USE_ODBC)
             
             trace(query);
             conn.checkTransaction();
+            applyTimeout();
 
             try
             {
@@ -1192,9 +1238,11 @@ version (USE_ODBC)
                 // the handle is freed and the statement closed even if closing the result fails
                 scope (exit)
                 {
-                    SQLFreeHandle(SQL_HANDLE_STMT, stmt);
+                    conn.cancelLock.lock();
+                    SQLFreeHandle(SQL_HANDLE_STMT, stmt); // (not while cancel() uses it)
                     stmt = null;
                     closed = true;
+                    conn.cancelLock.unlock();
                     conn.onStatementClosed(this);
                 }
                 closeResultSet();
@@ -1593,6 +1641,7 @@ version (USE_ODBC)
             
             trace(stmt);
             conn.checkTransaction();
+            applyTimeout();
 
             try
             {
@@ -1623,6 +1672,7 @@ version (USE_ODBC)
             
             trace(stmt);
             conn.checkTransaction();
+            applyTimeout();
 
             try
             {
@@ -1662,6 +1712,7 @@ version (USE_ODBC)
 
             trace(stmt);
             conn.checkTransaction();
+            applyTimeout();
 
             try
             {

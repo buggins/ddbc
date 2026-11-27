@@ -82,6 +82,14 @@ version (USE_ORACLE) {
             checkErrorInResultSet(c, "SELECT 1 / (5 - LEVEL) FROM DUAL CONNECT BY LEVEL <= 8", "SELECT 1 FROM DUAL", 4);
         }
 
+        /// Statement.cancel() and the query timeout (#247).
+        @Test
+        public void testCancelAndTimeout() {
+            import ddbc.test.common : checkCancelAndTimeout;
+
+            checkCancelAndTimeout(conn, "SELECT COUNT(*) FROM all_objects a, all_objects b WHERE ROWNUM < 300000000", "SELECT 1 FROM DUAL");
+        }
+
         /// Errors carry the SQLSTATE and error code, and a class generic code can act on (#246).
         @Test
         public void testErrorClasses() {

@@ -38,6 +38,14 @@ version(PostgresTests) {
             );
         }
 
+        /// Statement.cancel() and the query timeout (#247).
+        @Test
+        public void testCancelAndTimeout() {
+            import ddbc.test.common : checkCancelAndTimeout;
+
+            checkCancelAndTimeout(conn, "SELECT pg_sleep(5)", "SELECT 1", true, "HYT00", "SET statement_timeout = 0");
+        }
+
         /// Errors carry the SQLSTATE and error code, and a class generic code can act on (#246).
         @Test
         public void testErrorClasses() {

@@ -297,6 +297,26 @@ version(USE_MYSQL) {
             assert(conn.getTransactionIsolation() == TransactionIsolation.SERIALIZABLE);
         }
 
+        /// Statement.cancel() and the query timeout (#247).
+        @Test
+        public void testCancelAndTimeout() {
+            import ddbc.test.common : checkCancelAndTimeout;
+
+            import std.algorithm.searching : canFind;
+            import ddbc.core : ResultSet;
+
+            Statement v = conn.createStatement();
+            ResultSet rs = v.executeQuery("SELECT VERSION()");
+            rs.next();
+            const variable = rs.getString(1).canFind("MariaDB") ? "max_statement_time" : "max_execution_time";
+            rs.close();
+            v.close();
+            // (BENCHMARK() and SLEEP() just return early when interrupted: a join raises the timeout's error)
+            checkCancelAndTimeout(conn, "SELECT COUNT(*) FROM information_schema.COLLATIONS a, information_schema.COLLATIONS b, "
+                ~ "information_schema.COLLATIONS c, information_schema.COLLATIONS d WHERE CRC32(CONCAT(a.ID, b.ID, c.ID, d.ID)) = 7",
+                "SELECT 1", false, "*", "SET SESSION " ~ variable ~ " = 0");
+        }
+
         /// Errors carry the SQLSTATE and error code, and a class generic code can act on (#246).
         @Test
         public void testErrorClasses() {

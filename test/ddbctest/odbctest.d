@@ -34,6 +34,17 @@ version(USE_ODBC) {
             );
         }
 
+        /// Statement.cancel() and the query timeout (#247).
+        @Test
+        public void testCancelAndTimeout() {
+            import ddbc.test.common : checkCancelAndTimeout;
+
+            // (a plain COUNT of a cross join is computed at once: the filter makes the server join)
+            checkCancelAndTimeout(conn, "SELECT COUNT_BIG(*) FROM sys.all_objects a CROSS JOIN sys.all_objects b "
+                ~ "CROSS JOIN sys.all_objects c WHERE CAST(a.object_id AS bigint) + b.object_id + c.object_id = 7",
+                "SELECT 1");
+        }
+
         /// Errors carry the SQLSTATE and error code, and a class generic code can act on (#246).
         @Test
         public void testErrorClasses() {

@@ -64,6 +64,43 @@ version (USE_MSSQL) {
             checkClosedByServer(victim, &kill, "SELECT 1");
         }
 
+        /// Statement.cancel() and the query timeout (#247).
+        @Test
+        public void testCancelAndTimeout() {
+            import ddbc.test.common : checkCancelAndTimeout;
+
+            // (a plain COUNT of a cross join is computed at once: the filter makes the server join)
+            checkCancelAndTimeout(conn, "SELECT COUNT_BIG(*) FROM sys.all_objects a CROSS JOIN sys.all_objects b "
+                ~ "CROSS JOIN sys.all_objects c WHERE CAST(a.object_id AS bigint) + b.object_id + c.object_id = 7",
+                "SELECT 1");
+
+            // executeUpdate: the driver recognizes mssql-native's cancelled batch by its message
+            import core.thread : Thread;
+            import core.time : MonoTime, msecs, seconds;
+            import std.exception : collectException;
+            import std.variant : Variant;
+            import ddbc.core : SQLErrorKind;
+            import ddbc.test.common : checkSqlError;
+
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            foreach (withId; [false, true]) {
+                void cancelSoon() {
+                    Thread.sleep(300.msecs);
+                    stmt.cancel();
+                }
+                auto canceller = new Thread(&cancelSoon);
+                const start = MonoTime.currTime;
+                canceller.start();
+                Variant id;
+                auto e = collectException(withId ? stmt.executeUpdate("WAITFOR DELAY '00:00:10'", id)
+                    : stmt.executeUpdate("WAITFOR DELAY '00:00:10'"));
+                canceller.join();
+                assert(MonoTime.currTime - start < 4.seconds, "the cancel took too long");
+                checkSqlError(e, "57014", -1, SQLErrorKind.other);
+            }
+        }
+
         /// Errors carry the SQLSTATE and error code, and a class generic code can act on (#246).
         @Test
         public void testErrorClasses() {

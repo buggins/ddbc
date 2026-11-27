@@ -331,8 +331,35 @@ version(USE_PGSQL) {
     	string hostname;
     	int port = 5432;
     	PGconn * conn;
+        PGcancel * cancelHandle; // for Statement.cancel() (#247)
+        Mutex cancelLock; // guards cancelHandle: cancel() doesn't take the connection's lock, close() frees it
     	bool closed;
 		bool autocommit = true;
+        CurrentStatement current; // the statement that ran last, for Statement.cancel() (#247)
+        shared bool cancelRequested; // Statement.cancel() was called for the running statement
+        bool statementTimed; // the running statement has a query timeout: its 57014 is the timeout's
+        int sessionTimeout; // the statement_timeout (seconds) the driver set; 0: the session's own; -1: unknown
+        bool timeoutInBlock; // the driver set it inside a transaction block, whose rollback undoes it
+
+        /**
+         * Before a statement with the query timeout `seconds` (0: none), sets the server's `statement_timeout` when
+         * it differs from what the driver set last (`RESET` for 0: the session's own value) (#247). A SET inside a
+         * transaction block is undone when the block rolls back, so the value counts as unknown once that block
+         * has ended (a `ROLLBACK TO SAVEPOINT` undoes it too, unnoticed). Call with the lock held, before
+         * beginIfNeeded().
+         */
+        void applyQueryTimeout(int seconds) {
+            const status = PQtransactionStatus(conn);
+            if (timeoutInBlock && status == PQTRANS_IDLE) {
+                sessionTimeout = -1; // committed or rolled back: unknown
+                timeoutInBlock = false;
+            }
+            if (seconds == sessionTimeout || status == PQTRANS_INERROR) // (a failed block refuses the statement too)
+                return;
+            execCommand(seconds > 0 ? "SET statement_timeout = " ~ to!string(seconds * 1000L) : "RESET statement_timeout");
+            sessionTimeout = seconds;
+            timeoutInBlock = status != PQTRANS_IDLE;
+        }
         bool useSsl = true;
     	Mutex mutex;
 
@@ -363,8 +390,12 @@ version(USE_PGSQL) {
         /// The `SQLException` for a failed libpq call: the SQLSTATE of `res` (none when libpq returned no result),
         /// classified (#246). A FATAL error or a broken connection (`CONNECTION_BAD`) is a connection error.
         SQLException pqError(const(PGresult)* res, string msg) {
+            import core.atomic : atomicLoad;
+
             string state = res is null ? null : copyCString(PQresultErrorField(res, PG_DIAG_SQLSTATE));
             const severity = res is null ? null : copyCString(PQresultErrorField(res, PG_DIAG_SEVERITY_NONLOCALIZED));
+            if (state == "57014" && statementTimed && !atomicLoad(cancelRequested))
+                return makeSQLException(msg, "HYT00", 0, SQLErrorKind.timeout); // the query timeout's (#247)
             auto kind = kindOfSqlState(state);
             if (PQstatus(conn) == CONNECTION_BAD || severity == "FATAL" || severity == "PANIC") {
                 kind = SQLErrorKind.connection;
@@ -421,6 +452,7 @@ version(USE_PGSQL) {
 
     	this(string url, string[string] params) {
     		mutex = new Mutex();
+            cancelLock = new Mutex();
     		this.url = url;
     		this.params = params;
     		//writeln("parsing url " ~ url);
@@ -469,6 +501,7 @@ version(USE_PGSQL) {
     			throw makeSQLException(message, "08001", 0, SQLErrorKind.connection);
     		}
     		closed = false;
+            cancelHandle = PQgetCancel(conn); // for Statement.cancel() (#247)
     		setAutoCommit(true);
     		updateConnectionParams();
     	}
@@ -490,6 +523,12 @@ version(USE_PGSQL) {
     		closed = true; // before the handle goes: isClosed() reads it
     		auto handle = conn;
     		conn = null;
+            cancelLock.lock();
+            if (cancelHandle !is null) {
+                PQfreeCancel(cancelHandle); // (not while cancel() uses it)
+                cancelHandle = null;
+            }
+            cancelLock.unlock();
     		PQfinish(handle);
     	}
 
@@ -567,6 +606,13 @@ version(USE_PGSQL) {
             checkClosed();
             if (PQtransactionStatus(conn) != PQTRANS_IDLE)
                 rollback();
+            if (sessionTimeout != 0) { // the last borrower's query timeout, or unknown (#247)
+                lock();
+                scope(exit) unlock();
+                execCommand("RESET statement_timeout");
+                sessionTimeout = 0;
+                timeoutInBlock = false;
+            }
         }
 
     	override bool getAutoCommit() {
@@ -674,8 +720,58 @@ version(USE_PGSQL) {
     	PGSQLResultSet resultSet;
 
     	bool closed;
+        immutable ulong serial; // for cancel(): see CurrentStatement
+
+        /// Before the statement `sql` runs (lock held): the query timeout, the transaction, the cancel bookkeeping
+        /// (#247). A statement that names `statement_timeout` (or resets everything) sets it itself: the session's
+        /// value is then its own again, not the driver's.
+        void startStatement(const(char)[] sql) {
+            import core.atomic : atomicStore;
+            import std.uni : asLowerCase;
+
+            conn.applyQueryTimeout(queryTimeoutSeconds);
+            auto lower = sql.asLowerCase;
+            if (lower.canFind("statement_timeout") || lower.canFind("reset all") || lower.canFind("discard all")) {
+                conn.sessionTimeout = 0;
+                conn.timeoutInBlock = false;
+            }
+            conn.beginIfNeeded();
+            // before current.set: a cancel() that sees this statement current must find its flag reset already
+            atomicStore(conn.cancelRequested, false);
+            conn.statementTimed = queryTimeoutSeconds > 0;
+            conn.current.set(serial);
+        }
+
+        /// After the statement's call: libpq has its whole result, so its cancel() no longer reaches the connection.
+        void endStatement() {
+            conn.statementTimed = false;
+            conn.current.clear();
+        }
 
     public:
+        mixin QueryTimeoutProperty;
+
+        /**
+         * Cancels what this statement runs (libpq's `PQcancel`; #247). The query timeout is the server's
+         * `statement_timeout`, which the driver sets before a statement when it changes (one more round trip). It
+         * stays on the session until then: `commit()` and metadata queries run under the last statement's timeout.
+         */
+        override void cancel() {
+            import core.atomic : atomicStore;
+
+            if (closed || conn.closed || !conn.current.isCurrent(serial))
+                return;
+            conn.cancelLock.lock();
+            scope (exit)
+                conn.cancelLock.unlock();
+            auto handle = conn.cancelHandle;
+            if (handle is null)
+                return; // closed
+            atomicStore(conn.cancelRequested, true);
+            char[256] message;
+            if (!PQcancel(handle, message.ptr, cast(int) message.length))
+                throw new SQLException("The cancel request failed: " ~ copyCString(message.ptr));
+        }
 
 		// statements are DialectAware
         override DialectType getDialectType() {
@@ -696,6 +792,7 @@ version(USE_PGSQL) {
 
     	this(PGSQLConnection conn) {
     		this.conn = conn;
+            serial = newStatementSerial();
     	}
 
     	ResultSetMetaData createMetadata(PGresult * res) {
@@ -860,7 +957,9 @@ version(USE_PGSQL) {
 
             trace(query);
 
-    		conn.beginIfNeeded();
+            startStatement(query);
+            scope (exit)
+                endStatement();
     		PGresult * res = PQexec(conn.getConnection(), std.string.toStringz(query));
     		conn.checkResult(res !is null, res, "Failed to execute statement " ~ query ~ ": " ~ getError());
     		scope(exit) PQclear(res); // also when the statement failed (#249)
@@ -909,7 +1008,9 @@ version(USE_PGSQL) {
 
             trace(query);
 
-    		conn.beginIfNeeded();
+            startStatement(query);
+            scope (exit)
+                endStatement();
     		PGresult * res = PQexec(conn.getConnection(), std.string.toStringz(query));
     		conn.checkResult(res !is null, res, "Failed to execute statement " ~ query ~ ": " ~ getError());
     		scope(exit) PQclear(res); // also when the statement failed (#249)
@@ -1031,7 +1132,9 @@ version(USE_PGSQL) {
 
         PGresult * exec() {
             checkParams();
-            conn.beginIfNeeded();
+            startStatement(query);
+            scope (exit)
+                endStatement();
             const (char) * [] values = new const(char)*[paramCount];
             int[] lengths = new int[paramCount];
             int[] formats = new int[paramCount];

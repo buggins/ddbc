@@ -51,6 +51,7 @@ version (USE_ORACLE)
 {
     pragma(msg, "DDBC will use Oracle driver (oracle-native)");
 
+    import core.time : Duration;
     import std.conv : ConvException, to;
     import std.datetime : Date, DateTime, TimeOfDay;
     import std.datetime.systime : SysTime;
@@ -62,7 +63,8 @@ version (USE_ORACLE)
     import oracle.params : findPlaceholders, rewritePlaceholders;
     import dbwire.exception : DbException;
     import dbwire.io.backend : IoLock, backendFor;
-    import ddbc.drivers.utils : connectFailure, connectorError;
+    import ddbc.drivers.utils : connectFailure, connectorError, CurrentStatement, newStatementSerial,
+        QueryTimeoutProperty;
 
     /// Translates oracle-native errors into `SQLException`s.
     private T translate(T)(lazy T action, string context = null)
@@ -376,6 +378,8 @@ version (USE_ORACLE)
         IoLock driverLock;
         OracleStatement[] activeStatements;
         OracleResultSet activeResultSet; // streaming result set holding the server connection
+        CurrentStatement current; // the statement that ran last, for Statement.cancel() (#247)
+        Duration defaultCallTimeout; // the call timeout of the URL, for statements without a query timeout
         bool closed;
         bool autoCommit = true;
         TransactionIsolation isolation = TransactionIsolation.READ_COMMITTED;
@@ -424,6 +428,7 @@ version (USE_ORACLE)
             {
                 driverLock = backendFor(options.ioMode).newLock();
                 ora = new OR.Connection(options);
+                defaultCallTimeout = ora.callTimeout;
             }
             catch (DbException e)
             {
@@ -479,6 +484,13 @@ version (USE_ORACLE)
                 return false;
         }
 
+        /// The active result set ended or let go of the connection: no statement holds it any more (#247).
+        void resultSetDone()
+        {
+            activeResultSet = null;
+            current.clear();
+        }
+
         /// Frees the server connection before another statement runs on it: an unfinished
         /// result set is read into memory. An error in its rows (a fetch that fails at row N, a cancel, a lost
         /// session) goes to its reader, from `next()` after the rows read before it, not to the statement that
@@ -495,7 +507,7 @@ version (USE_ORACLE)
                 if (rs.failure is null || !ora.isOpen)
                     throw e; // not an error in its rows, or one that closed the connection: the caller needs it
             }
-            activeResultSet = null;
+            resultSetDone();
         }
 
         void onStatementClosed(OracleStatement stmt)
@@ -670,6 +682,7 @@ version (USE_ORACLE)
         OracleConnection conn;
         OracleResultSet resultSet;
         bool closed;
+        immutable ulong serial; // for cancel(): see CurrentStatement
 
         void checkClosed()
         {
@@ -686,6 +699,28 @@ version (USE_ORACLE)
                 conn.unlock(); // the callers unlock only after begin() returns (#242)
             conn.prepareForStatement();
             closeResultSet();
+            applyTimeout();
+            conn.current.set(serial);
+        }
+
+        /// Ends a statement started by begin(): the URL's call timeout again for the connection's other calls
+        /// (commit, rollback, metadata). Without a result set that holds the connection, the statement's cancel()
+        /// no longer reaches it (#247).
+        void end()
+        {
+            conn.ora.callTimeout = conn.defaultCallTimeout;
+            if (conn.activeResultSet is null)
+                conn.current.clear();
+            conn.unlock();
+        }
+
+        /// Sets the call timeout of the next call (an execution, or a fetch of more rows) to the query timeout, or
+        /// to the URL's call timeout without one (#247). Call with the lock held.
+        void applyTimeout()
+        {
+            import core.time : seconds;
+
+            conn.ora.callTimeout = queryTimeoutSeconds > 0 ? queryTimeoutSeconds.seconds : conn.defaultCallTimeout;
         }
 
         ddbc.core.ResultSet wrap(OR.QueryResult result, string sql)
@@ -708,6 +743,9 @@ version (USE_ORACLE)
             auto outputs = translate(result.outputs);
             if (outputs.length && outputs[0].values.length)
                 insertId = insertIdOf(outputs[0].values[0]);
+            // the statement is done: neither its query timeout nor its cancel() may stop the commit (#247)
+            conn.ora.callTimeout = conn.defaultCallTimeout;
+            conn.current.clear();
             conn.commitIfAuto();
             return n > int.max ? int.max : cast(int) n;
         }
@@ -716,6 +754,19 @@ version (USE_ORACLE)
         this(OracleConnection conn)
         {
             this.conn = conn;
+            serial = newStatementSerial();
+        }
+
+        mixin QueryTimeoutProperty;
+
+        /// Cancels the call this statement runs, or the fetch its result set waits for (a break; #247). The server
+        /// can't interrupt some waits: `DBMS_SESSION.SLEEP`, and a row-lock wait on 21c and later (see oracle-native).
+        override void cancel()
+        {
+            auto ora = conn.ora;
+            if (closed || ora is null || !conn.current.isCurrent(serial))
+                return;
+            translate(ora.cancel());
         }
 
         override DialectType getDialectType()
@@ -733,7 +784,7 @@ version (USE_ORACLE)
         {
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             return wrap(translate(conn.ora.query(query), query), query);
         }
 
@@ -751,7 +802,7 @@ version (USE_ORACLE)
         {
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             size_t count;
             const text = rewritePlaceholders(query, count);
             const placeholders = findPlaceholders(text);
@@ -849,7 +900,7 @@ version (USE_ORACLE)
             auto b = binds();
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             auto rs = wrap(translate(conn.ora.query(text, b), sql), sql);
             lastMetadata = rs.getMetaData();
             return rs;
@@ -867,7 +918,7 @@ version (USE_ORACLE)
             auto b = binds();
             begin();
             scope (exit)
-                conn.unlock();
+                end();
             return update(text, b, insertId);
         }
 
@@ -1085,15 +1136,22 @@ version (USE_ORACLE)
                 return false;
             try
             {
-                if (started)
-                    result.popFront();
-                started = true;
-                if (result.empty)
+                bool atEnd;
+                {
+                    stmt.applyTimeout(); // a fetch of more rows is a call of its own
+                    scope (exit)
+                        stmt.conn.ora.callTimeout = stmt.conn.defaultCallTimeout; // not for commitIfAuto
+                    if (started)
+                        result.popFront();
+                    started = true;
+                    atEnd = result.empty;
+                }
+                if (atEnd)
                 {
                     exhausted = true;
                     if (stmt.conn.activeResultSet is this)
                     {
-                        stmt.conn.activeResultSet = null;
+                        stmt.conn.resultSetDone();
                         stmt.conn.commitIfAuto();
                     }
                     return false;
@@ -1114,7 +1172,7 @@ version (USE_ORACLE)
                 exhausted = true;
                 if (conn.activeResultSet is this)
                 {
-                    conn.activeResultSet = null;
+                    conn.resultSetDone();
                     if (conn.ora.isOpen)
                     {
                         // in auto-commit mode, ends what the query held (the locks of a SELECT ... FOR UPDATE)
@@ -1213,7 +1271,7 @@ version (USE_ORACLE)
             }
             if (stmt.conn.activeResultSet is this)
             {
-                stmt.conn.activeResultSet = null;
+                stmt.conn.resultSetDone();
                 try
                     stmt.conn.commitIfAuto();
                 catch (Exception)

@@ -41,6 +41,7 @@ version(USE_SQLITE) {
     import std.string;
     import std.variant;
     import core.sync.mutex;
+    import core.time : MonoTime;
     import ddbc.common;
     import ddbc.core;
     //import ddbc.drivers.sqlite;
@@ -374,11 +375,41 @@ version(USE_SQLITE) {
         assert(ymdthmssUtcPlus2.toISOExtString() == "2019-09-15T15:18:51.5+02:00", ymdthmssUtcPlus2.toISOExtString());
     }
 
+    // SQLite's progress handler under a query timeout: interrupts the running statement at the deadline (#247).
+    private extern (C) int interruptAtDeadline(void* connection) nothrow {
+        auto c = cast(SQLITEConnection) connection;
+        if (MonoTime.currTime < c.deadline)
+            return 0;
+        c.timedOut = true;
+        return 1; // SQLITE_INTERRUPT
+    }
+
     class SQLITEConnection : ddbc.core.Connection, ConnectionResetter {
     private:
         string filename;
         sqlite3 * conn;
         bool closed;
+        CurrentStatement current; // the statement whose step runs, for Statement.cancel() (#247)
+        Mutex cancelLock; // Statement.cancel() doesn't take the connection's lock: this keeps close() from freeing
+                          // the handle while it's interrupted
+        MonoTime deadline; // the query timeout's, while `underTimeout` runs
+        bool timedOut; // the query timeout interrupted the last statement
+
+        /// Runs `action` (steps of statements) under a query timeout of `seconds` (none if 0): SQLite's progress
+        /// handler interrupts it at the deadline, and `failure` reports SQLITE_INTERRUPT as a timeout (#247). Call
+        /// with the lock held.
+        T underTimeout(T)(int seconds, lazy T action) {
+            import core.time : dur;
+
+            timedOut = false;
+            if (seconds <= 0)
+                return action();
+            deadline = MonoTime.currTime + dur!"seconds"(seconds);
+            sqlite3_progress_handler(conn, 1000, &interruptAtDeadline, cast(void*) this);
+            scope (exit)
+                sqlite3_progress_handler(conn, 0, null, null);
+            return action();
+        }
         bool autocommit = true;
         Mutex mutex;
 
@@ -428,6 +459,8 @@ version(USE_SQLITE) {
             const code = sqlite3_extended_errcode(conn);
             if (transactionLost())
                 msg ~= " - " ~ transactionLostMessage;
+            if ((code & 0xFF) == SQLITE_INTERRUPT && timedOut) // the query timeout's interrupt (#247)
+                return makeSQLException(msg, "HYT00", code, SQLErrorKind.timeout);
             return sqliteError(code, msg, !commit && sqlite3_get_autocommit(conn) == 0);
         }
 
@@ -479,6 +512,7 @@ version(USE_SQLITE) {
 
         this(string url, string[string] params) {
             mutex = new Mutex();
+            cancelLock = new Mutex();
             extractParamsFromURL(url, params);
             if (url.startsWith("sqlite:"))
                 url = url[7 .. $];
@@ -516,6 +550,9 @@ version(USE_SQLITE) {
             scope(exit) unlock();
 
             closeUnclosedStatements();
+            cancelLock.lock();
+            scope (exit)
+                cancelLock.unlock();
             int res = sqlite3_close(conn);
             if (res != SQLITE_OK)
                 throw new SQLException("SQLITE Error " ~ to!string(res) ~ " while trying to close DB " ~ filename ~ " : " ~ getError());
@@ -647,8 +684,35 @@ version(USE_SQLITE) {
         SQLITEResultSet resultSet;
 
         bool closed;
+        ulong cancelSerial; // for cancel(): see CurrentStatement; a statement's internal prepared one takes its number
+        SQLITEStatement owner; // the statement whose internal prepared statement this is: its query timeout counts
+
+        /// Runs `action` (calls of `sqlite3_step`) as this statement: the current one for cancel(), under the query
+        /// timeout (an internal prepared statement's owner's, read at each call; #247).
+        T runStep(T)(lazy T action) {
+            conn.current.set(cancelSerial);
+            scope (exit)
+                conn.current.clear(); // a late cancel() must not interrupt the connection's next statement or commit
+            return conn.underTimeout(owner !is null ? owner.queryTimeoutSeconds : queryTimeoutSeconds, action);
+        }
 
     public:
+        mixin QueryTimeoutProperty;
+
+        /// Interrupts what this statement runs (its execution, or a fetch of its result set) with
+        /// `sqlite3_interrupt` (#247). SQLite interrupts every statement running on the connection then, and rolls
+        /// the transaction back when the interrupted statement writes. Between two fetches nothing runs: a cancel
+        /// then does nothing.
+        override void cancel() {
+            if (closed || !conn.current.isCurrent(cancelSerial))
+                return;
+            conn.cancelLock.lock();
+            scope (exit)
+                conn.cancelLock.unlock();
+            if (!conn.closed && conn.current.isCurrent(cancelSerial))
+                sqlite3_interrupt(conn.conn);
+        }
+
         // statements are DialectAware
         override DialectType getDialectType() {
             return conn.getDialectType();
@@ -668,6 +732,15 @@ version(USE_SQLITE) {
 
         this(SQLITEConnection conn) {
             this.conn = conn;
+            cancelSerial = newStatementSerial();
+        }
+
+        /// The statement's internal prepared statement for `sql`, with its number and its query timeout (#247).
+        private PreparedStatement prepareInternal(string sql) {
+            auto ps = cast(SQLITEStatement) conn.prepareStatement(sql);
+            ps.owner = this;
+            ps.cancelSerial = cancelSerial;
+            return cast(PreparedStatement) ps;
         }
 
     public:
@@ -692,7 +765,7 @@ version(USE_SQLITE) {
 
         override ddbc.core.ResultSet executeQuery(string query) {
             closePreparedStatement();
-            _currentStatement = conn.prepareStatement(query);
+            _currentStatement = prepareInternal(query);
             trace(_currentStatement);
             _currentResultSet = _currentStatement.executeQuery();
             return _currentResultSet;
@@ -709,7 +782,7 @@ version(USE_SQLITE) {
 
         override int executeUpdate(string query, out Variant insertId) {
             closePreparedStatement();
-            _currentStatement = conn.prepareStatement(query);
+            _currentStatement = prepareInternal(query);
 
             trace(_currentStatement);
 
@@ -878,7 +951,7 @@ version(USE_SQLITE) {
             conn.checkTransaction();
 
             int rowsAffected = 0;
-            int res = sqlite3_step(stmt);
+            int res = runStep(sqlite3_step(stmt));
             if (res == SQLITE_DONE) {
                 insertId = Variant(sqlite3_last_insert_rowid(conn.getConnection()));
                 rowsAffected = sqlite3_changes(conn.getConnection());
@@ -1130,9 +1203,13 @@ version(USE_SQLITE) {
             }
 
             // Count how many rows were returned; an error ends the count (it looped forever before, #243)
-            int res;
-            while ((res = sqlite3_step(rs)) == SQLITE_ROW)
-                this.rowCount++;
+            int countRows() {
+                int res;
+                while ((res = sqlite3_step(rs)) == SQLITE_ROW)
+                    this.rowCount++;
+                return res;
+            }
+            const res = stmt.runStep(countRows()); // the query runs here (#247)
             if (res != SQLITE_DONE) {
                 string msg = "Error #" ~ to!string(res) ~ " while reading query result: "
                     ~ copyCString(sqlite3_errmsg(stmt.conn.getConnection()));
@@ -1188,7 +1265,7 @@ version(USE_SQLITE) {
             sqlite3_reset(rs);
 
             // Actually read the first row.
-            int res = sqlite3_step(rs);
+            int res = stmt.runStep(sqlite3_step(rs)); // (another statement may have run meanwhile)
             if (res == SQLITE_DONE) {
                 _last = true;
                 columnCount = sqlite3_data_count(rs);
@@ -1231,7 +1308,7 @@ version(USE_SQLITE) {
             if (currentRowIndex < 0)
                 stmt.conn.checkTransaction(); // the statement starts again (the row count reset it)
 
-            int res = sqlite3_step(rs);
+            int res = stmt.runStep(sqlite3_step(rs)); // (another statement may have run meanwhile)
             if (res == SQLITE_DONE) {
                 _last = true;
                 columnCount = sqlite3_data_count(rs);

@@ -30,6 +30,75 @@ private import ddbc.core : makeSQLException, SQLErrorKind, SQLException;
 private import dbwire.exception : DbException;
 version (unittest) private import ddbc.core : SQLNonTransientConnectionException, SQLTransactionRollbackException;
 
+/**
+ * The query timeout of a driver's statement (#247): `setQueryTimeout` and `getQueryTimeout` for a class with a
+ * `checkClosed()` method.
+ */
+mixin template QueryTimeoutProperty() {
+    private int queryTimeoutSeconds;
+
+    /// See `ddbc.core.Statement.setQueryTimeout`.
+    override void setQueryTimeout(int seconds) {
+        import std.exception : enforce;
+        import ddbc.core : SQLException;
+
+        checkClosed();
+        enforce!SQLException(seconds >= 0, "The query timeout can't be negative");
+        queryTimeoutSeconds = seconds;
+    }
+
+    /// ditto
+    override int getQueryTimeout() {
+        checkClosed();
+        return queryTimeoutSeconds;
+    }
+}
+
+/**
+ * Which statement of a connection runs, or holds the connection with its result set: `Statement.cancel()` reads it
+ * from another thread without the connection's lock, so that it cancels only its own statement (#247). Statements
+ * are numbered by `newStatementSerial`.
+ */
+struct CurrentStatement {
+    import core.atomic : atomicLoad, atomicStore;
+
+    private shared ulong serial;
+
+    /// The statement `s` starts a call (under the connection's lock).
+    void set(ulong s) nothrow @nogc { atomicStore(serial, s); }
+
+    /// No statement runs or holds the connection any more: a late cancel() of the last one does nothing, and doesn't
+    /// stop the connection's own calls (commit, rollback, metadata).
+    void clear() nothrow @nogc { atomicStore(serial, 0); }
+
+    /// Whether `s` is the statement that runs, or holds the connection with its result set (from any thread).
+    bool isCurrent(ulong s) const nothrow @nogc { return atomicLoad(serial) == s; }
+}
+
+/// A number for a new statement, unique in the process (see `CurrentStatement`).
+ulong newStatementSerial() nothrow @nogc {
+    import core.atomic : atomicOp;
+
+    static shared ulong last;
+    return atomicOp!"+="(last, 1);
+}
+
+/// The error of a call stopped by `Statement.cancel()`: SQLSTATE `57014` (query canceled), the same in every driver
+/// (#247).
+SQLException cancelledError(Throwable cause = null) {
+    return makeSQLException("The statement was cancelled", "57014", 0, SQLErrorKind.other, cause);
+}
+
+unittest {
+    CurrentStatement c;
+    const a = newStatementSerial(), b = newStatementSerial();
+    assert(a != b && !c.isCurrent(a));
+    c.set(a);
+    assert(c.isCurrent(a) && !c.isCurrent(b));
+    auto e = cancelledError();
+    assert(e.getSQLState() == "57014" && typeid(e) == typeid(SQLException));
+}
+
 string copyCString(T)(const T* c, int actualLength = -1) if (is(T == char) || is (T == ubyte)) {
     const(T)* a = c;
     if(a is null)
