@@ -69,6 +69,24 @@ version(USE_CLICKHOUSE) {
             );
         }
 
+        /// Errors carry the exception code, and a class generic code can act on (#246): `max_execution_time` running
+        /// out is an `SQLTimeoutException`.
+        @Test
+        public void testErrorClasses() {
+            import std.exception : collectException;
+            import ddbc.core : SQLErrorKind;
+            import ddbc.test.common : checkSqlError;
+
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            checkSqlError(collectException(stmt.executeQuery("SELECT count() FROM system.numbers "
+                ~ "SETTINGS max_execution_time = 1").next()), "HYT00", 159, SQLErrorKind.timeout);
+            checkSqlError(collectException(stmt.executeQuery("SELECT * FROM no_such_table").next()), null, 60,
+                SQLErrorKind.other);
+            ddbc.core.ResultSet rs = stmt.executeQuery("SELECT 1");
+            assert(rs.next() && rs.getInt(1) == 1, "the connection doesn't work after the errors");
+        }
+
         /// `isClosed()` after the connection broke underneath the driver (#248); ClickHouse can't kill a session,
         /// so the native connection is closed directly.
         @Test
@@ -81,7 +99,7 @@ version(USE_CLICKHOUSE) {
             void kill() {
                 (cast(ClickHouseConnection) victim).getNativeConnection().close();
             }
-            checkClosedByServer(victim, &kill, "SELECT 1");
+            checkClosedByServer(victim, &kill, "SELECT 1", false);
         }
 
         /// An error in a later block of a result set leaves the connection usable (#244).

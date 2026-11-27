@@ -63,6 +63,7 @@ version (USE_PGNATIVE)
     import PG = postgresql;
     import dbwire.exception : DbException;
     import dbwire.io.backend : IoLock, backendFor;
+    import ddbc.drivers.utils : connectFailure, connectorError;
 
     /// Translates postgresql-native errors into `SQLException`s.
     private T translate(T)(lazy T action, string context = null)
@@ -72,7 +73,39 @@ version (USE_PGNATIVE)
         catch (SQLException e)
             throw e;
         catch (DbException e)
-            throw new SQLException(context.length ? e.msg ~ " - while executing " ~ context : e.msg, e);
+            throw pgError(e, context.length ? e.msg ~ " - while executing " ~ context : e.msg);
+    }
+
+    /// The `SQLException` for a postgresql-native error: the server's SQLSTATE, classified (#246). A FATAL error
+    /// ended the session (e.g. `pg_terminate_backend`, 57P01): the connection is gone.
+    private SQLException pgError(DbException e, string msg)
+    {
+        if (auto server = cast(PG.ServerException) e)
+        {
+            const state = server.sqlState;
+            const kind = server.error.isFatal ? SQLErrorKind.connection : kindOfSqlState(state);
+            return makeSQLException(msg, state, 0, kind, e);
+        }
+        return connectorError(e, msg);
+    }
+
+    unittest
+    {
+        PG.ServerMessage m;
+        m.sqlState = "40P01";
+        m.severityNonLocalized = "ERROR";
+        auto e = pgError(new PG.ServerException(m), "deadlock detected");
+        assert(cast(SQLTransactionRollbackException) e && e.getSQLState() == "40P01" && e.getErrorCode() == 0);
+        m.sqlState = "55P03";
+        assert(cast(SQLTimeoutException) pgError(new PG.ServerException(m), "lock timeout"));
+        m.sqlState = "57014";
+        e = pgError(new PG.ServerException(m), "canceling statement due to user request");
+        assert(typeid(e) == typeid(SQLException) && e.getSQLState() == "57014");
+        m.sqlState = "57P01";
+        m.severityNonLocalized = "FATAL";
+        assert(cast(SQLNonTransientConnectionException) pgError(new PG.ServerException(m), "terminated"));
+        m.sqlState = "25P03"; // idle_in_transaction_session_timeout: FATAL
+        assert(cast(SQLNonTransientConnectionException) pgError(new PG.ServerException(m), "idle timeout"));
     }
 
     /**
@@ -165,7 +198,7 @@ version (USE_PGNATIVE)
         try
             return PG.ConnectionOptions.fromParams(p);
         catch (DbException e)
-            throw new SQLException(e.msg, e);
+            throw pgError(e, e.msg);
     }
 
     private bool parseFlag(string key, string value)
@@ -377,9 +410,15 @@ version (USE_PGNATIVE)
         bool autoCommit = true;
         TransactionIsolation isolation = TransactionIsolation.READ_COMMITTED;
 
-        void checkClosed()
+        /// Throws `SQLNonTransientConnectionException` (08003) if the connection was closed: by `close()`, or with
+        /// `andServer` also by the server or the network (#246).
+        void checkClosed(bool andServer = true)
         {
-            enforce!SQLException(!closed, "Connection is already closed");
+            if (closed)
+                throw makeSQLException("Connection is already closed", "08003", 0, SQLErrorKind.connection);
+            if (andServer && !pg.isOpen)
+                throw makeSQLException("The connection was closed by the server or the network", "08003", 0,
+                        SQLErrorKind.connection);
         }
 
         /// With auto-commit off, starts a transaction unless one is open. Call with the lock held.
@@ -407,13 +446,16 @@ version (USE_PGNATIVE)
                 pg = new PG.Connection(options);
             }
             catch (DbException e)
-                throw new SQLException(e.msg, e);
+            {
+                auto server = cast(PG.ServerException) e;
+                throw connectFailure(e, server is null ? null : server.sqlState);
+            }
         }
 
         /// The underlying postgresql-native connection, for features ddbc does not cover (COPY, LISTEN/NOTIFY, arrays).
         PG.Connection getNativeConnection()
         {
-            checkClosed();
+            checkClosed(false);
             return pg;
         }
 
@@ -496,7 +538,7 @@ version (USE_PGNATIVE)
 
         override void close()
         {
-            checkClosed();
+            checkClosed(false); // also after the server closed it: frees the driver's resources
             foreach (stmt; activeStatements.dup)
             {
                 try
@@ -528,12 +570,14 @@ version (USE_PGNATIVE)
         {
             if (pg.transactionFailed)
                 throw new SQLException("Can't " ~ what ~ ": the transaction failed after an error and the server rolled "
-                    ~ "back its work; call rollback() to continue");
+                    ~ "back its work; call rollback() to continue", "25000", 0);
         }
 
         override void rollback()
         {
-            checkClosed();
+            checkClosed(false);
+            if (!pg.isOpen)
+                return; // after the server closed the connection: nothing to do, its transaction is gone (#246)
             lock();
             scope (exit)
                 unlock();
@@ -546,7 +590,9 @@ version (USE_PGNATIVE)
         /// when the connection is returned (#245).
         void resetForPool()
         {
-            checkClosed();
+            checkClosed(false);
+            if (!pg.isOpen)
+                return;
             if (activeResultSet !is null)
             {
                 // the user is gone: drop the unread rows instead of reading them into memory
@@ -1093,7 +1139,7 @@ version (USE_PGNATIVE)
             }
             catch (DbException e)
             {
-                auto error = new SQLException(sql.length ? e.msg ~ " - while executing " ~ sql : e.msg, e);
+                auto error = pgError(e, sql.length ? e.msg ~ " - while executing " ~ sql : e.msg);
                 if (stmt.conn.pg.isBusy)
                     throw error; // the response wasn't read: the rows can still be read, or the result closed
                 finish();

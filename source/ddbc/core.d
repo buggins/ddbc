@@ -46,13 +46,192 @@ import std.datetime;
 /// Exact decimal numbers for `getDecimal`/`setDecimal`, from `dbwire:types`.
 public import dbwire.types.decimal : Decimal, RoundingMode;
 
+/**
+ * A database error. The drivers chain the client library's exception as `next`, and fill in the SQLSTATE and the
+ * database's error code where they have them (#246).
+ *
+ * Errors that generic code can act on without knowing the database are thrown as subclasses:
+ * `SQLTransactionRollbackException` (a deadlock or serialization failure), `SQLTimeoutException` (a timeout ran
+ * out) and `SQLNonTransientConnectionException` (the connection is gone or couldn't be opened).
+ */
 class SQLException : Exception {
     protected string _stateString;
+    protected int _errorCode;
     this(string msg, string stateString, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); _stateString = stateString; }
     this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
     this(Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(causedBy.msg, causedBy, f, l); }
     this(string msg, Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(msg, causedBy, f, l); }
     this(string msg, string stateString, Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(msg, causedBy, f, l); _stateString = stateString; }
+    /// An error with its SQLSTATE (or null) and the database's error code (or 0).
+    this(string msg, string sqlState, int errorCode, Throwable causedBy = null, string f = __FILE__, size_t l = __LINE__) {
+        super(msg, causedBy, f, l);
+        _stateString = sqlState;
+        _errorCode = errorCode;
+    }
+
+    /**
+     * The five-character SQLSTATE: the database's own (PostgreSQL, MySQL, ODBC), or for the others a value mapped
+     * for the errors the subclasses classify (e.g. `40001` for a deadlock, `HYT00` for a timeout, `08006` for a lost
+     * connection). Null when there is none.
+     */
+    string getSQLState() const { return _stateString; }
+
+    /// The database's own error code (ORA-00060 is 60, SQL Server's deadlock 1205, MySQL's 1213, ClickHouse's 159,
+    /// SQLite's extended result code); 0 when there is none (PostgreSQL has only SQLSTATEs).
+    int getErrorCode() const { return _errorCode; }
+}
+
+private mixin template SQLExceptionConstructors() {
+    this(string msg, string f = __FILE__, size_t l = __LINE__) { super(msg, f, l); }
+    this(string msg, Throwable causedBy, string f = __FILE__, size_t l = __LINE__) { super(msg, causedBy, f, l); }
+    this(string msg, string sqlState, int errorCode, Throwable causedBy = null, string f = __FILE__, size_t l = __LINE__) {
+        super(msg, sqlState, errorCode, causedBy, f, l);
+    }
+}
+
+/// An error after which retrying the operation may succeed (as in JDBC): the base of
+/// `SQLTransactionRollbackException` and `SQLTimeoutException`.
+class SQLTransientException : SQLException {
+    mixin SQLExceptionConstructors;
+}
+
+/**
+ * A deadlock or serialization failure (SQLSTATE class 40): call `rollback()`, then retry the whole transaction.
+ * PostgreSQL, MySQL and SQL Server have rolled back (or aborted) the transaction already; Oracle's ORA-00060 and
+ * ORA-08177 roll back only the statement, so the transaction's earlier work is still there until `rollback()`.
+ */
+class SQLTransactionRollbackException : SQLTransientException {
+    mixin SQLExceptionConstructors;
+}
+
+/// A timeout ran out: a lock wait timeout, a statement timeout set on the server (`max_execution_time`, ...) or
+/// by the client. The transaction stays open where the database keeps it after a failed statement; with MySQL it is
+/// lost, as mysql-native drops the session after a server error. PostgreSQL's `statement_timeout` is reported like a
+/// cancel (SQLSTATE 57014, a plain `SQLException`): the server sends the same code for both.
+class SQLTimeoutException : SQLTransientException {
+    mixin SQLExceptionConstructors;
+}
+
+/// The connection is gone (killed, reset, the server shut down), couldn't be opened (SQLSTATE class 08, or the
+/// server's own, such as PostgreSQL's 28P01 for a rejected password), or was closed already (08003). The session and
+/// its transaction are lost; retrying needs another connection. The native drivers' `isClosed()` is true afterwards;
+/// the MySQL driver opens a new session on its next statement instead (#240).
+class SQLNonTransientConnectionException : SQLException {
+    mixin SQLExceptionConstructors;
+}
+
+/// What a database error means for generic code; selects the class `makeSQLException` creates.
+enum SQLErrorKind {
+    other, /// none of the below: `SQLException`
+    transactionRollback, /// `SQLTransactionRollbackException`
+    timeout, /// `SQLTimeoutException`
+    connection, /// `SQLNonTransientConnectionException`
+}
+
+/// An exception of the class for `kind`. For drivers: the one place that maps a kind to a class.
+SQLException makeSQLException(string msg, string sqlState, int errorCode, SQLErrorKind kind,
+        Throwable causedBy = null, string f = __FILE__, size_t l = __LINE__) {
+    final switch (kind) {
+    case SQLErrorKind.other:
+        return new SQLException(msg, sqlState, errorCode, causedBy, f, l);
+    case SQLErrorKind.transactionRollback:
+        return new SQLTransactionRollbackException(msg, sqlState, errorCode, causedBy, f, l);
+    case SQLErrorKind.timeout:
+        return new SQLTimeoutException(msg, sqlState, errorCode, causedBy, f, l);
+    case SQLErrorKind.connection:
+        return new SQLNonTransientConnectionException(msg, sqlState, errorCode, causedBy, f, l);
+    }
+}
+
+/// The kind of `e`, from its class.
+SQLErrorKind kindOf(const SQLException e) {
+    if (cast(const SQLTransactionRollbackException) e)
+        return SQLErrorKind.transactionRollback;
+    if (cast(const SQLTimeoutException) e)
+        return SQLErrorKind.timeout;
+    if (cast(const SQLNonTransientConnectionException) e)
+        return SQLErrorKind.connection;
+    return SQLErrorKind.other;
+}
+
+/// `e` with the message `msg` (e.g. with the statement added): the same class, SQLSTATE, error code and cause
+/// (`e.next`); `e` itself when the message is the same, or when `makeSQLException` can't create its class (e.g. a
+/// direct `SQLTransientException`). For drivers that add context to an error already translated.
+SQLException withMessage(SQLException e, string msg) {
+    if (msg == e.msg)
+        return e;
+    const kind = kindOf(e);
+    TypeInfo_Class created;
+    final switch (kind) {
+    case SQLErrorKind.other:
+        created = typeid(SQLException);
+        break;
+    case SQLErrorKind.transactionRollback:
+        created = typeid(SQLTransactionRollbackException);
+        break;
+    case SQLErrorKind.timeout:
+        created = typeid(SQLTimeoutException);
+        break;
+    case SQLErrorKind.connection:
+        created = typeid(SQLNonTransientConnectionException);
+        break;
+    }
+    if (typeid(e) !is created)
+        return e; // keeps the class, which matters more than the context
+    return makeSQLException(msg, e.getSQLState(), e.getErrorCode(), kind, e.next !is null ? e.next : e,
+            e.file, e.line);
+}
+
+/**
+ * The kind of an SQLSTATE, as JDBC classifies them: class 40 (transaction rollback), class 08 (connection
+ * exception), `HYT00`/`HYT01` (timeout expired); and PostgreSQL's `55P03` (lock_not_available: `lock_timeout`,
+ * `NOWAIT`) and `57P01`–`57P03` (server shutdown, crash, not accepting connections). `57014` (query_canceled) is
+ * not a timeout: it's what a cancel gives.
+ */
+SQLErrorKind kindOfSqlState(string sqlState) {
+    import std.algorithm.searching : startsWith;
+
+    if (sqlState.length != 5)
+        return SQLErrorKind.other;
+    if (sqlState.startsWith("40"))
+        return SQLErrorKind.transactionRollback;
+    if (sqlState.startsWith("08") || sqlState == "57P01" || sqlState == "57P02" || sqlState == "57P03")
+        return SQLErrorKind.connection;
+    if (sqlState == "HYT00" || sqlState == "HYT01" || sqlState == "55P03")
+        return SQLErrorKind.timeout;
+    return SQLErrorKind.other;
+}
+
+///
+unittest {
+    assert(kindOfSqlState("40P01") == SQLErrorKind.transactionRollback);
+    assert(kindOfSqlState("40001") == SQLErrorKind.transactionRollback);
+    assert(kindOfSqlState("08006") == SQLErrorKind.connection);
+    assert(kindOfSqlState("57P01") == SQLErrorKind.connection);
+    assert(kindOfSqlState("55P03") == SQLErrorKind.timeout);
+    assert(kindOfSqlState("HYT00") == SQLErrorKind.timeout);
+    assert(kindOfSqlState("57014") == SQLErrorKind.other);
+    assert(kindOfSqlState("42P01") == SQLErrorKind.other);
+    assert(kindOfSqlState(null) == SQLErrorKind.other);
+
+    auto cause = new Exception("deadlock");
+    auto e = makeSQLException("deadlock detected", "40P01", 0, SQLErrorKind.transactionRollback, cause);
+    assert(cast(SQLTransactionRollbackException) e && cast(SQLTransientException) e);
+    assert(e.getSQLState() == "40P01" && e.getErrorCode() == 0 && e.next is cause && e.msg == "deadlock detected");
+    e = makeSQLException("lock wait", "HYT00", 1222, SQLErrorKind.timeout);
+    assert(cast(SQLTimeoutException) e && e.getErrorCode() == 1222);
+    e = makeSQLException("killed", "08006", 28, SQLErrorKind.connection);
+    assert(cast(SQLNonTransientConnectionException) e && !cast(SQLTransientException) e);
+    e = makeSQLException("syntax", null, 942, SQLErrorKind.other);
+    assert(typeid(e) == typeid(SQLException) && e.getSQLState() is null && e.getErrorCode() == 942);
+
+    e = makeSQLException("lock wait", "HYT00", 1222, SQLErrorKind.timeout, cause);
+    assert(withMessage(e, "lock wait") is e);
+    auto w = withMessage(e, "lock wait - while executing UPDATE t");
+    assert(cast(SQLTimeoutException) w && w.getSQLState() == "HYT00" && w.getErrorCode() == 1222 && w.next is cause);
+    assert(kindOf(w) == SQLErrorKind.timeout && kindOf(new SQLException("x")) == SQLErrorKind.other);
+    auto transient = new SQLTransientException("busy", "HY000", 1);
+    assert(withMessage(transient, "busy - while executing UPDATE t") is transient);
 }
 
 // The message given is kept, the cause is chained (#216)
@@ -61,7 +240,7 @@ unittest {
     auto e = new SQLException("context: cause", cause);
     assert(e.msg == "context: cause" && e.next is cause);
     e = new SQLException("with state", "08001", cause);
-    assert(e.msg == "with state" && e.next is cause && e._stateString == "08001");
+    assert(e.msg == "with state" && e.next is cause && e.getSQLState() == "08001" && e.getErrorCode() == 0);
     e = new SQLException(cause);
     assert(e.msg == "cause" && e.next is cause);
 }

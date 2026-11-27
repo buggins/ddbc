@@ -352,7 +352,7 @@ version(USE_PGSQL) {
 
     	void checkClosed() {
     		if (closed)
-    			throw new SQLException("Connection is already closed");
+    			throw makeSQLException("Connection is already closed", "08003", 0, SQLErrorKind.connection);
     	}
 
         /// libpq's message for the last failure on the connection.
@@ -360,13 +360,33 @@ version(USE_PGSQL) {
             return copyCString(PQerrorMessage(conn));
         }
 
+        /// The `SQLException` for a failed libpq call: the SQLSTATE of `res` (none when libpq returned no result),
+        /// classified (#246). A FATAL error or a broken connection (`CONNECTION_BAD`) is a connection error.
+        SQLException pqError(const(PGresult)* res, string msg) {
+            string state = res is null ? null : copyCString(PQresultErrorField(res, PG_DIAG_SQLSTATE));
+            const severity = res is null ? null : copyCString(PQresultErrorField(res, PG_DIAG_SEVERITY_NONLOCALIZED));
+            auto kind = kindOfSqlState(state);
+            if (PQstatus(conn) == CONNECTION_BAD || severity == "FATAL" || severity == "PANIC") {
+                kind = SQLErrorKind.connection;
+                if (state.length == 0)
+                    state = "08006";
+            }
+            return makeSQLException(msg, state, 0, kind);
+        }
+
+        /// Throws `pqError(res, msg)` unless `ok`.
+        void checkResult(bool ok, const(PGresult)* res, lazy string msg) {
+            if (!ok)
+                throw pqError(res, msg);
+        }
+
         /// Runs a transaction command (BEGIN, COMMIT, ROLLBACK). Call with the lock held.
         void execCommand(string sql) {
             trace(sql);
             PGresult * res = PQexec(conn, std.string.toStringz(sql));
-            enforce!SQLException(res !is null, "Failed to execute " ~ sql ~ ": " ~ errorMessage());
+            checkResult(res !is null, res, "Failed to execute " ~ sql ~ ": " ~ errorMessage());
             scope(exit) PQclear(res);
-            enforce!SQLException(PQresultStatus(res) == PGRES_COMMAND_OK, "Failed to execute " ~ sql ~ ": " ~ errorMessage());
+            checkResult(PQresultStatus(res) == PGRES_COMMAND_OK, res, "Failed to execute " ~ sql ~ ": " ~ errorMessage());
         }
 
         /// Whether a transaction is open (or failed) on the server.
@@ -446,7 +466,7 @@ version(USE_PGSQL) {
     			const message = copyCString(PQerrorMessage(conn));
     			PQfinish(conn); // a failed attempt still allocates the handle (#249)
     			conn = null;
-    			throw new SQLException(message);
+    			throw makeSQLException(message, "08001", 0, SQLErrorKind.connection);
     		}
     		closed = false;
     		setAutoCommit(true);
@@ -558,7 +578,7 @@ version(USE_PGSQL) {
         private void enforceNotFailed(string what) {
             if (PQtransactionStatus(conn) == PQTRANS_INERROR)
                 throw new SQLException("Can't " ~ what ~ ": the transaction failed after an error and the server rolled "
-                    ~ "back its work; call rollback() to continue");
+                    ~ "back its work; call rollback() to continue", "25000", 0);
         }
     	override void setAutoCommit(bool autoCommit) {
     		checkClosed();
@@ -586,9 +606,9 @@ version(USE_PGSQL) {
                 // directly, not through a statement: that would start a transaction (with auto-commit off), whose
                 // level a later setTransactionIsolation() couldn't change (#249)
                 PGresult * res = PQexec(conn, "SHOW TRANSACTION ISOLATION LEVEL");
-                enforce!SQLException(res !is null, "Failed to read the isolation level: " ~ errorMessage());
+                checkResult(res !is null, res, "Failed to read the isolation level: " ~ errorMessage());
                 scope(exit) PQclear(res);
-                enforce!SQLException(PQresultStatus(res) == PGRES_TUPLES_OK, "Failed to read the isolation level: "
+                checkResult(PQresultStatus(res) == PGRES_TUPLES_OK, res, "Failed to read the isolation level: "
                         ~ errorMessage());
                 if (PQntuples(res) == 1 && PQnfields(res) == 1) {
                     switch (copyCString(PQgetvalue(res, 0, 0), PQgetlength(res, 0, 0))) {
@@ -842,10 +862,10 @@ version(USE_PGSQL) {
 
     		conn.beginIfNeeded();
     		PGresult * res = PQexec(conn.getConnection(), std.string.toStringz(query));
-    		enforce!SQLException(res !is null, "Failed to execute statement " ~ query ~ ": " ~ getError());
+    		conn.checkResult(res !is null, res, "Failed to execute statement " ~ query ~ ": " ~ getError());
     		scope(exit) PQclear(res); // also when the statement failed (#249)
     		auto status = PQresultStatus(res);
-    		enforce!SQLException(status == PGRES_TUPLES_OK, getError());
+    		conn.checkResult(status == PGRES_TUPLES_OK, res, getError());
 
     //		cmd = new Command(conn.getConnection(), query);
     //		rs = cmd.execSQLResult();
@@ -891,10 +911,10 @@ version(USE_PGSQL) {
 
     		conn.beginIfNeeded();
     		PGresult * res = PQexec(conn.getConnection(), std.string.toStringz(query));
-    		enforce!SQLException(res !is null, "Failed to execute statement " ~ query ~ ": " ~ getError());
+    		conn.checkResult(res !is null, res, "Failed to execute statement " ~ query ~ ": " ~ getError());
     		scope(exit) PQclear(res); // also when the statement failed (#249)
     		auto status = PQresultStatus(res);
-    		enforce!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, getError());
+    		conn.checkResult(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, res, getError());
 
     		string rowsAffected = copyCString(PQcmdTuples(res));
 
@@ -1041,11 +1061,11 @@ version(USE_PGSQL) {
             // being unable to send the query to the server. For other errors, a non-null result is
             // returned, and the status should be looked up.
             // See https://www.postgresql.org/docs/current/libpq-exec.html#LIBPQ-PQEXEC
-            enforce!SQLException(res !is null, "Error while executing prepared statement " ~ query ~ ": "
+            conn.checkResult(res !is null, res, "Error while executing prepared statement " ~ query ~ ": "
                     ~ conn.errorMessage());
             scope(failure) PQclear(res); // the caller frees it after a success (#249)
-            enforce!SQLException(
-                    PQresultStatus(res) != PGRES_FATAL_ERROR,
+            conn.checkResult(
+                    PQresultStatus(res) != PGRES_FATAL_ERROR, res,
                     "Fatal error executing prepared statement " ~ query ~ ": " ~ copyCString(PQresultErrorMessage(res)));
             metadata = createMetadata(res);
             return res;
@@ -1087,7 +1107,7 @@ version(USE_PGSQL) {
             PGresult * res = exec();
             scope(exit) PQclear(res);
             auto status = PQresultStatus(res);
-            enforce!SQLException(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, getError(res));
+            conn.checkResult(status == PGRES_COMMAND_OK || status == PGRES_TUPLES_OK, res, getError(res));
 
             string rowsAffected = copyCString(PQcmdTuples(res));
             //auto lastid = PQoidValue(res);

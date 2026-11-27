@@ -38,6 +38,25 @@ version(PostgresTests) {
             );
         }
 
+        /// Errors carry the SQLSTATE and error code, and a class generic code can act on (#246).
+        @Test
+        public void testErrorClasses() {
+            import std.exception : collectException;
+            import ddbc.core : SQLErrorKind;
+            import ddbc.test.common : checkDeadlock, checkLockTimeout, checkSqlError;
+
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("DROP TABLE IF EXISTS lock_test");
+            stmt.executeUpdate("CREATE TABLE lock_test (id INT PRIMARY KEY, v INT)");
+            scope(exit) stmt.executeUpdate("DROP TABLE IF EXISTS lock_test");
+            stmt.executeUpdate("INSERT INTO lock_test VALUES (1, 0), (2, 0)");
+            checkDeadlock("ddbc:postgresql://localhost:%s/testdb?user=testuser,password=passw0rd,ssl=false".format(environment.get("POSTGRES_PORT", "5432")), "lock_test", "40P01", 0);
+            checkLockTimeout("ddbc:postgresql://localhost:%s/testdb?user=testuser,password=passw0rd,ssl=false".format(environment.get("POSTGRES_PORT", "5432")), "lock_test", "SET lock_timeout = '200ms'", "UPDATE lock_test SET v = 7 WHERE id = 1", "55P03", 0);
+            checkSqlError(collectException(stmt.executeQuery("SELECT * FROM no_such_table").next()), "42P01", 0,
+                SQLErrorKind.other);
+        }
+
         /// After an error the server aborts the transaction; commit() must not report success (#241).
         @Test
         public void testCommitAfterError() {

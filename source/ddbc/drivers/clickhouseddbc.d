@@ -63,6 +63,7 @@ version (USE_CLICKHOUSE)
 
     import CH = clickhoused;
     import clickhoused.io.backend : PoolSync, backendFor;
+    import ddbc.drivers.utils : connectFailure, connectorError;
 
     /// The type without `Nullable(...)` and `LowCardinality(...)` wrappers, in any order.
     private string baseClickHouseType(string typeName)
@@ -349,7 +350,42 @@ version (USE_CLICKHOUSE)
         catch (SQLException e)
             throw e;
         catch (CH.ClickHouseException e)
-            throw new SQLException(context.length ? e.msg ~ " - while executing " ~ context : e.msg, e);
+            throw chError(e, context.length ? e.msg ~ " - while executing " ~ context : e.msg);
+    }
+
+    /**
+     * The `SQLException` for a clickhoused error: the server's exception code, and for the errors generic code can
+     * act on a SQLSTATE and a class (#246): 159 (TIMEOUT_EXCEEDED, e.g. `max_execution_time`) → HYT00, 394
+     * (QUERY_WAS_CANCELLED, KILL QUERY) → 57014, a network failure → 08006.
+     */
+    private SQLException chError(CH.ClickHouseException e, string msg)
+    {
+        if (auto server = cast(CH.ServerException) e)
+        {
+            switch (server.code)
+            {
+            case 159:
+                return makeSQLException(msg, "HYT00", server.code, SQLErrorKind.timeout, e);
+            case 394:
+                return makeSQLException(msg, "57014", server.code, SQLErrorKind.other, e);
+            default:
+                return makeSQLException(msg, null, server.code, SQLErrorKind.other, e);
+            }
+        }
+        return connectorError(e, msg);
+    }
+
+    unittest
+    {
+        import dbwire.exception : ConnectionException;
+
+        auto e = chError(new CH.ServerException(159, "DB::Exception", "Timeout exceeded"), "timeout");
+        assert(cast(SQLTimeoutException) e && e.getSQLState() == "HYT00" && e.getErrorCode() == 159);
+        e = chError(new CH.ServerException(394, "DB::Exception", "Query was cancelled"), "cancelled");
+        assert(typeid(e) == typeid(SQLException) && e.getSQLState() == "57014");
+        e = chError(new CH.ServerException(60, "DB::Exception", "Unknown table"), "no table");
+        assert(typeid(e) == typeid(SQLException) && e.getSQLState() is null && e.getErrorCode() == 60);
+        assert(cast(SQLNonTransientConnectionException) chError(new ConnectionException("reset"), "reset"));
     }
 
     /// DDBC connection to a ClickHouse server.
@@ -362,9 +398,15 @@ version (USE_CLICKHOUSE)
         ClickHouseResultSet activeResultSet; // streaming result set holding the server connection
         bool closed;
 
-        void checkClosed()
+        /// Throws `SQLNonTransientConnectionException` (08003) if the connection was closed: by `close()`, or with
+        /// `andServer` also by the server or the network (#246).
+        void checkClosed(bool andServer = true)
         {
-            enforce!SQLException(!closed, "Connection is already closed");
+            if (closed)
+                throw makeSQLException("Connection is already closed", "08003", 0, SQLErrorKind.connection);
+            if (andServer && !ch.isOpen)
+                throw makeSQLException("The connection was closed by the server or the network", "08003", 0,
+                        SQLErrorKind.connection);
         }
 
     public:
@@ -387,20 +429,29 @@ version (USE_CLICKHOUSE)
                 dsn ~= separator ~ encodeComponent(k) ~ "=" ~ encodeComponent(v);
                 separator = "&";
             }
+            CH.ConnectionOptions options;
+            try
+                options = CH.ConnectionOptions.fromDsn(dsn);
+            catch (CH.ClickHouseException e)
+                throw chError(e, e.msg);
             try
             {
-                auto options = CH.ConnectionOptions.fromDsn(dsn);
                 driverLock = new DriverLock(backendFor(options.ioMode).newPoolSync());
                 ch = new CH.Connection(options);
             }
-            catch (Exception e)
-                throw new SQLException(e);
+            catch (CH.ClickHouseException e)
+            {
+                auto server = cast(CH.ServerException) e;
+                throw connectFailure(e, null, server is null ? 0 : server.code); // 516: authentication failed
+            }
+            catch (Exception e) // from setting up the I/O backend: a failed connect too
+                throw makeSQLException(e.msg, "08001", 0, SQLErrorKind.connection, e);
         }
 
         /// The underlying clickhoused connection, for features ddbc does not cover (e.g. bulk inserts).
         CH.Connection getNativeConnection()
         {
-            checkClosed();
+            checkClosed(false);
             return ch;
         }
 
@@ -475,7 +526,7 @@ version (USE_CLICKHOUSE)
 
         override void close()
         {
-            checkClosed();
+            checkClosed(false); // also after the server closed it: frees the driver's resources
             foreach (stmt; activeStatements.dup)
             {
                 try
@@ -1182,7 +1233,7 @@ version (USE_CLICKHOUSE)
             }
             catch (CH.ClickHouseException e)
             {
-                auto error = new SQLException(sql.length ? e.msg ~ " - while executing " ~ sql : e.msg, e);
+                auto error = chError(e, sql.length ? e.msg ~ " - while executing " ~ sql : e.msg);
                 if (stmt.conn.ch.isBusy)
                     throw error; // the response wasn't read: the blocks can still be read, or the query cancelled
                 finish();

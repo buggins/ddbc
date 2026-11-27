@@ -3,7 +3,7 @@ module ddbc.test.common;
 import std.stdio : stdout, writeln;
 
 import dunit;
-import ddbc.core : Connection, Statement;
+import ddbc.core : Connection, SQLErrorKind, Statement;
 import ddbc.common : createConnection;
 
 class DdbcTestFixture {
@@ -197,6 +197,7 @@ void checkCommitAfterDeadlock(Connection conn, string url) {
     stmt.executeUpdate("UPDATE deadlock_test SET v = 9 WHERE id = 3"); // work before the deadlock
     Exception e = provokeSqlServerDeadlock(conn, other, "deadlock_test");
     assert(e !is null && e.msg.canFind("deadlock"), e is null ? "no deadlock" : e.msg);
+    checkSqlError(e, "40001", 1205, SQLErrorKind.transactionRollback); // #246
     other.rollback();
     other.setAutoCommit(true);
     assertThrown!SQLException(stmt.executeUpdate("UPDATE deadlock_test SET v = 8 WHERE id = 3"));
@@ -316,16 +317,19 @@ void checkPoolEndsSqlTransaction(string url, string begin, string failing = null
 }
 
 /// After the server ends `victim`'s session (`kill` does that, from another connection), the next call on `victim`
-/// fails and `isClosed()` is true (#248); `close()` still works. `probe` is a query giving one row.
-void checkClosedByServer(Connection victim, void delegate() kill, string probe) {
+/// fails and `isClosed()` is true (#248); `rollback()` (with `transactions`) and `close()` still work: the session and
+/// its transaction are gone, and the original error isn't replaced (#246). `probe` is a query giving one row.
+void checkClosedByServer(Connection victim, void delegate() kill, string probe, bool transactions = true) {
     import std.exception : assertThrown;
-    import ddbc.core : SQLException;
+    import ddbc.core : SQLNonTransientConnectionException;
 
     assert(!victim.isClosed());
     kill();
-    Statement stmt = victim.createStatement();
-    assertThrown!SQLException(stmt.executeQuery(probe).next());
+    // the class generic code can act on (#246); createStatement() already refuses a connection known to be closed
+    assertThrown!SQLNonTransientConnectionException(victim.createStatement().executeQuery(probe).next());
     assert(victim.isClosed(), "isClosed() is false after the server closed the connection");
+    if (transactions)
+        victim.rollback();
     victim.close();
 }
 
@@ -384,4 +388,131 @@ void checkErrorInResultSet(Connection conn, string failing, string probe, int ro
     assert(!rs.next(), "next() after the error");
     rs.close();
     probeWorks();
+}
+
+/**
+ * Checks an error's class, SQLSTATE and error code (#246): `sqlState` null means none, `errorCode` -1 means any
+ * (the message is in the assertion's text).
+ */
+void checkSqlError(Exception e, string sqlState, int errorCode, SQLErrorKind kind) {
+    import std.conv : to;
+    import ddbc.core : SQLException, SQLNonTransientConnectionException, SQLTimeoutException,
+        SQLTransactionRollbackException;
+
+    assert(e !is null, "no error");
+    auto sql = cast(SQLException) e;
+    assert(sql !is null, "not an SQLException: " ~ typeid(e).name ~ ": " ~ e.msg);
+    const what = typeid(e).name ~ " (SQLSTATE " ~ sql.getSQLState() ~ ", code " ~ sql.getErrorCode().to!string
+        ~ "): " ~ e.msg;
+    final switch (kind) {
+    case SQLErrorKind.other:
+        assert(typeid(e) == typeid(SQLException), "expected a plain SQLException: " ~ what);
+        break;
+    case SQLErrorKind.transactionRollback:
+        assert(cast(SQLTransactionRollbackException) e, "expected SQLTransactionRollbackException: " ~ what);
+        break;
+    case SQLErrorKind.timeout:
+        assert(cast(SQLTimeoutException) e, "expected SQLTimeoutException: " ~ what);
+        break;
+    case SQLErrorKind.connection:
+        assert(cast(SQLNonTransientConnectionException) e, "expected SQLNonTransientConnectionException: " ~ what);
+        break;
+    }
+    assert(sql.getSQLState() == sqlState, "SQLSTATE " ~ sql.getSQLState() ~ ", expected " ~ sqlState ~ ": " ~ what);
+    assert(errorCode < 0 || sql.getErrorCode() == errorCode, "error code: " ~ what);
+}
+
+/**
+ * A deadlock (#246): two connections from `url`, auto-commit off, update rows 1 and 2 of `table` (columns `id`,
+ * `v`) in opposite order; the second one waits in a thread. The database aborts one of them with an
+ * `SQLTransactionRollbackException` of `sqlState` and `errorCode`; the other then goes on (the aborted side rolls
+ * back at once: Oracle's ORA-00060 rolls back only the statement, so the locks stay until then).
+ */
+void checkDeadlock(string url, string table, string sqlState, int errorCode) {
+    import core.thread : Thread;
+    import core.time : msecs;
+
+    Connection a = createConnection(url);
+    scope (exit)
+        a.close();
+    Connection b = createConnection(url);
+    scope (exit)
+        b.close();
+    a.setAutoCommit(false);
+    b.setAutoCommit(false);
+    Statement sa = a.createStatement();
+    scope (exit)
+        sa.close();
+    Statement sb = b.createStatement();
+    scope (exit)
+        sb.close();
+    sa.executeUpdate("UPDATE " ~ table ~ " SET v = 1 WHERE id = 1");
+    sb.executeUpdate("UPDATE " ~ table ~ " SET v = 2 WHERE id = 2");
+    Exception errorA, errorB;
+    void waitForRow1() {
+        try
+            sb.executeUpdate("UPDATE " ~ table ~ " SET v = 2 WHERE id = 1");
+        catch (Exception e) {
+            errorB = e;
+            try
+                b.rollback();
+            catch (Exception) {
+            }
+        }
+    }
+    auto thread = new Thread(&waitForRow1);
+    thread.start();
+    Thread.sleep(500.msecs); // b now waits for row 1
+    try
+        sa.executeUpdate("UPDATE " ~ table ~ " SET v = 1 WHERE id = 2");
+    catch (Exception e) {
+        errorA = e;
+        a.rollback();
+    }
+    thread.join();
+    assert((errorA is null) != (errorB is null), errorA is null && errorB is null ? "no deadlock"
+        : "both failed: " ~ errorA.msg ~ " / " ~ errorB.msg);
+    checkSqlError(errorA !is null ? errorA : errorB, sqlState, errorCode, SQLErrorKind.transactionRollback);
+    a.rollback();
+    b.rollback();
+}
+
+/**
+ * A lock wait that runs out (#246): a second connection from `url` holds a row lock on row 1 of `table` (columns
+ * `id`, `v`); a third runs `prepare` (setting a short lock timeout; may be null), then `blocked`, which waits for
+ * that lock and fails with an `SQLTimeoutException` (or the class of `kind`) of `sqlState` and `errorCode`. The
+ * connection works afterwards.
+ */
+void checkLockTimeout(string url, string table, string prepare, string blocked, string sqlState, int errorCode,
+        SQLErrorKind kind = SQLErrorKind.timeout) {
+    import ddbc.core : ResultSet;
+
+    Connection holder = createConnection(url);
+    scope (exit)
+        holder.close();
+    holder.setAutoCommit(false);
+    Statement sh = holder.createStatement();
+    scope (exit)
+        sh.close();
+    sh.executeUpdate("UPDATE " ~ table ~ " SET v = 5 WHERE id = 1");
+    Connection waiter = createConnection(url);
+    scope (exit)
+        waiter.close();
+    Statement sw = waiter.createStatement();
+    scope (exit)
+        sw.close();
+    if (prepare.length)
+        sw.executeUpdate(prepare);
+    Exception error;
+    try
+        sw.executeUpdate(blocked);
+    catch (Exception e)
+        error = e;
+    holder.rollback();
+    checkSqlError(error, sqlState, errorCode, kind);
+    if (!waiter.getAutoCommit())
+        waiter.rollback();
+    ResultSet rs = sw.executeQuery("SELECT v FROM " ~ table ~ " WHERE id = 1");
+    assert(rs.next() && rs.getInt(1) == 0, "the connection doesn't work after the lock timeout");
+    rs.close();
 }

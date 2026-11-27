@@ -46,6 +46,45 @@ version(USE_SQLITE) {
     //import ddbc.drivers.sqlite;
     import ddbc.drivers.utils;
     import etc.c.sqlite3;
+
+    /**
+     * The `SQLException` for an SQLite error, from its extended result code (`sqlite3_extended_errcode`), classified
+     * (#246; SQLite has no SQLSTATE): SQLITE_BUSY_SNAPSHOT (a WAL snapshot went stale: retry the transaction) →
+     * 40001; SQLITE_BUSY (still locked by another connection after `busy_timeout`) → HYT00, but 40001 with
+     * `inTransaction` (except for COMMIT, which can be retried): SQLite returns it at once, skipping the busy handler,
+     * when waiting could deadlock, and only a rollback frees the locks the transaction holds; SQLITE_INTERRUPT → 57014.
+     * SQLITE_LOCKED is a conflict within the connection (e.g. DROP TABLE while a result set on it is open): retrying
+     * doesn't help, so it isn't a timeout.
+     */
+    private SQLException sqliteError(int extendedCode, string msg, bool inTransaction = false) {
+        enum busySnapshot = 517; // SQLITE_BUSY | (2 << 8)
+        if (extendedCode == busySnapshot)
+            return makeSQLException(msg, "40001", extendedCode, SQLErrorKind.transactionRollback);
+        switch (extendedCode & 0xFF) {
+        case SQLITE_BUSY:
+            if (inTransaction)
+                return makeSQLException(msg, "40001", extendedCode, SQLErrorKind.transactionRollback);
+            return makeSQLException(msg, "HYT00", extendedCode, SQLErrorKind.timeout);
+        case SQLITE_INTERRUPT:
+            return makeSQLException(msg, "57014", extendedCode, SQLErrorKind.other);
+        default:
+            return makeSQLException(msg, null, extendedCode, SQLErrorKind.other);
+        }
+    }
+
+    unittest {
+        auto e = sqliteError(517, "database is locked");
+        assert(cast(SQLTransactionRollbackException) e && e.getSQLState() == "40001" && e.getErrorCode() == 517);
+        assert(cast(SQLTimeoutException) sqliteError(SQLITE_BUSY, "database is locked"));
+        e = sqliteError(SQLITE_BUSY, "database is locked", true);
+        assert(cast(SQLTransactionRollbackException) e && e.getSQLState() == "40001" && e.getErrorCode() == 5);
+        e = sqliteError(SQLITE_LOCKED | (1 << 8), "table is locked"); // SQLITE_LOCKED_SHAREDCACHE
+        assert(typeid(e) == typeid(SQLException) && e.getSQLState() is null);
+        e = sqliteError(SQLITE_INTERRUPT, "interrupted");
+        assert(typeid(e) == typeid(SQLException) && e.getSQLState() == "57014");
+        e = sqliteError(SQLITE_CONSTRAINT | (8 << 8), "UNIQUE constraint failed"); // SQLITE_CONSTRAINT_UNIQUE
+        assert(typeid(e) == typeid(SQLException) && e.getSQLState() is null && e.getErrorCode() == 2067);
+    }
     import std.traits : isSomeString;
 
 
@@ -355,7 +394,7 @@ version(USE_SQLITE) {
 
         void checkClosed() {
             if (closed)
-                throw new SQLException("Connection is already closed");
+                throw makeSQLException("Connection is already closed", "08003", 0, SQLErrorKind.connection);
         }
 
         bool beginFailed; // the driver's BEGIN after a COMMIT or ROLLBACK failed: no transaction, nothing lost
@@ -379,14 +418,17 @@ version(USE_SQLITE) {
         /// Called with the lock held before a statement runs.
         void checkTransaction() {
             if (transactionLost())
-                throw new SQLException("Can't run statements: " ~ transactionLostMessage);
+                throw makeSQLException("Can't run statements: " ~ transactionLostMessage, "25000", 0,
+                    SQLErrorKind.other);
         }
 
-        /// The exception for a failed statement, saying so when SQLite rolled the transaction back.
-        SQLException failure(string msg) {
+        /// The exception for a failed statement, from the connection's last error, saying so when SQLite rolled the
+        /// transaction back. `commit`: the statement was COMMIT, which can be retried after SQLITE_BUSY.
+        SQLException failure(string msg, bool commit = false) {
+            const code = sqlite3_extended_errcode(conn);
             if (transactionLost())
                 msg ~= " - " ~ transactionLostMessage;
-            return new SQLException(msg);
+            return sqliteError(code, msg, !commit && sqlite3_get_autocommit(conn) == 0);
         }
 
         /// Runs the driver's own transaction statements (BEGIN, COMMIT, ROLLBACK), bypassing checkTransaction.
@@ -403,7 +445,7 @@ version(USE_SQLITE) {
                     beginFailed = true;
                     throw new SQLException(after ~ " succeeded, but starting the next transaction failed: " ~ msg);
                 }
-                throw failure(msg);
+                throw failure(msg, sql == "COMMIT");
             }
             if (sql == "BEGIN")
                 beginFailed = false;
@@ -455,9 +497,10 @@ version(USE_SQLITE) {
             int res = sqlite3_open(toStringz(filename), &conn);
             if(res != SQLITE_OK) {
                 string msg = "SQLITE Error " ~ to!string(res) ~ " while trying to open DB " ~ filename ~ " : " ~ getError();
+                const code = conn is null ? res : sqlite3_extended_errcode(conn);
                 sqlite3_close(conn); // SQLite allocates the handle also when opening fails
                 conn = null;
-                throw new SQLException(msg);
+                throw makeSQLException(msg, "08001", code, SQLErrorKind.connection);
             }
             assert(conn !is null);
             closed = false;
@@ -487,7 +530,7 @@ version(USE_SQLITE) {
             scope(exit) unlock();
 
             if (transactionLost())
-                throw new SQLException("Can't commit: " ~ transactionLostMessage);
+                throw makeSQLException("Can't commit: " ~ transactionLostMessage, "25000", 0, SQLErrorKind.other);
             execInternal("COMMIT"); // on SQLITE_BUSY the transaction stays open and commit() can be retried
 
             // Simulate autocommit being off by immediately starting a new transaction.
@@ -571,7 +614,7 @@ version(USE_SQLITE) {
             if (autoCommit) {
                 // If switching on autocommit, commit any ongoing transaction.
                 if (transactionLost())
-                    throw new SQLException("Can't commit: " ~ transactionLostMessage);
+                    throw makeSQLException("Can't commit: " ~ transactionLostMessage, "25000", 0, SQLErrorKind.other);
                 execInternal("COMMIT");
             } else {
                 // If switching off autocommit, start a transaction.
@@ -708,7 +751,8 @@ version(USE_SQLITE) {
                 &stmt,  /* OUT: Statement handle */
                 null     /* OUT: Pointer to unused portion of zSql */
                 );
-            enforce!SQLException(res == SQLITE_OK, "Error #" ~ to!string(res) ~ " while preparing statement " ~ query ~ " : " ~ conn.getError());
+            if (res != SQLITE_OK)
+                throw conn.failure("Error #" ~ to!string(res) ~ " while preparing statement " ~ query ~ " : " ~ conn.getError());
             paramMetadata = createParamMetadata();
             paramCount = paramMetadata.getParameterCount();
             metadata = createMetadata();

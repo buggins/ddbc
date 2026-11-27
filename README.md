@@ -198,6 +198,39 @@ foreach(ref e; stmt.select!(User, "id", "name")) {
 }
 ```
 
+### Errors
+
+Every driver throws `SQLException`, with the client library's exception chained as `next`. `getSQLState()` gives the
+SQLSTATE and `getErrorCode()` the database's own error code. Errors that generic code can act on, without knowing
+the database, are thrown as subclasses (as in JDBC):
+
+| Class | Meaning | What to do |
+|---|---|---|
+| `SQLTransactionRollbackException` | a deadlock or serialization failure (SQLSTATE class 40) | `rollback()`, then retry the whole transaction |
+| `SQLTimeoutException` | a lock wait timeout or a statement timeout ran out | retry, or give up; the connection works (with MySQL the transaction is lost) |
+| `SQLNonTransientConnectionException` | the connection is gone (killed, reset, the server shut down), couldn't be opened, or was closed (08003) | open another connection |
+
+`SQLTransactionRollbackException` and `SQLTimeoutException` extend `SQLTransientException`. A cancel (PostgreSQL's
+57014, ORA-01013, ClickHouse's 394, SQLite's `SQLITE_INTERRUPT`) is a plain `SQLException` with SQLSTATE 57014.
+PostgreSQL reports its `statement_timeout` with the same 57014, so it arrives as a cancel, not as an
+`SQLTimeoutException`. When the driver finds that the server rolled back the transaction after an earlier error
+("call rollback() to continue"), it throws a plain `SQLException` with SQLSTATE 25000: the earlier error, which may
+not be worth a retry (e.g. a duplicate key), already had its class.
+
+| Driver | SQLSTATE | Error code | Transaction rollback | Timeout | Connection |
+|---|---|---|---|---|---|
+| PGNATIVE, PGSQL | the server's | 0 | 40P01, 40001 | 55P03 | FATAL errors, 57P01–57P03 |
+| MySQL | the server's | the server's | 1213 | 1205, 3024, 1969 | class 08, 1927, network failures |
+| MSSQL | 40001, HYT00, 08006 for the classified errors | error number | 1205, 3960 | 1222, `command_timeout` | severity 20 or more (e.g. 596) |
+| ORACLE | 40001, HYT00, 08006, 57014 for the classified errors | ORA number | 60, 8177 | 54, 2049, 30006, `call_timeout` | ORA-00028, ORA-03113, ... |
+| ClickHouse | HYT00, 57014 for the classified errors | exception code | – | 159 (`max_execution_time`) | network failures |
+| SQLite | 40001, HYT00, 57014 for the classified errors | extended result code | `SQLITE_BUSY_SNAPSHOT` | `SQLITE_BUSY` | – |
+| ODBC | the driver's | native code | class 40 | HYT00, HYT01 (SQL Server's lock timeout 1222 arrives as 42000) | class 08 |
+
+Network failures and failed connects are `SQLNonTransientConnectionException` in every driver (08006, 08001).
+PostgreSQL, MySQL and SQL Server roll back (or abort) the whole transaction on a deadlock; Oracle rolls back only the
+statement, so the transaction's earlier work stays until `rollback()`.
+
 ## Connections Strings
 
 Connection strings should start with `ddbc:` followed by the driver type, eg: `ddbc:mysql://localhost`. However, the _ddbc_ prefix is optional.

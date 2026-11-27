@@ -34,6 +34,25 @@ version(USE_ODBC) {
             );
         }
 
+        /// Errors carry the SQLSTATE and error code, and a class generic code can act on (#246).
+        @Test
+        public void testErrorClasses() {
+            import std.exception : collectException;
+            import ddbc.core : SQLErrorKind;
+            import ddbc.test.common : checkDeadlock, checkLockTimeout, checkSqlError;
+
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("DROP TABLE IF EXISTS lock_test");
+            stmt.executeUpdate("CREATE TABLE lock_test (id INT PRIMARY KEY, v INT)");
+            scope(exit) stmt.executeUpdate("DROP TABLE IF EXISTS lock_test");
+            stmt.executeUpdate("INSERT INTO lock_test VALUES (1, 0), (2, 0)");
+            checkLockTimeout("odbc://localhost,%s?user=SA,password=MSbbk4k77JKH88g54,trust_server_certificate=yes,driver=ODBC Driver 18 for SQL Server".format(environment.get("MSSQL_PORT", "1433")), "lock_test", "SET LOCK_TIMEOUT 200", "UPDATE lock_test SET v = 7 WHERE id = 1", "42000", 1222,
+                SQLErrorKind.other); // ODBC classifies by SQLSTATE only: SQL Server's driver sends 42000 for error 1222
+            checkSqlError(collectException(stmt.executeQuery("SELECT * FROM no_such_table").next()), "42S02", 208,
+                SQLErrorKind.other);
+        }
+
         /// commit() after the server rolled the transaction back (deadlock victim, SQLSTATE 40001) must not succeed (#241).
         @Test
         public void testCommitAfterDeadlock() {

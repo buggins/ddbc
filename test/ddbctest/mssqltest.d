@@ -64,6 +64,25 @@ version (USE_MSSQL) {
             checkClosedByServer(victim, &kill, "SELECT 1");
         }
 
+        /// Errors carry the SQLSTATE and error code, and a class generic code can act on (#246).
+        @Test
+        public void testErrorClasses() {
+            import std.exception : collectException;
+            import ddbc.core : SQLErrorKind;
+            import ddbc.test.common : checkDeadlock, checkLockTimeout, checkSqlError;
+
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("DROP TABLE IF EXISTS lock_test");
+            stmt.executeUpdate("CREATE TABLE lock_test (id INT PRIMARY KEY, v INT)");
+            scope(exit) stmt.executeUpdate("DROP TABLE IF EXISTS lock_test");
+            stmt.executeUpdate("INSERT INTO lock_test VALUES (1, 0), (2, 0)");
+            checkDeadlock(msSqlUrl(), "lock_test", "40001", 1205);
+            checkLockTimeout(msSqlUrl(), "lock_test", "SET LOCK_TIMEOUT 200", "UPDATE lock_test SET v = 7 WHERE id = 1", "HYT00", 1222);
+            checkSqlError(collectException(stmt.executeQuery("SELECT * FROM no_such_table").next()), null, 208,
+                SQLErrorKind.other);
+        }
+
         /// commit() after the server rolled the transaction back (deadlock victim) must not succeed (#241).
         @Test
         public void testCommitAfterDeadlock() {

@@ -26,6 +26,9 @@ private import std.datetime.timezone : UTC;
 private import std.format : formattedRead;
 //private import std.traits : isSomeString;
 private import std.algorithm : canFind;
+private import ddbc.core : makeSQLException, SQLErrorKind, SQLException;
+private import dbwire.exception : DbException;
+version (unittest) private import ddbc.core : SQLNonTransientConnectionException, SQLTransactionRollbackException;
 
 string copyCString(T)(const T* c, int actualLength = -1) if (is(T == char) || is (T == ubyte)) {
     const(T)* a = c;
@@ -131,4 +134,39 @@ Date parseDateoid(const string dateoid)
     int year, month, day;
     formattedRead(input, "%s-%s-%s", &year, &month, &day);
     return Date(year, month, day);
+}
+
+/**
+ * For the drivers built on dbwire (PGNATIVE, MSSQL, ORACLE, ClickHouse): the `SQLException` for a connector error
+ * whose SQLSTATE, error code and kind the driver has worked out (#246). A network failure or malformed data
+ * (`ConnectionException`, `ProtocolException`) has closed the connection: its kind is `connection`, with SQLSTATE
+ * `08006` unless the driver gave one.
+ */
+SQLException connectorError(DbException e, string msg, string sqlState = null, int errorCode = 0,
+        SQLErrorKind kind = SQLErrorKind.other) {
+    import dbwire.exception : ConnectionException, ProtocolException;
+
+    if (cast(ConnectionException) e || cast(ProtocolException) e)
+        return makeSQLException(msg, sqlState.length ? sqlState : "08006", errorCode, SQLErrorKind.connection, e);
+    return makeSQLException(msg, sqlState, errorCode, kind, e);
+}
+
+/// The `SQLException` for a failure to open a connection: always of kind `connection`, with the server's SQLSTATE
+/// (e.g. PostgreSQL's `28P01` for a rejected password) or `08001` ("unable to establish the connection").
+SQLException connectFailure(DbException e, string sqlState = null, int errorCode = 0) {
+    return makeSQLException(e.msg, sqlState.length ? sqlState : "08001", errorCode, SQLErrorKind.connection, e);
+}
+
+unittest {
+    import dbwire.exception : ClientException, ConnectionException, ProtocolException;
+
+    auto e = connectorError(new ConnectionException("reset"), "reset - while executing SELECT 1");
+    assert(cast(SQLNonTransientConnectionException) e && e.getSQLState() == "08006" && e.msg.length > 5);
+    assert(cast(SQLNonTransientConnectionException) connectorError(new ProtocolException("bad packet"), "x"));
+    e = connectorError(new ClientException("no such column"), "no such column");
+    assert(typeid(e) == typeid(SQLException) && e.getSQLState() is null);
+    e = connectorError(new ClientException("x"), "x", "40001", 1205, SQLErrorKind.transactionRollback);
+    assert(cast(SQLTransactionRollbackException) e && e.getErrorCode() == 1205);
+    e = connectFailure(new ConnectionException("refused"));
+    assert(cast(SQLNonTransientConnectionException) e && e.getSQLState() == "08001" && e.msg == "refused");
 }

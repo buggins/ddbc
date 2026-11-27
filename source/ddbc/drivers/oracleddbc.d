@@ -62,6 +62,7 @@ version (USE_ORACLE)
     import oracle.params : findPlaceholders, rewritePlaceholders;
     import dbwire.exception : DbException;
     import dbwire.io.backend : IoLock, backendFor;
+    import ddbc.drivers.utils : connectFailure, connectorError;
 
     /// Translates oracle-native errors into `SQLException`s.
     private T translate(T)(lazy T action, string context = null)
@@ -71,7 +72,55 @@ version (USE_ORACLE)
         catch (SQLException e)
             throw e;
         catch (DbException e)
-            throw new SQLException(context.length ? e.msg ~ " - while executing " ~ context : e.msg, e);
+            throw oraError(e, context.length ? e.msg ~ " - while executing " ~ context : e.msg);
+    }
+
+    /**
+     * The `SQLException` for an oracle-native error: the ORA number, and for the errors generic code can act on a
+     * SQLSTATE and a class (#246): ORA-00060 (deadlock) and ORA-08177 (can't serialize) → 40001; ORA-00054
+     * (resource busy), ORA-30006 (WAIT timeout), ORA-02049 (distributed lock timeout) and oracle-native's call
+     * timeout → HYT00; a session-fatal error (ORA-00028, ORA-03113, ...) → 08006; ORA-01013 from a cancel → 57014.
+     */
+    private SQLException oraError(DbException e, string msg)
+    {
+        if (cast(OR.StatementTimeoutException) e)
+            return makeSQLException(msg, "HYT00", 1013, SQLErrorKind.timeout, e);
+        if (auto server = cast(OR.ServerException) e)
+        {
+            const code = server.code;
+            if (server.sessionLost)
+                return makeSQLException(msg, "08006", code, SQLErrorKind.connection, e);
+            switch (code)
+            {
+            case 60:
+            case 8177:
+                return makeSQLException(msg, "40001", code, SQLErrorKind.transactionRollback, e);
+            case 54:
+            case 2049:
+            case 30006:
+                return makeSQLException(msg, "HYT00", code, SQLErrorKind.timeout, e);
+            case 1013:
+                return makeSQLException(msg, "57014", code, SQLErrorKind.other, e);
+            default:
+                return makeSQLException(msg, null, code, SQLErrorKind.other, e);
+            }
+        }
+        return connectorError(e, msg);
+    }
+
+    unittest
+    {
+        auto e = oraError(new OR.ServerException(60, "ORA-00060: deadlock detected"), "deadlock");
+        assert(cast(SQLTransactionRollbackException) e && e.getSQLState() == "40001" && e.getErrorCode() == 60);
+        assert(cast(SQLTimeoutException) oraError(new OR.ServerException(30006, "ORA-30006"), "wait"));
+        e = oraError(new OR.StatementTimeoutException("ORA-01013: user requested cancel", "1 sec"), "timeout");
+        assert(cast(SQLTimeoutException) e && e.getErrorCode() == 1013);
+        e = oraError(new OR.ServerException(1013, "ORA-01013: user requested cancel"), "cancel");
+        assert(typeid(e) == typeid(SQLException) && e.getSQLState() == "57014");
+        e = oraError(new OR.ServerException(28, "ORA-00028: your session has been killed"), "killed");
+        assert(cast(SQLNonTransientConnectionException) e && e.getErrorCode() == 28);
+        e = oraError(new OR.ServerException(942, "ORA-00942: table or view does not exist"), "no table");
+        assert(typeid(e) == typeid(SQLException) && e.getSQLState() is null && e.getErrorCode() == 942);
     }
 
     /**
@@ -161,7 +210,7 @@ version (USE_ORACLE)
         try
             return OR.ConnectionOptions.fromParams(p);
         catch (DbException e)
-            throw new SQLException(e.msg, e);
+            throw oraError(e, e.msg);
     }
 
     unittest
@@ -331,9 +380,15 @@ version (USE_ORACLE)
         bool autoCommit = true;
         TransactionIsolation isolation = TransactionIsolation.READ_COMMITTED;
 
-        void checkClosed()
+        /// Throws `SQLNonTransientConnectionException` (08003) if the connection was closed: by `close()`, or with
+        /// `andServer` also by the server or the network (#246).
+        void checkClosed(bool andServer = true)
         {
-            enforce!SQLException(!closed, "Connection is already closed");
+            if (closed)
+                throw makeSQLException("Connection is already closed", "08003", 0, SQLErrorKind.connection);
+            if (andServer && !ora.isOpen)
+                throw makeSQLException("The connection was closed by the server or the network", "08003", 0,
+                        SQLErrorKind.connection);
         }
 
         /// Runs `sql` (no result set) with the lock held, after freeing the server connection.
@@ -371,13 +426,16 @@ version (USE_ORACLE)
                 ora = new OR.Connection(options);
             }
             catch (DbException e)
-                throw new SQLException(e.msg, e);
+            {
+                auto server = cast(OR.ServerException) e;
+                throw connectFailure(e, null, server is null ? 0 : server.code); // ORA-01017: invalid credentials
+            }
         }
 
         /// The underlying oracle-native connection, for features ddbc does not cover (e.g. LOB locators, array DML).
         OR.Connection getNativeConnection()
         {
-            checkClosed();
+            checkClosed(false);
             return ora;
         }
 
@@ -452,7 +510,7 @@ version (USE_ORACLE)
 
         override void close()
         {
-            checkClosed();
+            checkClosed(false); // also after the server closed it: frees the driver's resources
             foreach (stmt; activeStatements.dup)
             {
                 try
@@ -478,7 +536,9 @@ version (USE_ORACLE)
 
         override void rollback()
         {
-            checkClosed();
+            checkClosed(false);
+            if (!ora.isOpen)
+                return; // after the server closed the connection: nothing to do, its transaction is gone (#246)
             lock();
             scope (exit)
                 unlock();
@@ -490,7 +550,9 @@ version (USE_ORACLE)
         /// the connection is returned (#245).
         void resetForPool()
         {
-            checkClosed();
+            checkClosed(false);
+            if (!ora.isOpen)
+                return;
             if (activeResultSet !is null)
             {
                 // the user is gone: drop the unread rows instead of reading them into memory
@@ -1045,7 +1107,7 @@ version (USE_ORACLE)
             }
             catch (DbException e)
             {
-                auto error = new SQLException(sql.length ? e.msg ~ " - while executing " ~ sql : e.msg, e);
+                auto error = oraError(e, sql.length ? e.msg ~ " - while executing " ~ sql : e.msg);
                 auto conn = stmt.conn;
                 if (conn.ora.isBusy)
                     throw error; // the response wasn't read: the rows can still be read, or the result closed

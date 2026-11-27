@@ -14,9 +14,9 @@
         "frontend": ">=2.097"
     },
     "dependencies": {
-        "dbwire:types": "~>0.9.9",
-        "dbwire:io": "~>0.9.9",
-        "dbwire:client": "~>0.9.9"
+        "dbwire:types": "~>0.9.10",
+        "dbwire:io": "~>0.9.10",
+        "dbwire:client": "~>0.9.10"
     },
     "systemDependencies": "Depending on configuration: PostgreSQL client library (libpq; on Windows, libpq.dll from a PostgreSQL installation in PATH), SQLite v3, ODBC",
     "configurations": [
@@ -100,21 +100,21 @@
             "name": "ClickHouse",
             "versions": ["USE_CLICKHOUSE"],
             "dependencies": {
-                "clickhoused": "~>0.9.4"
+                "clickhoused": "~>0.9.5"
             }
         },
         {
             "name": "MSSQL",
             "versions": ["USE_MSSQL"],
             "dependencies": {
-                "mssql-native": "~>0.3.3"
+                "mssql-native": "~>0.4.0"
             }
         },
         {
             "name": "ORACLE",
             "versions": ["USE_ORACLE"],
             "dependencies": {
-                "oracle-native": "~>0.5.0"
+                "oracle-native": "~>0.6.0"
             }
         },
         {
@@ -129,9 +129,9 @@
             "versions": ["USE_MYSQL", "USE_SQLITE", "USE_CLICKHOUSE", "USE_MSSQL", "USE_ORACLE", "USE_PGNATIVE"],
             "dependencies": {
                 "mysql-native": "~>3.1.0",
-                "clickhoused": "~>0.9.4",
-                "mssql-native": "~>0.3.3",
-                "oracle-native": "~>0.5.0",
+                "clickhoused": "~>0.9.5",
+                "mssql-native": "~>0.4.0",
+                "oracle-native": "~>0.6.0",
                 "postgresql-native": "~>0.7.0"
             },
             "libs-posix": ["sqlite3"],
@@ -182,7 +182,7 @@
             "versions": ["USE_SQLITE", "USE_CLICKHOUSE"],
             "dependencies": {
                 "d-unit": "~>0.10.2",
-                "clickhoused": "~>0.9.4"
+                "clickhoused": "~>0.9.5"
             },
             "libs-posix": ["sqlite3"],
             "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],
@@ -198,7 +198,7 @@
             "versions": ["USE_SQLITE", "USE_MSSQL"],
             "dependencies": {
                 "d-unit": "~>0.10.2",
-                "mssql-native": "~>0.3.3"
+                "mssql-native": "~>0.4.0"
             },
             "libs-posix": ["sqlite3"],
             "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],
@@ -214,7 +214,7 @@
             "versions": ["USE_SQLITE", "USE_ORACLE"],
             "dependencies": {
                 "d-unit": "~>0.10.2",
-                "oracle-native": "~>0.5.0"
+                "oracle-native": "~>0.6.0"
             },
             "libs-posix": ["sqlite3"],
             "lflags-osx-x86_64": ["-L/usr/local/opt/sqlite3/lib/"],
@@ -247,9 +247,9 @@
             "dependencies": {
                 "d-unit": "~>0.10.2",
                 "mysql-native": "~>3.1.0",
-                "clickhoused": "~>0.9.4",
-                "mssql-native": "~>0.3.3",
-                "oracle-native": "~>0.5.0",
+                "clickhoused": "~>0.9.5",
+                "mssql-native": "~>0.4.0",
+                "oracle-native": "~>0.6.0",
                 "postgresql-native": "~>0.7.0"
             },
             "libs-posix": ["sqlite3"],

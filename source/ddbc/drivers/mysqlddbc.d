@@ -25,11 +25,11 @@
 module ddbc.drivers.mysqlddbc;
 
 import std.algorithm;
-import std.conv : to;
+import std.conv : ConvException, to;
 import std.datetime : Date, DateTime, TimeOfDay;
 import std.datetime.date;
 import std.datetime.systime;
-import std.exception : enforce;
+import std.exception : collectException, enforce;
 static if (__traits(compiles, (){ import std.logger; } )) {
     import std.logger;
 } else {
@@ -54,6 +54,100 @@ import mysql.prepared;
 import mysql.protocol.constants;
 import mysql.protocol.packets : FieldDescription, ParamDescription;
 import mysql.result : Row, ResultRange;
+
+/**
+ * The `SQLException` for a mysql-native error: the server's SQLSTATE and error code, classified (#246). Class 40
+ * (1213, deadlock) is a transaction rollback; 1205 (lock wait timeout), 3024 (MySQL's `max_execution_time`) and
+ * 1969 (MariaDB's `max_statement_time`) are timeouts; class 08 and 1927 (MariaDB: connection killed) are connection
+ * errors. 1317 (query interrupted) is a cancel. An error the server didn't send (a network failure) is a
+ * connection error when `connectionGone`. A server error is classified by its code only: mysql-native closes its
+ * socket after any server error and opens a new session on the next command. An `SQLException` (translated already,
+ * e.g. by a statement) keeps its class, SQLSTATE and code.
+ */
+private SQLException mysqlError(Throwable e, string msg, bool connectionGone = false) {
+    if (auto sql = cast(SQLException) e)
+        return withMessage(sql, msg);
+    string state;
+    int code;
+    SQLErrorKind kind;
+    if (auto received = cast(MYXReceived) e) {
+        code = received.errorCode;
+        state = validSqlState(received.sqlState);
+        kind = kindOfSqlState(state);
+        switch (code) {
+        case 1205:
+        case 1969:
+        case 3024:
+            kind = SQLErrorKind.timeout;
+            break;
+        case 1927:
+            kind = SQLErrorKind.connection;
+            break;
+        default:
+            break;
+        }
+    }
+    else if (connectionGone) {
+        kind = SQLErrorKind.connection;
+        if (state.length == 0)
+            state = "08006";
+    }
+    return makeSQLException(msg, state, code, kind, e);
+}
+
+/// The SQLSTATE of an error packet, or null when it has none (mysql-native leaves the field at `char.init`, 0xFF).
+private string validSqlState(const char[5] state) {
+    import std.ascii : isAlphaNum;
+
+    foreach (c; state)
+        if (!isAlphaNum(c))
+            return null;
+    return state.idup;
+}
+
+/// The `SQLException` for a failed connect: always `SQLNonTransientConnectionException`, with the server's SQLSTATE
+/// and code (1045 access denied: 28000) or 08001.
+private SQLException mysqlConnectFailure(Exception e) {
+    string state;
+    int code;
+    if (auto received = cast(MYXReceived) e) {
+        code = received.errorCode;
+        state = validSqlState(received.sqlState);
+    } else if (auto sql = cast(SQLException) e) {
+        code = sql.getErrorCode();
+        state = sql.getSQLState();
+    }
+    return makeSQLException(e.msg, state.length ? state : "08001", code, SQLErrorKind.connection,
+            e.next !is null && cast(SQLException) e ? e.next : e);
+}
+
+unittest {
+    auto e = mysqlError(new MYXReceived("Deadlock found", 1213, "40001", __FILE__, __LINE__), "deadlock");
+    assert(cast(SQLTransactionRollbackException) e && e.getSQLState() == "40001" && e.getErrorCode() == 1213);
+    e = mysqlError(new MYXReceived("Lock wait timeout exceeded", 1205, "HY000", __FILE__, __LINE__), "lock wait");
+    assert(cast(SQLTimeoutException) e && e.getSQLState() == "HY000");
+    e = mysqlError(new MYXReceived("Table doesn't exist", 1146, "42S02", __FILE__, __LINE__), "no table");
+    assert(typeid(e) == typeid(SQLException) && e.getSQLState() == "42S02" && e.getErrorCode() == 1146);
+    e = mysqlError(new Exception("Connection reset"), "reset", true);
+    assert(cast(SQLNonTransientConnectionException) e && e.getSQLState() == "08006" && e.getErrorCode() == 0);
+    // mysql-native closed the socket after the server's answer: still a deadlock
+    e = mysqlError(new MYXReceived("Deadlock found", 1213, "40001", __FILE__, __LINE__), "deadlock", true);
+    assert(cast(SQLTransactionRollbackException) e);
+    // translated already (by a statement): kept, also when the socket is closed
+    auto syntax = mysqlError(new MYXReceived("syntax", 1064, "42000", __FILE__, __LINE__), "syntax");
+    e = mysqlError(syntax, "syntax - while preparing SELEC 1", true);
+    assert(typeid(e) == typeid(SQLException) && e.getSQLState() == "42000" && e.getErrorCode() == 1064);
+    assert(mysqlError(syntax, syntax.msg, true) is syntax);
+    // no SQLSTATE in the packet
+    char[5] none;
+    e = mysqlError(new MYXReceived("old server", 1146, none, __FILE__, __LINE__), "no table");
+    assert(e.getSQLState() is null && e.getErrorCode() == 1146);
+    // connect failures
+    e = mysqlConnectFailure(new MYXReceived("Access denied", 1045, "28000", __FILE__, __LINE__));
+    assert(cast(SQLNonTransientConnectionException) e && e.getSQLState() == "28000" && e.getErrorCode() == 1045);
+    e = mysqlConnectFailure(new Exception("Connection refused"));
+    assert(cast(SQLNonTransientConnectionException) e && e.getSQLState() == "08001");
+}
 
 
 SqlType fromMySQLType(int t) {
@@ -115,7 +209,7 @@ private:
 
 	void checkClosed() {
 		if (closed)
-			throw new SQLException("Connection is already closed");
+			throw makeSQLException("Connection is already closed", "08003", 0, SQLErrorKind.connection);
 	}
 
     /+
@@ -145,7 +239,8 @@ private:
                 restoreSession();
         }
         if (transactionLost)
-            throw new SQLException("Can't run statements: " ~ transactionLostMessage);
+            throw makeSQLException("Can't run statements: " ~ transactionLostMessage, "25000", 0,
+                SQLErrorKind.other);
     }
 
     /// Called with the lock held after a statement ran.
@@ -161,7 +256,7 @@ private:
             transactionLost = true;
             msg ~= " - " ~ transactionLostMessage;
         }
-        return new SQLException(msg, e);
+        return mysqlError(e, msg, conn.closed);
     }
 
     /// Sets up the session mysql-native opens on the next command like the lost one: auto-commit off if it was, the
@@ -174,7 +269,7 @@ private:
             if (sessionIsolation.length)
                 exec(conn, "SET SESSION TRANSACTION ISOLATION LEVEL " ~ sessionIsolation);
         } catch (Exception e) {
-            throw new SQLException("Restoring the session after mysql-native's reconnect failed: " ~ e.msg, e);
+            throw mysqlError(e, "Restoring the session after mysql-native's reconnect failed: " ~ e.msg, conn.closed);
         }
         transactionLost = false;
         transactionStarted = false;
@@ -227,8 +322,12 @@ public:
             if (portDelimiter >= 0) {
                 string portString = hostname[portDelimiter + 1 .. $];
                 hostname = hostname[0 .. portDelimiter];
-                if (portString.length > 0)
-                    port = to!int(portString);
+                if (portString.length > 0) {
+                    try
+                        port = to!int(portString);
+                    catch (ConvException e)
+                        throw new SQLException("Invalid port in the URL: " ~ e.msg, e);
+                }
                 if (port < 1 || port > 65535)
                     port = 3306;
             }
@@ -242,9 +341,15 @@ public:
             conn = new MySqlNativeConnection(hostname, username, password, dbName, cast(ushort)port);
             closed = false;
             setAutoCommit(true);
-        } catch (Throwable e) {
-            //writeln(e.msg);
-            throw new SQLException(e);
+        } catch (Exception e) {
+            if (conn is null) {
+                if (auto urlError = cast(SQLException) e)
+                    throw urlError; // a bad URL: not a connection error
+            } else {
+                collectException(conn.close()); // e.g. setAutoCommit failed: don't leave the session open
+                closed = true;
+            }
+            throw mysqlConnectFailure(e); // couldn't connect: SQLNonTransientConnectionException
         }
 
         //writeln("MySQLConnection() connection created");
@@ -260,7 +365,7 @@ public:
             conn.close();
             closed = true;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg, conn.closed);
         }
     }
     override void commit() {
@@ -277,12 +382,12 @@ public:
             if (!autocommit && transactionStarted && conn.closed) {
                 transactionLost = true;
                 if (cast(MYXReceived) e) // the server answered with an error: it rolled back
-                    throw new SQLException("COMMIT failed: " ~ e.msg ~ " - " ~ transactionLostMessage, e);
+                    throw mysqlError(e, "COMMIT failed: " ~ e.msg ~ " - " ~ transactionLostMessage, true);
                 // the connection broke after COMMIT was sent: the server may have committed or not (#240)
-                throw new SQLException("COMMIT failed and the connection to the MySQL server was closed: whether the "
-                    ~ "transaction was committed is unknown; call rollback() to continue", e);
+                throw mysqlError(e, "COMMIT failed and the connection to the MySQL server was closed: whether the "
+                    ~ "transaction was committed is unknown; call rollback() to continue", true);
             }
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg, conn.closed);
         }
     }
     override Statement createStatement() {
@@ -296,7 +401,7 @@ public:
     		activeStatements ~= stmt;
             return stmt;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
 
@@ -364,7 +469,7 @@ public:
                 restoreSession();
                 return;
             }
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     /// Ends an open transaction, also one started in SQL (`START TRANSACTION`) with auto-commit on: the connection
@@ -393,7 +498,7 @@ public:
             this.autocommit = autoCommit;
             transactionStarted = false;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
 
@@ -425,7 +530,7 @@ public:
                 return TransactionIsolation.REPEATABLE_READ;  // MySQL default
             }
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
 
@@ -460,7 +565,7 @@ public:
             stmt.executeUpdate("SET SESSION TRANSACTION ISOLATION LEVEL " ~ levelName);
             sessionIsolation = levelName;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
 }
@@ -588,7 +693,7 @@ public:
             closed = true;
             conn.onStatementClosed(this);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     void closeResultSet() {
@@ -613,7 +718,7 @@ class MySQLPreparedStatement : MySQLStatement, PreparedStatement {
             this.statement = prepare(conn.getConnection(), queryString);
             this.paramCount = this.statement.numArgs;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg, conn.getConnection().closed);
         }
     }
     void checkIndex(int index) {
@@ -642,7 +747,7 @@ public:
             }
             return metadata;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
 
@@ -657,7 +762,7 @@ public:
             }
             return paramMetadata;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
 
@@ -718,7 +823,7 @@ public:
             for (int i = 1; i <= paramCount; i++)
                 setNull(i);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     
@@ -730,7 +835,7 @@ public:
         try {
     		this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
 	}
 	override void setDouble(int parameterIndex, double x){
@@ -741,7 +846,7 @@ public:
         try {
     		this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
 	}
 	override void setBoolean(int parameterIndex, bool x) {
@@ -752,7 +857,7 @@ public:
         try {
             this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     override void setLong(int parameterIndex, long x) {
@@ -763,7 +868,7 @@ public:
         try {
             this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     override void setUlong(int parameterIndex, ulong x) {
@@ -774,7 +879,7 @@ public:
         try {
             this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     override void setInt(int parameterIndex, int x) {
@@ -785,7 +890,7 @@ public:
         try {
             this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     override void setUint(int parameterIndex, uint x) {
@@ -796,7 +901,7 @@ public:
         try {
             this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     override void setShort(int parameterIndex, short x) {
@@ -807,7 +912,7 @@ public:
         try {
             this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     override void setUshort(int parameterIndex, ushort x) {
@@ -818,7 +923,7 @@ public:
         try {
             this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     override void setByte(int parameterIndex, byte x) {
@@ -829,7 +934,7 @@ public:
         try {
             this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     override void setUbyte(int parameterIndex, ubyte x) {
@@ -840,7 +945,7 @@ public:
         try {
             this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     override void setBytes(int parameterIndex, byte[] x) {
@@ -855,7 +960,7 @@ public:
                 this.statement.setArg(parameterIndex-1, x);
             }
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     override void setUbytes(int parameterIndex, ubyte[] x) {
@@ -870,7 +975,7 @@ public:
                 this.statement.setArg(parameterIndex-1, x);
             }
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     /// Sent as text (`Decimal.toFixedString`); the server converts it to the column type.
@@ -889,7 +994,7 @@ public:
                 this.statement.setArg(parameterIndex-1, x);
             }
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
 
@@ -901,7 +1006,7 @@ public:
         try {
             this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
 
@@ -913,7 +1018,7 @@ public:
         try {
 		    this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
 	}
 	override void setDate(int parameterIndex, Date x) {
@@ -924,7 +1029,7 @@ public:
         try {
     		this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
 	}
 	override void setTime(int parameterIndex, TimeOfDay x) {
@@ -935,7 +1040,7 @@ public:
         try {
 		    this.statement.setArg(parameterIndex-1, x);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
 	}
 	override void setVariant(int parameterIndex, Variant x) {
@@ -954,7 +1059,7 @@ public:
                 this.statement.setArg(parameterIndex-1, x);
             }
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     override void setNull(int parameterIndex) {
@@ -965,7 +1070,7 @@ public:
         try {
             this.statement.setNullArg(parameterIndex-1);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
     override void setNull(int parameterIndex, int sqlType) {
@@ -975,7 +1080,7 @@ public:
         try {
             setNull(parameterIndex);
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
 
@@ -1034,7 +1139,7 @@ public:
 			}
             this.columnCount = cast(int)results.colNames.length;
         } catch (Throwable e) {
-            throw new SQLException(e);
+            throw mysqlError(e, e.msg);
         }
     }
 

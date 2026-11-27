@@ -113,7 +113,8 @@ class ConnectionWrapper : Connection {
 	}
 	// the connection, while this wrapper is open: once returned, another user may have it
 	private Connection open() {
-		enforce!SQLException(!closed, "Connection is already closed");
+		if (closed)
+			throw makeSQLException("Connection is already closed", "08003", 0, SQLErrorKind.connection);
 		return base;
 	}
 	override PreparedStatement prepareStatement(string query) { return open().prepareStatement(query); }
