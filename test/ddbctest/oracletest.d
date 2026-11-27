@@ -82,6 +82,26 @@ version (USE_ORACLE) {
             checkErrorInResultSet(c, "SELECT 1 / (5 - LEVEL) FROM DUAL CONNECT BY LEVEL <= 8", "SELECT 1 FROM DUAL", 4);
         }
 
+        /// Errors carry the SQLSTATE and error code, and a class generic code can act on (#246).
+        @Test
+        public void testErrorClasses() {
+            import std.exception : collectException;
+            import ddbc.core : SQLErrorKind;
+            import ddbc.test.common : checkDeadlock, checkLockTimeout, checkSqlError;
+
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("DROP TABLE IF EXISTS lock_test");
+            stmt.executeUpdate("CREATE TABLE lock_test (id NUMBER PRIMARY KEY, v NUMBER)");
+            scope(exit) stmt.executeUpdate("DROP TABLE IF EXISTS lock_test");
+            stmt.executeUpdate("INSERT INTO lock_test VALUES (1, 0)");
+            stmt.executeUpdate("INSERT INTO lock_test VALUES (2, 0)");
+            checkDeadlock(oracleUrl(), "lock_test", "40001", 60);
+            checkLockTimeout(oracleUrl(), "lock_test", null, "LOCK TABLE lock_test IN EXCLUSIVE MODE WAIT 1", "HYT00", 54);
+            checkSqlError(collectException(stmt.executeQuery("SELECT * FROM no_such_table").next()), null, 942,
+                SQLErrorKind.other);
+        }
+
         /// `isClosed()` after the session was killed (#248). Needs SELECT on V$SESSION and ALTER SYSTEM; skipped
         /// without them.
         @Test

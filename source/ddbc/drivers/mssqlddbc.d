@@ -61,6 +61,7 @@ version (USE_MSSQL)
     import mssql.params : rewritePlaceholders;
     import dbwire.exception : DbException;
     import dbwire.io.backend : IoLock, backendFor;
+    import ddbc.drivers.utils : connectFailure, connectorError;
 
     /// Translates mssql-native errors into `SQLException`s.
     private T translate(T)(lazy T action, string context = null)
@@ -70,7 +71,57 @@ version (USE_MSSQL)
         catch (SQLException e)
             throw e;
         catch (DbException e)
-            throw new SQLException(context.length ? e.msg ~ " - while executing " ~ context : e.msg, e);
+            throw msError(e, context.length ? e.msg ~ " - while executing " ~ context : e.msg);
+    }
+
+    /**
+     * The `SQLException` for an mssql-native error: the error number, and for the errors generic code can act on a
+     * SQLSTATE and a class (#246; SQL Server sends no SQLSTATE): 1205 (deadlock victim) and 3960 (snapshot update
+     * conflict) → 40001, 1222 (lock request timeout) and mssql-native's command timeout → HYT00, an error that
+     * ended the session (severity 20 or more, e.g. 596 for a killed session) → 08006.
+     */
+    private SQLException msError(DbException e, string msg)
+    {
+        if (auto server = cast(MS.ServerException) e)
+        {
+            const number = server.number;
+            if (server.sessionLost)
+                return makeSQLException(msg, "08006", number, SQLErrorKind.connection, e);
+            switch (number)
+            {
+            case 1205:
+            case 3960:
+                return makeSQLException(msg, "40001", number, SQLErrorKind.transactionRollback, e);
+            case 1222:
+                return makeSQLException(msg, "HYT00", number, SQLErrorKind.timeout, e);
+            default:
+                return makeSQLException(msg, null, number, SQLErrorKind.other, e);
+            }
+        }
+        if (cast(MS.StatementTimeoutException) e)
+            return makeSQLException(msg, "HYT00", 0, SQLErrorKind.timeout, e);
+        return connectorError(e, msg);
+    }
+
+    unittest
+    {
+        MS.ServerMessage m;
+        m.number = 1205;
+        m.severity = 13;
+        auto e = msError(new MS.ServerException([m]), "deadlock victim");
+        assert(cast(SQLTransactionRollbackException) e && e.getSQLState() == "40001" && e.getErrorCode() == 1205);
+        m.number = 1222;
+        m.severity = 16;
+        assert(cast(SQLTimeoutException) msError(new MS.ServerException([m]), "lock request timeout"));
+        assert(cast(SQLTimeoutException) msError(new MS.StatementTimeoutException("timeout"), "timeout"));
+        m.number = 596;
+        m.severity = 21;
+        e = msError(new MS.ServerException([m]), "killed");
+        assert(cast(SQLNonTransientConnectionException) e && e.getErrorCode() == 596);
+        m.number = 208;
+        m.severity = 16;
+        e = msError(new MS.ServerException([m]), "Invalid object name");
+        assert(typeid(e) == typeid(SQLException) && e.getSQLState() is null && e.getErrorCode() == 208);
     }
 
     /**
@@ -177,7 +228,7 @@ version (USE_MSSQL)
         try
             return MS.ConnectionOptions.fromParams(p);
         catch (DbException e)
-            throw new SQLException(e.msg, e);
+            throw msError(e, e.msg);
     }
 
     unittest
@@ -403,9 +454,15 @@ version (USE_MSSQL)
         bool autoCommit = true;
         TransactionIsolation isolation = TransactionIsolation.READ_COMMITTED;
 
-        void checkClosed()
+        /// Throws `SQLNonTransientConnectionException` (08003) if the connection was closed: by `close()`, or with
+        /// `andServer` also by the server or the network (#246).
+        void checkClosed(bool andServer = true)
         {
-            enforce!SQLException(!closed, "Connection is already closed");
+            if (closed)
+                throw makeSQLException("Connection is already closed", "08003", 0, SQLErrorKind.connection);
+            if (andServer && !ms.isOpen)
+                throw makeSQLException("The connection was closed by the server or the network", "08003", 0,
+                        SQLErrorKind.connection);
         }
 
         /+
@@ -428,8 +485,8 @@ version (USE_MSSQL)
             if (!autoCommit && !transactionLost && sawTransaction && !ms.inTransaction)
                 transactionLost = true; // ended outside a tracked statement, e.g. while reading a result set
             if (transactionLost)
-                throw new SQLException("The server rolled back the transaction after an error (e.g. a deadlock); "
-                    ~ "call rollback() to continue");
+                throw makeSQLException("The server rolled back the transaction after an error (e.g. a deadlock); "
+                    ~ "call rollback() to continue", "25000", 0, SQLErrorKind.other);
             wasInTransaction = ms.inTransaction;
         }
 
@@ -494,13 +551,16 @@ version (USE_MSSQL)
                 ms = new MS.Connection(options);
             }
             catch (DbException e)
-                throw new SQLException(e.msg, e);
+            {
+                auto server = cast(MS.ServerException) e;
+                throw connectFailure(e, null, server is null ? 0 : server.number); // 18456: login failed
+            }
         }
 
         /// The underlying mssql-native connection, for features ddbc does not cover (e.g. bulk inserts).
         MS.Connection getNativeConnection()
         {
-            checkClosed();
+            checkClosed(false);
             return ms;
         }
 
@@ -576,7 +636,7 @@ version (USE_MSSQL)
 
         override void close()
         {
-            checkClosed();
+            checkClosed(false); // also after the server closed it: frees the driver's resources
             foreach (stmt; activeStatements.dup)
             {
                 try
@@ -604,11 +664,12 @@ version (USE_MSSQL)
 
         override void rollback()
         {
-            checkClosed();
+            checkClosed(false);
             lock();
             scope (exit)
                 unlock();
-            runLocked("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION");
+            if (ms.isOpen) // after the server closed the connection: nothing to do, its transaction is gone (#246)
+                runLocked("IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION");
             sawTransaction = !autoCommit && ms.inTransaction;
             transactionLost = false;
         }
@@ -617,7 +678,9 @@ version (USE_MSSQL)
         /// connection pool calls it when the connection is returned (#245).
         void resetForPool()
         {
-            checkClosed();
+            checkClosed(false);
+            if (!ms.isOpen)
+                return;
             if (activeResultSet !is null)
             {
                 // the user is gone: drop the unread rows instead of reading them into memory

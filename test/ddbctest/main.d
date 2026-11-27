@@ -31,6 +31,50 @@ class SQLiteTest : DdbcTestFixture {
         );
     }
 
+    /// Errors carry SQLite's extended result code, and a class generic code can act on (#246): a database still
+    /// locked after `busy_timeout` is an `SQLTimeoutException`.
+    @Test
+    public void testErrorClasses() {
+        import std.exception : collectException;
+        import std.file : exists, remove, tempDir;
+        import std.path : buildPath;
+        import ddbc.common : createConnection;
+        import ddbc.core : SQLErrorKind;
+        import ddbc.test.common : checkSqlError;
+
+        Statement stmt = conn.createStatement();
+        scope(exit) stmt.close();
+        stmt.executeUpdate("INSERT INTO my_first_test (id, name) VALUES (1, 'Ann')");
+        checkSqlError(collectException(stmt.executeUpdate("INSERT INTO my_first_test (id, name) VALUES (1, 'Bob')")),
+            null, 1555, SQLErrorKind.other); // SQLITE_CONSTRAINT_PRIMARYKEY
+        checkSqlError(collectException(stmt.executeQuery("SELECT * FROM no_such_table").next()), null, 1,
+            SQLErrorKind.other); // SQLITE_ERROR
+
+        const file = buildPath(tempDir, "ddbc_busy_test.db");
+        scope(exit) if (exists(file)) remove(file);
+        Connection holder = createConnection("sqlite:" ~ file);
+        scope(exit) holder.close();
+        Statement sh = holder.createStatement();
+        scope(exit) sh.close();
+        sh.executeUpdate("CREATE TABLE IF NOT EXISTS busy (v INT)");
+        holder.setAutoCommit(false);
+        sh.executeUpdate("INSERT INTO busy VALUES (1)"); // holds the write lock
+        Connection waiter = createConnection("sqlite:" ~ file ~ "?busy_timeout=100");
+        scope(exit) waiter.close();
+        Statement sw = waiter.createStatement();
+        scope(exit) sw.close();
+        checkSqlError(collectException(sw.executeUpdate("INSERT INTO busy VALUES (2)")), "HYT00", 5,
+            SQLErrorKind.timeout); // SQLITE_BUSY
+        // inside a transaction it may be a deadlock (SQLite then skips the busy handler): roll back and retry
+        waiter.setAutoCommit(false);
+        checkSqlError(collectException(sw.executeUpdate("INSERT INTO busy VALUES (2)")), "40001", 5,
+            SQLErrorKind.transactionRollback);
+        waiter.rollback();
+        waiter.setAutoCommit(true);
+        holder.rollback();
+        sw.executeUpdate("INSERT INTO busy VALUES (3)");
+    }
+
     /// The pool ends a transaction started with BEGIN while auto-commit is on (#245).
     @Test
     public void testPoolEndsSqlTransaction() {

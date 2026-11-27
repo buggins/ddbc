@@ -297,6 +297,25 @@ version(USE_MYSQL) {
             assert(conn.getTransactionIsolation() == TransactionIsolation.SERIALIZABLE);
         }
 
+        /// Errors carry the SQLSTATE and error code, and a class generic code can act on (#246).
+        @Test
+        public void testErrorClasses() {
+            import std.exception : collectException;
+            import ddbc.core : SQLErrorKind;
+            import ddbc.test.common : checkDeadlock, checkLockTimeout, checkSqlError;
+
+            Statement stmt = conn.createStatement();
+            scope(exit) stmt.close();
+            stmt.executeUpdate("DROP TABLE IF EXISTS lock_test");
+            stmt.executeUpdate("CREATE TABLE lock_test (id INT PRIMARY KEY, v INT) ENGINE=InnoDB");
+            scope(exit) stmt.executeUpdate("DROP TABLE IF EXISTS lock_test");
+            stmt.executeUpdate("INSERT INTO lock_test VALUES (1, 0), (2, 0)");
+            checkDeadlock("ddbc:mysql://localhost:%s/testdb?user=testuser,password=passw0rd".format(environment.get("MYSQL_PORT", "3306")), "lock_test", "40001", 1213);
+            checkLockTimeout("ddbc:mysql://localhost:%s/testdb?user=testuser,password=passw0rd".format(environment.get("MYSQL_PORT", "3306")), "lock_test", "SET SESSION innodb_lock_wait_timeout = 1", "UPDATE lock_test SET v = 7 WHERE id = 1", "HY000", 1205);
+            checkSqlError(collectException(stmt.executeQuery("SELECT * FROM no_such_table").next()), "42S02", 1146,
+                SQLErrorKind.other);
+        }
+
         @Test
         public void testRollbackAfterKill() {
             // rollback() that finds the connection closed by the server succeeds at once: the server rolled back (#240)

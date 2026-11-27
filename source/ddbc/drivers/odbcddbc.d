@@ -275,6 +275,20 @@ version (USE_ODBC)
 
     alias checkenv = partial!(check, SQL_HANDLE_ENV);
 
+    /// A failed ODBC call: the text of its diagnostic records, and the first record's SQLSTATE and native error code.
+    private class ODBCError : Exception
+    {
+        string sqlState;
+        int nativeCode;
+
+        this(string msg, string sqlState, int nativeCode, string file, size_t line)
+        {
+            super(msg, file, line);
+            this.sqlState = sqlState;
+            this.nativeCode = nativeCode;
+        }
+    }
+
     private void extractError(string fn, SQLHANDLE handle, SQLSMALLINT type, string file, size_t line)
     {
         short i = 0;
@@ -284,7 +298,8 @@ version (USE_ODBC)
         SQLSMALLINT textLen;
         SQLRETURN ret;
 
-        string message;
+        string message, firstState;
+        int firstCode;
         do
         {
             ret = SQLGetDiagRec(type, handle, ++i, state.ptr, &errorCode,
@@ -294,11 +309,45 @@ version (USE_ODBC)
                 import std.format;
                 message ~= format("\n\t%s:%d:%d\t%s", fromStringz(state.ptr),
                         cast(int) i, errorCode, fromStringz(msg.ptr)).idup;
+                if (i == 1)
+                {
+                    firstState = fromStringz(cast(char*) state.ptr).idup;
+                    firstCode = errorCode;
+                }
             }
         }
         while (SQL_SUCCEEDED(ret)); // SQL_SUCCESS_WITH_INFO: a message longer than the buffer, cut
         //debug stderr.writefln("%s:%s:%s %s", file, line, fn, message);
-        throw new Exception(message, file, line);
+        throw new ODBCError(message, firstState, firstCode, file, line);
+    }
+
+    /**
+     * The `SQLException` for a failure, with `msg`: for an ODBC call's error, its SQLSTATE and native error code,
+     * classified by the SQLSTATE (#246: class 40 → transaction rollback, class 08 → connection, HYT00/HYT01 →
+     * timeout); an `SQLException` keeps its class, SQLSTATE and code.
+     */
+    private SQLException odbcError(Throwable e, string msg)
+    {
+        if (auto odbc = cast(ODBCError) e)
+            return makeSQLException(msg, odbc.sqlState, odbc.nativeCode, kindOfSqlState(odbc.sqlState), e,
+                    e.file, e.line);
+        if (auto sql = cast(SQLException) e)
+            return withMessage(sql, msg);
+        return new SQLException(msg, e, e.file, e.line);
+    }
+
+    unittest
+    {
+        auto e = odbcError(new ODBCError("\n\t40001:1:1205\tdeadlock victim", "40001", 1205, __FILE__, __LINE__),
+                "deadlock - while execution of query UPDATE t");
+        assert(cast(SQLTransactionRollbackException) e && e.getSQLState() == "40001" && e.getErrorCode() == 1205);
+        assert(cast(SQLTimeoutException) odbcError(new ODBCError("timeout", "HYT00", 0, __FILE__, __LINE__), "t"));
+        assert(cast(SQLNonTransientConnectionException) odbcError(new ODBCError("link", "08S01", 0, __FILE__,
+                __LINE__), "link failure"));
+        auto inner = odbcError(new ODBCError("syntax", "42000", 102, __FILE__, __LINE__), "syntax");
+        assert(typeid(inner) == typeid(SQLException) && inner.getSQLState() == "42000" && inner.getErrorCode() == 102);
+        e = odbcError(e, "deadlock - while executing the batch"); // wrapped again: the class stays
+        assert(cast(SQLTransactionRollbackException) e && e.getErrorCode() == 1205);
     }
 
     // The SQLSTATEs of the diagnostic records of `handle` (after a call failed).
@@ -566,7 +615,7 @@ version (USE_ODBC)
 
         void checkClosed() {
             if (closed)
-                throw new SQLException("Connection is already closed");
+                throw makeSQLException("Connection is already closed", "08003", 0, SQLErrorKind.connection);
         }
 
     public:
@@ -627,8 +676,8 @@ version (USE_ODBC)
         void checkTransaction()
         {
             if (transactionLost)
-                throw new SQLException("The server rolled back the transaction after an error (e.g. a deadlock); "
-                    ~ "call rollback() to continue");
+                throw makeSQLException("The server rolled back the transaction after an error (e.g. a deadlock); "
+                    ~ "call rollback() to continue", "25000", 0, SQLErrorKind.other);
         }
 
         this(string url, string[string] params)
@@ -642,17 +691,22 @@ version (USE_ODBC)
             extractParamsFromURL(url, this.params);
             //writeln(url);
 
-            // Allocate environment handle
-            checkenv!SQLAllocHandle(cast(ushort) SQL_HANDLE_ENV, SQL_NULL_HANDLE, &henv);
+            try
+            {
+                // Allocate environment handle
+                checkenv!SQLAllocHandle(cast(ushort) SQL_HANDLE_ENV, SQL_NULL_HANDLE, &henv);
 
-            // Set the ODBC version environment attribute
-            checkenv!SQLSetEnvAttr(henv, SQL_ATTR_ODBC_VERSION, cast(SQLPOINTER*) SQL_OV_ODBC3, 0);
+                // Set the ODBC version environment attribute
+                checkenv!SQLSetEnvAttr(henv, SQL_ATTR_ODBC_VERSION, cast(SQLPOINTER*) SQL_OV_ODBC3, 0);
 
-            // Allocate connection handle
-            checkdbc!SQLAllocHandle(cast(ushort) SQL_HANDLE_DBC, henv, &conn);
+                // Allocate connection handle
+                checkdbc!SQLAllocHandle(cast(ushort) SQL_HANDLE_DBC, henv, &conn);
 
-            // Set login timeout to 5 seconds
-            checkdbc!SQLSetConnectAttr(conn, SQL_LOGIN_TIMEOUT, cast(SQLPOINTER) 5, 0);
+                // Set login timeout to 5 seconds
+                checkdbc!SQLSetConnectAttr(conn, SQL_LOGIN_TIMEOUT, cast(SQLPOINTER) 5, 0);
+            }
+            catch (ODBCError e)
+                throw connectError(e);
 
             string[] connectionProps;
 
@@ -700,20 +754,39 @@ version (USE_ODBC)
 
             SQLCHAR[1024] outstr;
             SQLSMALLINT outstrlen;
-            checkdbc!SQLDriverConnect(conn, // ConnectionHandle
-                    null, // WindowHandle
-                    connectionString.dup.ptr, // InConnectionString
-                    (connectionString.length).to!(short), // StringLength1
-                    outstr.ptr, // OutConnectionString
-                    outstr.length.to!(short), // BufferLength
-                    &outstrlen, // StringLength2Ptr
-                    cast(ushort) SQL_DRIVER_NOPROMPT // DriverCompletion
-                    );
+            try
+                checkdbc!SQLDriverConnect(conn, // ConnectionHandle
+                        null, // WindowHandle
+                        connectionString.dup.ptr, // InConnectionString
+                        (connectionString.length).to!(short), // StringLength1
+                        outstr.ptr, // OutConnectionString
+                        outstr.length.to!(short), // BufferLength
+                        &outstrlen, // StringLength2Ptr
+                        cast(ushort) SQL_DRIVER_NOPROMPT // DriverCompletion
+                        );
+            catch (ODBCError e)
+                throw connectError(e);
 
             closed = false;
             setAutoCommit(true);
 
             //writeln("MySQLConnection() connection created");
+        }
+
+        /// Couldn't connect: `SQLNonTransientConnectionException`, with the driver's SQLSTATE or 08001.
+        private static SQLException connectError(ODBCError e)
+        {
+            return makeSQLException(e.msg, e.sqlState.length ? e.sqlState : "08001", e.nativeCode,
+                    SQLErrorKind.connection, e, e.file, e.line);
+        }
+
+        /// Calls `fn` on the connection handle: a failure is an `SQLException`, classified by its SQLSTATE (#246).
+        private void callDbc(alias Fn, string file = __FILE__, size_t line = __LINE__)(Parameters!Fn args)
+        {
+            try
+                checkdbc!(Fn, file, line)(args);
+            catch (ODBCError e)
+                throw odbcError(e, e.msg);
         }
 
         /**
@@ -756,7 +829,7 @@ version (USE_ODBC)
                 throw e;
             catch (Exception e) // an Error propagates unchanged
             {
-                throw new SQLException(e);
+                throw odbcError(e, e.msg);
             }
         }
 
@@ -812,7 +885,7 @@ version (USE_ODBC)
                     unlock();
 
                 checkTransaction();
-                checkdbc!SQLEndTran(cast(short) SQL_HANDLE_DBC, conn, cast(short) SQL_COMMIT);
+                callDbc!SQLEndTran(cast(short) SQL_HANDLE_DBC, conn, cast(short) SQL_COMMIT);
             }
         }
 
@@ -832,7 +905,7 @@ version (USE_ODBC)
             }
             catch (Throwable e)
             {
-                throw new SQLException(e);
+                throw odbcError(e, e.msg);
             }
         }
 
@@ -852,7 +925,7 @@ version (USE_ODBC)
             }
             catch (Throwable e)
             {
-                throw new SQLException(e.msg ~ " while execution of query " ~ sql, e);
+                throw odbcError(e, e.msg ~ " while execution of query " ~ sql);
             }
         }
 
@@ -879,7 +952,7 @@ version (USE_ODBC)
             scope (exit)
                 unlock();
 
-            checkdbc!SQLEndTran(cast(short) SQL_HANDLE_DBC, conn, cast(short) SQL_ROLLBACK);
+            callDbc!SQLEndTran(cast(short) SQL_HANDLE_DBC, conn, cast(short) SQL_ROLLBACK);
             transactionLost = false;
         }
 
@@ -901,7 +974,7 @@ version (USE_ODBC)
 
                 if (autoCommit)
                     checkTransaction(); // switching auto-commit on commits
-                checkdbc!SQLSetConnectAttr(conn, SQL_ATTR_AUTOCOMMIT, cast(SQLPOINTER) ac, 0);
+                callDbc!SQLSetConnectAttr(conn, SQL_ATTR_AUTOCOMMIT, cast(SQLPOINTER) ac, 0);
                 this.autocommit = autoCommit;
                 transactionLost = false;
             }
@@ -913,7 +986,7 @@ version (USE_ODBC)
             scope(exit) unlock;
             // See https://odbc.dpldocs.info/v1.0.0/source/odbc.sql.d.html#L571
             long level;
-            checkdbc!SQLGetConnectAttr(conn, SQL_ATTR_TXN_ISOLATION, &level, 0, null);
+            callDbc!SQLGetConnectAttr(conn, SQL_ATTR_TXN_ISOLATION, &level, 0, null);
             switch (level) {
                 case SQL_TXN_READ_UNCOMMITTED:
                     return TransactionIsolation.READ_UNCOMMITTED;
@@ -949,7 +1022,7 @@ version (USE_ODBC)
                     txnLevel = SQL_TXN_SERIALIZABLE;
                     break;
             }
-            checkdbc!SQLSetConnectAttr(conn, SQL_ATTR_TXN_ISOLATION, cast(SQLPOINTER) txnLevel, 0);
+            callDbc!SQLSetConnectAttr(conn, SQL_ATTR_TXN_ISOLATION, cast(SQLPOINTER) txnLevel, 0);
         }
     }
 
@@ -1037,8 +1110,7 @@ version (USE_ODBC)
             catch (Exception e)
             {
                 SQLFreeStmt(stmt, SQL_CLOSE); // a cursor opened before the failure
-                throw new SQLException(e.msg ~ " - while execution of query " ~ query, e,
-                        e.file, e.line);
+                throw odbcError(e, e.msg ~ " - while execution of query " ~ query);
             }
         }
 
@@ -1069,7 +1141,7 @@ version (USE_ODBC)
             }
             catch (Exception e)
             {
-                throw new SQLException(e.msg ~ " While executing query: '" ~ query ~ "'", e, e.file, e.line);
+                throw odbcError(e, e.msg ~ " While executing query: '" ~ query ~ "'");
             }
         }
 
@@ -1102,7 +1174,7 @@ version (USE_ODBC)
                 throw e;
             catch (Throwable e)
             {
-                throw new SQLException(e.msg ~ " - while execution of query " ~ query, e);
+                throw odbcError(e, e.msg ~ " - while execution of query " ~ query);
             }
         }
 
@@ -1129,7 +1201,7 @@ version (USE_ODBC)
             }
             catch (Exception e) // an Error propagates unchanged, also through Connection.close
             {
-                throw new SQLException(e);
+                throw odbcError(e, e.msg);
             }
         }
 
@@ -1483,7 +1555,7 @@ version (USE_ODBC)
             }
             catch (Throwable e)
             {
-                throw new SQLException(e);
+                throw odbcError(e, e.msg);
             }
         }
 
@@ -1538,7 +1610,7 @@ version (USE_ODBC)
             }
             catch (Throwable e)
             {
-                throw new SQLException(e);
+                throw odbcError(e, e.msg);
             }
         }
 
@@ -1577,7 +1649,7 @@ version (USE_ODBC)
             }
             catch (Throwable e)
             {
-                throw new SQLException(e);
+                throw odbcError(e, e.msg);
             }
         }
 
@@ -1602,7 +1674,7 @@ version (USE_ODBC)
             catch (Throwable e)
             {
                 SQLFreeStmt(stmt, SQL_CLOSE); // a cursor opened before the failure
-                throw new SQLException(e);
+                throw odbcError(e, e.msg);
             }
         }
 
@@ -1619,7 +1691,7 @@ version (USE_ODBC)
             }
             catch (Throwable e)
             {
-                throw new SQLException(e);
+                throw odbcError(e, e.msg);
             }
         }
 
@@ -1691,7 +1763,7 @@ version (USE_ODBC)
                         param.bindType, param.dbtype, columnSize, decimalDigits, param.data.ptr,
                         cast(ptrdiff_t) param.data.length, &param.indicator);
             catch (Exception e)
-                throw new SQLException(e);
+                throw odbcError(e, e.msg);
         }
 
         override void setFloat(int parameterIndex, float x)
@@ -1873,7 +1945,7 @@ version (USE_ODBC)
                 checkstmt!SQLBindParameter(stmt, cast(ushort) parameterIndex, SQL_PARAM_INPUT, param.bindType,
                         param.dbtype, 1, 0, null, 0, &param.indicator);
             catch (Exception e)
-                throw new SQLException(e);
+                throw odbcError(e, e.msg);
         }
 
         override string toString() {
